@@ -1,0 +1,338 @@
+{
+  "info": {
+    "name": "Asiatech Sentiment Analysis API",
+    "description": "Sentiment Analysis of Student Feedback from Asiatech College of Sta. Rosa, Laguna using SVM, Random Forest and BERT.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000/api/v1" },
+    { "key": "access_token", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "evaluation_id", "value": "" },
+    { "key": "dataset_filename", "value": "sample_feedback.csv" }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Juan Dela Cruz\",\n  \"email\": \"juan@example.com\",\n  \"password\": \"SecurePass123\",\n  \"role\": \"student\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('access_token', data.access_token);",
+                  "pm.collectionVariables.set('refresh_token', data.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"juan@example.com\",\n  \"password\": \"SecurePass123\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/refresh", "host": ["{{base_url}}"], "path": ["auth", "refresh"] }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/auth/me", "host": ["{{base_url}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Evaluations",
+      "item": [
+        {
+          "name": "Submit Evaluation",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["const data = pm.response.json();", "pm.collectionVariables.set('evaluation_id', data.id);"] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"Faculty\",\n  \"comment\": \"The professor explains lessons very clearly and is always willing to help.\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/evaluation", "host": ["{{base_url}}"], "path": ["evaluation"] }
+          }
+        },
+        {
+          "name": "List Evaluations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/evaluation?page=1&page_size=20",
+              "host": ["{{base_url}}"], "path": ["evaluation"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "page_size", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Get Evaluation By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/evaluation/{{evaluation_id}}",
+              "host": ["{{base_url}}"], "path": ["evaluation", "{{evaluation_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Evaluation (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/evaluation/{{evaluation_id}}",
+              "host": ["{{base_url}}"], "path": ["evaluation", "{{evaluation_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prediction",
+      "item": [
+        {
+          "name": "Predict Sentiment (Ad-hoc)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"text\": \"The staff were rude and unhelpful.\"\n}" },
+            "url": { "raw": "{{base_url}}/predict", "host": ["{{base_url}}"], "path": ["predict"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Overall Sentiment",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/analytics/overall", "host": ["{{base_url}}"], "path": ["analytics", "overall"] }
+          }
+        },
+        {
+          "name": "Category Sentiment",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/analytics/category?category=Faculty",
+              "host": ["{{base_url}}"], "path": ["analytics", "category"],
+              "query": [{ "key": "category", "value": "Faculty" }]
+            }
+          }
+        },
+        {
+          "name": "Monthly Trend",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/analytics/monthly", "host": ["{{base_url}}"], "path": ["analytics", "monthly"] }
+          }
+        },
+        {
+          "name": "Daily Trend",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/analytics/daily", "host": ["{{base_url}}"], "path": ["analytics", "daily"] }
+          }
+        },
+        {
+          "name": "Word Frequency",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/analytics/word-frequency?sentiment=Negative&top_n=30",
+              "host": ["{{base_url}}"], "path": ["analytics", "word-frequency"],
+              "query": [{ "key": "sentiment", "value": "Negative" }, { "key": "top_n", "value": "30" }]
+            }
+          }
+        },
+        {
+          "name": "Top Complaints",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/analytics/top-complaints", "host": ["{{base_url}}"], "path": ["analytics", "top-complaints"] }
+          }
+        },
+        {
+          "name": "Top Appreciations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/analytics/top-appreciations", "host": ["{{base_url}}"], "path": ["analytics", "top-appreciations"] }
+          }
+        },
+        {
+          "name": "Export CSV Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/analytics/export/csv", "host": ["{{base_url}}"], "path": ["analytics", "export", "csv"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Machine Learning (Admin)",
+      "item": [
+        {
+          "name": "Upload Dataset",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file", "src": "" }]
+            },
+            "url": { "raw": "{{base_url}}/ml/dataset/upload", "host": ["{{base_url}}"], "path": ["ml", "dataset", "upload"] }
+          }
+        },
+        {
+          "name": "Train Models",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataset_filename\": \"{{dataset_filename}}\",\n  \"n_estimators\": 300,\n  \"max_depth\": null,\n  \"min_samples_split\": 2\n}"
+            },
+            "url": { "raw": "{{base_url}}/ml/train", "host": ["{{base_url}}"], "path": ["ml", "train"] }
+          }
+        },
+        {
+          "name": "Retrain Models",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataset_filename\": \"{{dataset_filename}}\",\n  \"n_estimators\": 400,\n  \"max_depth\": 20,\n  \"min_samples_split\": 4\n}"
+            },
+            "url": { "raw": "{{base_url}}/ml/retrain", "host": ["{{base_url}}"], "path": ["ml", "retrain"] }
+          }
+        },
+        {
+          "name": "List Training History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/ml/models", "host": ["{{base_url}}"], "path": ["ml", "models"] }
+          }
+        },
+        {
+          "name": "Model Comparison / Performance",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/ml/performance", "host": ["{{base_url}}"], "path": ["ml", "performance"] }
+          }
+        },
+        {
+          "name": "Confusion Matrix",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/ml/confusion-matrix?algorithm=SVM",
+              "host": ["{{base_url}}"], "path": ["ml", "confusion-matrix"],
+              "query": [{ "key": "algorithm", "value": "SVM" }]
+            }
+          }
+        },
+        {
+          "name": "Classification Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/ml/classification-report?algorithm=SVM",
+              "host": ["{{base_url}}"], "path": ["ml", "classification-report"],
+              "query": [{ "key": "algorithm", "value": "SVM" }]
+            }
+          }
+        },
+        {
+          "name": "Rollback Production Model",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/ml/rollback?training_history_id=REPLACE_WITH_ID",
+              "host": ["{{base_url}}"], "path": ["ml", "rollback"],
+              "query": [{ "key": "training_history_id", "value": "REPLACE_WITH_ID" }]
+            }
+          }
+        },
+        {
+          "name": "Download Trained Model",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/ml/models/SVM/download",
+              "host": ["{{base_url}}"], "path": ["ml", "models", "SVM", "download"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

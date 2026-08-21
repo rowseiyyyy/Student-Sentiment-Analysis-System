@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asiatech Feedback Casefile - Student Feedback Sentiment Analysis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="toast-container" id="toast-container"></div>
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <span id="loading-text">Loading...</span>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- LOGIN PAGE                                                      -->
+    <!-- ============================================================ -->
+    <div id="page-login" class="page active">
+        <div class="login-page">
+            <div class="login-container">
+                <div class="login-header">
+                    <span class="login-kicker">Asia Technological School of Science and Arts</span>
+                    <h1>Student Sentiment Analysis<br></h1>
+                    <p class="subtitle">Every comment, read closely — not just scored. Sign in to open your file.</p>
+                </div>
+                <div class="role-selector">
+                    <button class="role-pill active" data-role="student" onclick="APP.setLoginRole('student')">
+                        <i class="fas fa-user-graduate"></i> Student
+                    </button>
+                    <button class="role-pill" data-role="admin" onclick="APP.setLoginRole('admin')">
+                        <i class="fas fa-user-shield"></i> Admin
+                    </button>
+                    <button class="role-pill" data-role="faculty" onclick="APP.setLoginRole('faculty')">
+                        <i class="fas fa-chalkboard-teacher"></i> Faculty
+                    </button>
+                </div>
+
+                <!-- Student Login -->
+                <form id="login-form-student" onsubmit="STUDENT.handleLogin(event)">
+                    <div class="form-group">
+                        <label for="inp-sn"><i class="fas fa-id-card"></i> Student number</label>
+                        <input type="text" id="inp-sn" class="form-control" placeholder="1-23****" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block btn-lg">
+                        <i class="fas fa-arrow-right"></i> Open evaluation →
+                    </button>
+                </form>
+
+                <!-- Credential Login (Admin/Faculty) -->
+                <form id="login-form-credential" class="hidden" onsubmit="return false;">
+                    
+                    <div class="form-group">
+                        <label for="inp-email"><i class="fas fa-envelope"></i> Email</label>
+                        <input type="email" id="inp-email" class="form-control" placeholder="name@asiatech.edu.ph" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="inp-pass"><i class="fas fa-lock"></i> Password</label>
+                        <input type="password" id="inp-pass" class="form-control" placeholder="••••••••" required>
+                    </div>
+<button type="submit" class="btn btn-primary btn-block btn-lg" onclick="APP.doCredentialLogin(event)">
+                        <i class="fas fa-sign-in-alt"></i> Sign in →
+                    </button>
+                    <p class="form-footer">
+                        No account yet? <a href="#" onclick="APP.showRegForm();return false;">Register</a>
+                        · <a href="#" onclick="APP.showForgotForm();return false;">Forgot password?</a>
+                    </p>
+                </form>
+
+                <!-- Forgot Password Form -->
+                <form id="login-form-forgot" class="hidden" onsubmit="APP.doForgotPassword(event)">
+                    <div class="form-group">
+                        <label for="inp-femail"><i class="fas fa-envelope"></i> Account email</label>
+                        <input type="email" class="form-control" id="inp-femail" placeholder="name@asiatech.edu.ph" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block btn-lg">
+                        <i class="fas fa-paper-plane"></i> Send reset link →
+                    </button>
+                    <p class="form-footer">
+                        Remembered it? <a href="#" onclick="APP.hideForgotForm();return false;">Sign in</a>
+                    </p>
+                </form>
+
+                <!-- Reset Password Form -->
+                <form id="login-form-reset" class="hidden" onsubmit="APP.doResetPassword(event)">
+                    <div class="form-group">
+                        <label><i class="fas fa-key"></i> Reset token</label>
+                        <input type="text" class="form-control" id="inp-rtoken" placeholder="Paste the reset token from the email" required>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-lock"></i> New password</label>
+                        <input type="password" class="form-control" id="inp-news-pass" placeholder="At least 8 characters" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block btn-lg">
+                        <i class="fas fa-check-circle"></i> Reset password →
+                    </button>
+                    <p class="form-footer">
+                        Remembered it? <a href="#" onclick="APP.hideForgotForm();return false;">Sign in</a>
+                    </p>
+                </form>
+
+                <!-- Register Form -->
+                <form id="login-form-register" class="hidden" onsubmit="APP.doRegister(event)">
+                    <div class="form-group">
+                        <label><i class="fas fa-user"></i> Full Name</label>
+                        <input class="form-control" id="inp-rname" placeholder="Full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-envelope"></i> Email</label>
+                        <input type="email" class="form-control" id="inp-remail" placeholder="name@asiatech.edu.ph" required>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-lock"></i> Password</label>
+                        <input type="password" class="form-control" id="inp-rpass" placeholder="••••••••" required>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-user-tag"></i> Role</label>
+                        <select class="form-control" id="inp-rrole">
+                            <option value="faculty">Faculty</option>
+                            <option value="administrator">Administrator</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block btn-lg">
+                        <i class="fas fa-user-plus"></i> Create account →
+                    </button>
+                    <p class="form-footer">
+                        Already have an account? <a href="#" onclick="APP.hideRegForm();return false;">Sign in</a>
+                    </p>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- STUDENT EVALUATION PAGE                                        -->
+    <!-- ============================================================ -->
+    <div id="page-student-eval" class="page">
+        <nav class="navbar" id="nav-student">
+            <div class="nav-brand">
+                <i class="fas fa-smile"></i>
+                Asiatech Feedback<small>Reading Room</small>
+            </div>
+<ul class="nav-links">
+                <li><button class="active" data-stab="form"><i class="fas fa-edit"></i> Evaluation Form</button></li>
+                <li><button data-stab="submissions"><i class="fas fa-history"></i> My Submissions</button></li>
+            </ul>
+            <div class="nav-user">
+                <span class="user-badge" id="badge-student"></span>
+                <button class="btn-logout" onclick="STUDENT.logout()"><i class="fas fa-sign-out-alt"></i> Close file</button>
+            </div>
+        </nav>
+
+<div class="page-layout" id="student-content">
+            <div id="student-form-area">
+                <div class="page-header">
+                    <h1><i class="fas fa-edit"></i> Student Evaluation Form</h1>
+                    <span class="date-note" id="student-id-disp"></span>
+                </div>
+                <!-- Course / Year Level Selector -->
+                <div class="card" style="padding:1rem 1.25rem;margin-bottom:1rem;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label for="sel-course"><i class="fas fa-book"></i> Course / Program</label>
+                            <select class="form-control" id="sel-course" required>
+                                <option value="">Select your course</option>
+                                <option>Associate in Computer Technology</option>
+                                 <option>Associate in Information Technology</option>
+                                 <option>BS Accountancy</option>
+                                <option>BS Computer Science</option>
+                                <option>BS Computer Engineering</option>
+                                <option>BS Criminology</option>
+                                <option>BS Information Technology</option>
+                                <option>BS Business Administration</option>
+                                <option>BS Hospitality Management</option>
+                                <option>BS Education</option>
+                                 <option>BS Tourism Management</option>
+                                
+                    
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label for="sel-year"><i class="fas fa-layer-group"></i> Year Level</label>
+                            <select class="form-control" id="sel-year" required>
+                                <option value="">Select year level</option>
+                                <option>1st Year</option>
+                                <option>2nd Year</option>
+                                <option>3rd Year</option>
+                                <option>4th Year</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <!-- Evaluation Tabs -->
+                <div class="tabs" id="eval-tabs">
+                    <button class="tab-btn active" data-tab="professor"><i class="fas fa-chalkboard-teacher"></i> Professor</button>
+                    <button class="tab-btn" data-tab="staff"><i class="fas fa-users"></i> Staff</button>
+                    <button class="tab-btn" data-tab="facilities"><i class="fas fa-building"></i> Facilities</button>
+                    <button class="tab-btn" data-tab="payments"><i class="fas fa-credit-card"></i> Payments</button>
+                </div>
+                <div id="eval-form-content"></div>
+            </div>
+            <div id="student-submissions-area" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- ADMIN DASHBOARD PAGE                                           -->
+    <!-- ============================================================ -->
+    <div id="page-admin-dashboard" class="page">
+        <nav class="navbar" id="nav-admin">
+            <div class="nav-brand">
+                <i class="fas fa-smile"></i>
+                Asiatechian Feedback<small>Reading Room</small>
+            </div>
+            <ul class="nav-links">
+                <li><button class="active" data-tab="overview"><i class="fas fa-chart-pie"></i> Overview</button></li>
+                <li><button data-tab="responses"><i class="fas fa-table"></i> Responses</button></li>
+                <li><button data-tab="analytics"><i class="fas fa-chart-line"></i> Analytics</button></li>
+                <li><button data-tab="ml"><i class="fas fa-brain"></i> ML Training</button></li>
+                <li><button data-tab="import"><i class="fas fa-upload"></i> Import Data</button></li>
+            </ul>
+            <div class="nav-user">
+                <span class="user-badge" id="badge-admin"></span>
+                <button class="btn-logout" onclick="ADMIN.logout()"><i class="fas fa-sign-out-alt"></i> Close file</button>
+            </div>
+        </nav>
+
+        <div class="page-layout" id="admin-content"></div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- FACULTY DASHBOARD PAGE                                         -->
+    <!-- ============================================================ -->
+    <div id="page-faculty-dashboard" class="page">
+        <nav class="navbar" id="nav-faculty">
+            <div class="nav-brand">
+                <i class="fas fa-smile"></i>
+                Asiatech Feedback<small>Reading Room</small>
+            </div>
+            <ul class="nav-links">
+                <li><button class="active" data-ftab="overview"><i class="fas fa-chart-pie"></i> Overview</button></li>
+                <li><button data-ftab="analytics"><i class="fas fa-chart-line"></i> Analytics</button></li>
+            </ul>
+            <div class="nav-user">
+                <span class="user-badge" id="badge-faculty"></span>
+                <button class="btn-logout" onclick="FACULTY.logout()"><i class="fas fa-sign-out-alt"></i> Close file</button>
+            </div>
+        </nav>
+
+        <div class="page-layout" id="faculty-content"></div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- EVALUATION DETAIL MODAL                                        -->
+    <!-- ============================================================ -->
+    <div class="modal-backdrop" id="modal-eval">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-file-alt"></i> Evaluation Detail</h3>
+                <button class="modal-close" onclick="APP.closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="js/utils.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/student.js"></script>
+    <script src="js/admin.js"></script>
+    <script src="js/faculty.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
+

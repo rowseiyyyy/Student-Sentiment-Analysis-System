@@ -1,0 +1,61 @@
+id,category,comment,sentiment
+1,Faculty,"The professor explains lessons very clearly and is always willing to help students who are struggling.",Positive
+2,Faculty,"Our instructor is very patient and makes even difficult topics easy to understand.",Positive
+3,Faculty,"I appreciate how the teacher gives detailed feedback on our projects.",Positive
+4,Faculty,"The professor is often late to class and rushes through the lecture.",Negative
+5,Faculty,"Some instructors do not respond to emails or messages for consultation.",Negative
+6,Faculty,"The teacher's grading system is unclear and inconsistent.",Negative
+7,Faculty,"The class schedule is fine but the topics discussed are just average.",Neutral
+8,Faculty,"The professor follows the syllabus and covers the required topics.",Neutral
+9,Faculty,"Our teacher is knowledgeable but sometimes speaks too fast during lectures.",Neutral
+10,Faculty,"I love how our professor uses real world examples to explain the lesson.",Positive
+11,Faculty,"The instructor rarely gives updates about our grades.",Negative
+12,Faculty,"Lectures are okay, nothing special but nothing bad either.",Neutral
+13,Staff,"The registrar staff were very accommodating when I asked about my enrollment.",Positive
+14,Staff,"The guidance office staff patiently answered all my questions.",Positive
+15,Staff,"Staff at the library are helpful and always ready to assist students.",Positive
+16,Staff,"The staff at the records office was rude when I asked for my transcript.",Negative
+17,Staff,"It took forever for the staff to process my request, very disorganized.",Negative
+18,Staff,"Some staff members ignore students waiting in line.",Negative
+19,Staff,"The staff processed my documents within the expected time frame.",Neutral
+20,Staff,"Front desk staff followed the standard procedure for my request.",Neutral
+21,Staff,"The office staff was courteous and explained the requirements clearly.",Positive
+22,Staff,"Staff response time was slow but they eventually resolved my concern.",Neutral
+23,Staff,"I had a bad experience with an unfriendly staff member at the clinic.",Negative
+24,Staff,"The IT support staff quickly fixed my account access issue.",Positive
+25,Payment,"The cashier explained the payment breakdown clearly and was very kind.",Positive
+26,Payment,"Online payment portal is convenient and easy to use.",Positive
+27,Payment,"I like that the school offers flexible installment plans.",Positive
+28,Payment,"The payment system crashed multiple times during enrollment.",Negative
+29,Payment,"Long queues at the cashier caused me to miss my class.",Negative
+30,Payment,"There is no clear receipt given after paying tuition fees.",Negative
+31,Payment,"The payment process took the usual amount of time, nothing unusual.",Neutral
+32,Payment,"Tuition fee breakdown is available but hard to find on the portal.",Neutral
+33,Payment,"Refund process was smooth and staff explained each step.",Positive
+34,Payment,"Payment confirmation emails are delayed for several days.",Negative
+35,Payment,"The billing statement matches what was discussed during enrollment.",Neutral
+36,Payment,"Extremely disappointed with how payment concerns are handled.",Negative
+37,Facilities,"The classrooms are clean and well ventilated.",Positive
+38,Facilities,"Wifi connection in the campus is fast and reliable.",Positive
+39,Facilities,"The library has a wide collection of books and a quiet study area.",Positive
+40,Facilities,"Restrooms are often dirty and lack proper supplies.",Negative
+41,Facilities,"The aircon in our room has been broken for weeks.",Negative
+42,Facilities,"Parking space is very limited during peak hours.",Negative
+43,Facilities,"The laboratory equipment is outdated but still functional.",Neutral
+44,Facilities,"Classrooms have the basic furniture needed for lectures.",Neutral
+45,Facilities,"Cafeteria food is average, could use more variety.",Neutral
+46,Facilities,"I love studying in the new student lounge, it's spacious and comfortable.",Positive
+47,Facilities,"Elevators are frequently out of service which is inconvenient.",Negative
+48,Facilities,"The gymnasium is well maintained and used for various events.",Positive
+49,Faculty,"The professor is strict but fair when it comes to grading.",Neutral
+50,Faculty,"I did not learn much this semester because lectures felt disorganized.",Negative
+51,Staff,"The staff went above and beyond to help me find my lost ID.",Positive
+52,Staff,"Requesting documents from the registrar is a slow and tedious process.",Negative
+53,Payment,"I appreciate the discount given for early payment of tuition.",Positive
+54,Payment,"There were errors in my billing statement that took weeks to correct.",Negative
+55,Facilities,"Signages around the campus could be improved for new students.",Neutral
+56,Facilities,"The new computer laboratory has updated and fast computers.",Positive
+57,Faculty,"Our professor provides extra review sessions before major exams.",Positive
+58,Staff,"The clinic staff acted quickly when a student fainted during class.",Positive
+59,Payment,"Cashiering hours are limited which is inconvenient for working students.",Negative
+60,Facilities,"Overall the campus facilities meet the basic needs of students.",Neutral

@@ -1,0 +1,64 @@
+# ==============================
+# Backend / API
+# ==============================
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-multipart==0.0.9
+email-validator==2.2.0
+
+# ==============================
+# Database / ORM
+# ==============================
+SQLAlchemy==2.0.35
+alembic==1.13.2
+PyMySQL==1.1.1
+cryptography==43.0.1
+
+# ==============================
+# Auth / Security
+# ==============================
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.0
+slowapi==0.1.9
+
+# ==============================
+# Machine Learning / NLP
+# ==============================
+scikit-learn==1.5.2
+# XGBoost 3.4.x requires Python >=3.12; the official backend environment is
+# Python 3.11, so 3.2.0 is the newest compatible release (justified change).
+xgboost==3.2.0
+transformers==4.44.2
+datasets==5.0.1
+sentencepiece==0.2.2
+torch==2.4.1
+pandas==2.2.3
+numpy==1.26.4
+joblib==1.4.2
+nltk==3.9.1
+spacy==3.7.6
+emoji==2.13.2
+
+# ==============================
+# Visualization
+# ==============================
+plotly==5.24.1
+matplotlib==3.9.2
+
+# ==============================
+# Utilities
+# ==============================
+python-dotenv==1.0.1
+loguru==0.7.2
+tqdm==4.66.5
+openpyxl==3.1.5
+
+# ==============================
+# Testing
+# ==============================
+pytest==8.3.3
+httpx==0.27.2
+pytest-asyncio==0.24.0
