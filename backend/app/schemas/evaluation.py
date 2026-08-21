@@ -16,10 +16,17 @@ class StudentInfo(BaseModel):
 
 class EvaluationCreate(BaseModel):
     category: EvaluationCategory
-    comment: str = Field(min_length=3, max_length=5000)  # Kept for backward compatibility
+    # Optional: a student may submit only Likert ratings, or only
+    # strengths/areas_for_improvement, without free-text `comment`. The API
+    # layer (app.api.evaluation.submit_evaluation) enforces that at least
+    # one of comment / strengths / areas_for_improvement / ratings is
+    # present — making `comment` required here would silently defeat that
+    # check with an early 422 before the handler ever runs.
+    comment: str | None = Field(default=None, max_length=5000)
     evaluatee: str | None = None
     strengths: str | None = None
     areas_for_improvement: str | None = None
+    # Likert-scale ratings: mapping of question/aspect -> 1-5 score.
     ratings: dict[str, Any] | None = None
     # Student info for anonymous submissions (will be saved to User record)
     student_id: str | None = None
@@ -37,6 +44,10 @@ class EvaluationOut(BaseModel):
     areas_for_improvement: str | None = None
     ratings: dict[str, Any] | None = None
     sentiment: str | None = None
+    # Likert-derived classification, independent of the text sentiment
+    # `prediction` below. Present whenever `ratings` were submitted.
+    likert_sentiment: str | None = None
+    likert_average: float | None = None
     created_at: datetime
     prediction: PredictionOut | None = None
     student: StudentInfo | None = None

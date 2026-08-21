@@ -8,25 +8,31 @@ from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction
 from app.models.user import User, UserRole
 from app.schemas.evaluation import EvaluationCreate, EvaluationListResponse, EvaluationOut, StudentInfo
+from app.services.likert import classify_likert
 from app.services.preprocessing import clean_for_classical
 from app.services.prediction import run_prediction_pipeline
 
 router = APIRouter(prefix="/evaluation", tags=["Evaluations"])
 
 
-def _build_comment_from_payload(payload: EvaluationCreate) -> str:
-    """Build a comment string from structured fields for backward compatibility."""
-    if payload.comment and len(payload.comment) >= 3:
-        return payload.comment
+def _build_text_for_sentiment(payload: EvaluationCreate) -> str | None:
+    """Build the free-text string to run through the NLP sentiment pipeline.
+
+    Returns ``None`` when the student provided no genuine free text (a
+    Likert-only submission). Likert ratings are numeric and must never be
+    paraphrased into a sentence (e.g. "Average rating: 4.5/5") and fed to
+    the text sentiment models — that produces meaningless predictions on
+    text the models were never trained to see. Likert scoring is handled
+    separately via ``classify_likert``.
+    """
+    if payload.comment and payload.comment.strip():
+        return payload.comment.strip()
     parts = []
-    if payload.strengths:
-        parts.append(f"Strengths: {payload.strengths}")
-    if payload.areas_for_improvement:
-        parts.append(f"Areas for improvement: {payload.areas_for_improvement}")
-    if payload.ratings:
-        avg = sum(payload.ratings.values()) / len(payload.ratings) if payload.ratings else 0
-        parts.append(f"Average rating: {avg:.1f}/5")
-    return parts[0] if parts else f"{payload.category.value} evaluation"
+    if payload.strengths and payload.strengths.strip():
+        parts.append(f"Strengths: {payload.strengths.strip()}")
+    if payload.areas_for_improvement and payload.areas_for_improvement.strip():
+        parts.append(f"Areas for improvement: {payload.areas_for_improvement.strip()}")
+    return parts[0] if parts else None
 
 
 def _attach_student_info(evaluation: Evaluation) -> StudentInfo | None:
@@ -54,22 +60,33 @@ def submit_evaluation(
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
-    """Students submit open-ended feedback. The full model pipeline
-    (SVM + Random Forest + BERT) runs immediately and the official
-    production-model prediction is stored alongside every model's
-    individual output for research purposes."""
+    """Students submit Likert ratings and/or open-ended feedback. Likert
+    ratings are scored with a deterministic numeric aggregation
+    (``classify_likert``); free text is run through the full approved
+    text-sentiment pipeline (XGBoost + DeBERTa + RoBERTa / ensembles). The
+    two are independent — a submission may contain either, or both."""
 
-    # Require at least one meaningful field: a comment, or strengths /
-    # areas_for_improvement. This allows imported/minimal rows to pass while
-    # still enforcing that students actually type something.
+    # Require at least one meaningful field: a comment, strengths /
+    # areas_for_improvement, or Likert ratings. This allows imported/minimal
+    # rows and Likert-only submissions to pass while still enforcing that
+    # students actually submitted *something*.
     has_strengths = bool(payload.strengths and payload.strengths.strip())
     has_improvement = bool(payload.areas_for_improvement and payload.areas_for_improvement.strip())
     has_comment = bool(payload.comment and payload.comment.strip())
-    if not (has_strengths or has_improvement or has_comment):
+    has_ratings = bool(payload.ratings)
+    if not (has_strengths or has_improvement or has_comment or has_ratings):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please provide your feedback (comment, strengths, or areas for improvement).",
+            detail="Please provide your feedback (ratings, comment, strengths, or areas for improvement).",
         )
+
+    likert_label: str | None = None
+    likert_average: float | None = None
+    if payload.ratings:
+        try:
+            likert_label, likert_average = classify_likert(payload.ratings)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     # Handle student info for anonymous submissions (create/update user record)
     user_id = current_user.id if current_user else None
     if not current_user and payload.student_id:
@@ -100,55 +117,68 @@ def submit_evaluation(
             db.flush()
             user_id = new_user.id
 
-    comment = _build_comment_from_payload(payload)
+    text_for_sentiment = _build_text_for_sentiment(payload)
+    # `comment` is still stored for display/search even for ratings-only
+    # submissions, but a placeholder is used instead of feeding a fabricated
+    # sentence into the NLP pipeline (see _build_text_for_sentiment).
+    stored_comment = text_for_sentiment or f"{payload.category.value} evaluation (Likert only)"
+
     evaluation = Evaluation(
         user_id=user_id,
         category=payload.category,
-        comment=comment,
-        cleaned_comment=clean_for_classical(comment),
+        comment=stored_comment,
+        cleaned_comment=clean_for_classical(text_for_sentiment) if text_for_sentiment else None,
         evaluatee=payload.evaluatee,
         strengths=payload.strengths,
         areas_for_improvement=payload.areas_for_improvement,
         ratings=payload.ratings,
+        likert_sentiment=likert_label,
+        likert_average=likert_average,
     )
     db.add(evaluation)
     db.commit()
     db.refresh(evaluation)
 
-    try:
-        result = run_prediction_pipeline(db, comment)
-    except RuntimeError as exc:
-        db.delete(evaluation)
+    official_sentiment = likert_label  # default when there is no free text at all
+
+    if text_for_sentiment:
+        try:
+            result = run_prediction_pipeline(db, text_for_sentiment)
+        except RuntimeError as exc:
+            db.delete(evaluation)
+            db.commit()
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+        prediction = Prediction(
+            evaluation_id=evaluation.id,
+            svm_prediction=result["svm_prediction"],
+            svm_confidence=result["svm_confidence"],
+            random_forest_prediction=result["random_forest_prediction"],
+            random_forest_confidence=result["random_forest_confidence"],
+            naive_bayes_prediction=result["naive_bayes_prediction"],
+            naive_bayes_confidence=result["naive_bayes_confidence"],
+            bert_prediction=result["bert_prediction"],
+            bert_confidence=result["bert_confidence"],
+            xgb_prediction=result["xgb_prediction"],
+            xgb_confidence=result["xgb_confidence"],
+            deberta_prediction=result["deberta_prediction"],
+            deberta_confidence=result["deberta_confidence"],
+            roberta_prediction=result["roberta_prediction"],
+            roberta_confidence=result["roberta_confidence"],
+            official_prediction=result["official_prediction"],
+            algorithm_used=result["algorithm_used"],
+            confidence_score=result["confidence_score"],
+            processing_time_ms=result["processing_time_ms"],
+        )
+        db.add(prediction)
         db.commit()
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+        # The text model's official prediction takes precedence when free
+        # text was actually submitted; Likert score remains stored
+        # separately on the evaluation regardless (see likert_sentiment).
+        official_sentiment = result["official_prediction"]
 
-    prediction = Prediction(
-        evaluation_id=evaluation.id,
-        svm_prediction=result["svm_prediction"],
-        svm_confidence=result["svm_confidence"],
-        random_forest_prediction=result["random_forest_prediction"],
-        random_forest_confidence=result["random_forest_confidence"],
-        naive_bayes_prediction=result["naive_bayes_prediction"],
-        naive_bayes_confidence=result["naive_bayes_confidence"],
-        bert_prediction=result["bert_prediction"],
-        bert_confidence=result["bert_confidence"],
-        xgb_prediction=result["xgb_prediction"],
-        xgb_confidence=result["xgb_confidence"],
-        deberta_prediction=result["deberta_prediction"],
-        deberta_confidence=result["deberta_confidence"],
-        roberta_prediction=result["roberta_prediction"],
-        roberta_confidence=result["roberta_confidence"],
-        official_prediction=result["official_prediction"],
-        algorithm_used=result["algorithm_used"],
-        confidence_score=result["confidence_score"],
-        processing_time_ms=result["processing_time_ms"],
-    )
-    db.add(prediction)
-    db.commit()
-    db.refresh(evaluation)
-
-    # Store the official sentiment label directly on the evaluation row.
-    evaluation.sentiment = result["official_prediction"]
+    # Store the overall sentiment label directly on the evaluation row.
+    evaluation.sentiment = official_sentiment
     db.commit()
     db.refresh(evaluation)
 

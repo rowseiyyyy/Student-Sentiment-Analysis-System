@@ -57,3 +57,15 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
             detail="This action requires administrator privileges.",
         )
     return current_user
+
+
+def require_staff(current_user: User = Depends(get_current_user)) -> User:
+    """Faculty and administrators can view the shared/aggregate reporting
+    data (analytics, dashboards). Students may only see their own
+    submissions via the evaluation endpoints, never sitewide analytics."""
+    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.FACULTY}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This action requires faculty or administrator privileges.",
+        )
+    return current_user

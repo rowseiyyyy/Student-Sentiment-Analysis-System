@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import require_staff
 from app.core.database import get_db
 from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction, SentimentLabel
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
 @router.get("/overall", response_model=OverallAnalyticsResponse)
-def get_overall_analytics(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_overall_analytics(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
     return analytics_service.overall_analytics(db)
 
 
@@ -31,18 +31,18 @@ def get_overall_analytics(db: Session = Depends(get_db), current_user: User = De
 def get_category_analytics(
     category: EvaluationCategory,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff),
 ):
     return analytics_service.category_analytics(db, category)
 
 
 @router.get("/monthly", response_model=TrendResponse)
-def get_monthly_trend(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_monthly_trend(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
     return analytics_service.trend_analytics(db, granularity="monthly")
 
 
 @router.get("/daily", response_model=TrendResponse)
-def get_daily_trend(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_daily_trend(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
     return analytics_service.trend_analytics(db, granularity="daily")
 
 
@@ -51,7 +51,7 @@ def get_word_frequency(
     sentiment: SentimentLabel,
     top_n: int = Query(30, ge=1, le=200),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff),
 ):
     return analytics_service.word_frequency(db, sentiment, top_n=top_n)
 
@@ -60,7 +60,7 @@ def get_word_frequency(
 def get_top_complaints(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff),
 ):
     return analytics_service.top_comments(db, kind="complaints", limit=limit)
 
@@ -69,13 +69,13 @@ def get_top_complaints(
 def get_top_appreciations(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff),
 ):
     return analytics_service.top_comments(db, kind="appreciations", limit=limit)
 
 
 @router.get("/export/csv")
-def export_evaluations_csv(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def export_evaluations_csv(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
     """Streams all evaluations + predictions as a downloadable CSV report."""
     rows = (
         db.query(Evaluation, Prediction)
@@ -88,24 +88,21 @@ def export_evaluations_csv(db: Session = Depends(get_db), current_user: User = D
     writer = csv.writer(buffer)
     writer.writerow([
         "evaluation_id", "category", "comment", "sentiment", "official_prediction", "algorithm_used",
-        "confidence_score", "svm_prediction", "svm_confidence",
-        "random_forest_prediction", "random_forest_confidence",
-        "naive_bayes_prediction", "naive_bayes_confidence",
-        "bert_prediction", "bert_confidence",
+        "confidence_score", "xgb_prediction", "xgb_confidence",
+        "deberta_prediction", "deberta_confidence",
+        "roberta_prediction", "roberta_confidence",
         "created_at",
     ])
     for ev, pred in rows:
         writer.writerow([
             ev.id, ev.category.value, ev.comment, ev.sentiment or "", pred.official_prediction.value,
             pred.algorithm_used.value, pred.confidence_score,
-            pred.svm_prediction.value if pred.svm_prediction else "",
-            pred.svm_confidence if pred.svm_confidence else "",
-            pred.random_forest_prediction.value if pred.random_forest_prediction else "",
-            pred.random_forest_confidence if pred.random_forest_confidence else "",
-            pred.naive_bayes_prediction.value if pred.naive_bayes_prediction else "",
-            pred.naive_bayes_confidence if pred.naive_bayes_confidence else "",
-            pred.bert_prediction.value if pred.bert_prediction else "",
-            pred.bert_confidence if pred.bert_confidence else "",
+            pred.xgb_prediction.value if pred.xgb_prediction else "",
+            pred.xgb_confidence if pred.xgb_confidence else "",
+            pred.deberta_prediction.value if pred.deberta_prediction else "",
+            pred.deberta_confidence if pred.deberta_confidence else "",
+            pred.roberta_prediction.value if pred.roberta_prediction else "",
+            pred.roberta_confidence if pred.roberta_confidence else "",
             ev.created_at.isoformat(),
         ])
     buffer.seek(0)

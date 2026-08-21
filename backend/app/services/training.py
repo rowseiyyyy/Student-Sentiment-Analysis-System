@@ -263,6 +263,60 @@ def _write_comparison_artifacts(results: dict, best_algorithm: str, selection_me
         json.dump(metadata, fh, indent=2)
 
 
+def sync_deployment_metadata(db: Session, algorithm_name: str) -> None:
+    """Rewrite the ``production_model`` section of ``model_metadata.json`` to
+    match ``algorithm_name``.
+
+    ``model_metadata.json`` is normally written once per training run, for
+    whichever approach scored best (see ``_write_comparison_artifacts``).
+    If an admin later rolls back production to a *different* approved
+    approach via ``/ml/rollback``, that file is otherwise never updated,
+    which left runtime inference (``get_deployment_config`` in
+    ``app/services/prediction.py``) reconstructing ensembles using the
+    *previous* best approach's stale member list and weights. This function
+    must be called any time ``TrainingHistory.is_production_model`` changes
+    outside of ``run_full_training`` itself (i.e. on rollback), using each
+    ensemble's own persisted weights (stored in ``TrainingHistory.hyperparameters``
+    at training time) rather than falling back to configuration defaults.
+    """
+    settings.ML_DIR.mkdir(parents=True, exist_ok=True)
+
+    metadata: dict = {}
+    if settings.MODEL_METADATA_PATH.exists():
+        try:
+            with open(settings.MODEL_METADATA_PATH, encoding="utf-8") as fh:
+                metadata = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            metadata = {}
+
+    metadata["production_model"] = algorithm_name
+
+    if algorithm_name in ENSEMBLES:
+        history_algorithm = APPROACH_TO_ALGORITHM.get(algorithm_name)
+        latest = (
+            db.query(TrainingHistory)
+            .filter(TrainingHistory.algorithm == history_algorithm)
+            .order_by(TrainingHistory.created_at.desc())
+            .first()
+        )
+        members = members_of(algorithm_name)
+        trained_weights = {}
+        if latest is not None and latest.hyperparameters:
+            trained_weights = latest.hyperparameters.get("weights") or {}
+        metadata["approach_type"] = "ensemble"
+        metadata["ensemble_members"] = members
+        # Always derived from *this* approach's own persisted weights; never
+        # silently reused from whatever ensemble was previously in production.
+        metadata["ensemble_weights"] = normalize_weights(members, trained_weights)
+    else:
+        metadata["approach_type"] = "single"
+        metadata.pop("ensemble_members", None)
+        metadata.pop("ensemble_weights", None)
+
+    with open(settings.MODEL_METADATA_PATH, "w", encoding="utf-8") as fh:
+        json.dump(metadata, fh, indent=2)
+
+
 def run_full_training(
     db: Session,
     csv_path: Path,

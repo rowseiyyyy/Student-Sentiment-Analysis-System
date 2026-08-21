@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, JSON, String, Text
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -26,12 +26,21 @@ class Evaluation(Base):
     category: Mapped[EvaluationCategory] = mapped_column(Enum(EvaluationCategory), nullable=False)
     comment: Mapped[str] = mapped_column(Text, nullable=False)
     cleaned_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Overall sentiment label shown to faculty/admin: the text model's
+    # official_prediction when free text was submitted, otherwise the
+    # Likert-derived label (see likert_sentiment below).
     sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     # New structured evaluation fields
     evaluatee: Mapped[str | None] = mapped_column(String(250), nullable=True)
     strengths: Mapped[str | None] = mapped_column(Text, nullable=True)
     areas_for_improvement: Mapped[str | None] = mapped_column(Text, nullable=True)
     ratings: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Likert-scale classification: computed deterministically from `ratings`
+    # via app.services.likert.classify_likert. Kept fully separate from the
+    # text sentiment pipeline/columns above — Likert scores are never
+    # paraphrased into text and run through the NLP models.
+    likert_sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    likert_average: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     @property

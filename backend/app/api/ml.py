@@ -18,7 +18,12 @@ from app.schemas.ml import (
     TrainingHistoryOut,
     TrainRequest,
 )
-from app.services.training import DatasetValidationError, load_and_validate_dataset, run_full_training
+from app.services.training import (
+    DatasetValidationError,
+    load_and_validate_dataset,
+    run_full_training,
+    sync_deployment_metadata,
+)
 
 router = APIRouter(prefix="/ml", tags=["Machine Learning"])
 
@@ -224,6 +229,11 @@ def rollback_production_model(
     db.query(TrainingHistory).update({TrainingHistory.is_production_model: False})
     target.is_production_model = True
     db.commit()
+
+    # Keep model_metadata.json's production-model section (used to
+    # reconstruct ensembles at inference time) in sync with this rollback,
+    # using the rolled-back approach's own trained weights.
+    sync_deployment_metadata(db, target.algorithm.value)
 
     return {"message": f"Production model rolled back to {target.algorithm.value} (run {target.id})."}
 
