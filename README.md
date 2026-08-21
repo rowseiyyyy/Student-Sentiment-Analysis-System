@@ -32,24 +32,11 @@ Model	Role
 XGBoost	Traditional machine learning model using TF-IDF
 DeBERTa	Transformer-based sentiment classifier
 RoBERTa	Transformer-based sentiment classifier
-Weighted Ensemble
-Student Feedback
-       ↓
-Validation
-       ↓
-Preprocessing
-       ↓
- ┌──────────┬──────────┬──────────┐
- │ XGBoost  │ DeBERTa  │ RoBERTa  │
- │  20%     │   40%    │   40%    │
- └──────────┴──────────┴──────────┘
-       ↓
-Weighted Soft Voting
-       ↓
-Final Sentiment
-       ↓
-Positive / Neutral / Negative
-Technology Stack
+
+![Weighted Ensemble](https://github.com/user-attachments/assets/29fa62be-36db-469f-b3c3-fbf020bce353)
+
+
+Technology Stack:
 Backend
 Python
 FastAPI
@@ -57,7 +44,7 @@ SQLAlchemy
 MySQL
 Alembic
 JWT
-Machine Learning / NLP
+Machine Learning / NLP:
 XGBoost
 Hugging Face Transformers
 PyTorch
