@@ -191,9 +191,9 @@ These metrics are used to compare model performance and evaluate the effectivene
 
 ## Research Project
 
-**Project:** Student Sentiment Analysis System
-**Institution:** Asia Technological School of Science and Arts (Asiatech)
-**Location:** Sta. Rosa, Laguna, Philippines
+* **Project:** Student Sentiment Analysis System
+* **Institution:** Asia Technological School of Science and Arts (Asiatech)
+* **Location:** Sta. Rosa, Laguna, Philippines
 
 ### Researchers
 
