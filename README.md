@@ -24,7 +24,6 @@ The system collects student evaluations and analyzes open-ended feedback using *
 ### 👩‍🏫 Faculty
 
 * **Faculty account access**
-* View **student evaluation results**
 * View **sentiment analysis results**
 
 ### 🛠️ Administrator
