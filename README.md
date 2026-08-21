@@ -73,6 +73,7 @@ HTML5
 CSS3
 JavaScript
 Chart.js
+
 Project Structure
 Student-Sentiment-Analysis-System/
 │
@@ -107,40 +108,8 @@ Student-Sentiment-Analysis-System/
 ├── folder-structure.txt
 └── run.py
 
-flowchart TD
-    A["Student Sentiment Analysis System"]
+![SSAS System Architecture](https://github.com/user-attachments/assets/895a4fb8-eff1-4277-9ff8-1e7b603a275c)
 
-    A --> S["STUDENT"]
-    A --> AD["ADMIN"]
-
-    S --> SE["Submit Evaluation"]
-    SE --> L["Likert Scale<br/>1–5"]
-    SE --> C["Open-ended<br/>Comment"]
-
-    L --> LS["Likert Scoring"]
-    LS --> LR["Positive / Neutral / Negative"]
-
-    C --> ML["ML Sentiment Analysis"]
-    ML --> X["XGBoost"]
-    ML --> D["DeBERTa"]
-    ML --> R["RoBERTa"]
-
-    AD --> U["Upload External<br/>Labeled Dataset"]
-    U --> V["Validate Dataset"]
-
-    V --> X
-    V --> D
-    V --> R
-
-    X --> E["Evaluate 4 Ensembles"]
-    D --> E
-    R --> E
-
-    E --> CP["Compare Performance"]
-    CP --> B["Select Best Model / Ensemble"]
-    B --> SM["Save Model + Metadata"]
-    SM --> DP["Deploy for Use"]
-    
 Installation
 1. Clone the repository
 git clone https://github.com/rowseiyyyy/Student-Sentiment-Analysis-System.git
