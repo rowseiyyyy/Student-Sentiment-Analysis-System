@@ -74,40 +74,7 @@ CSS3
 JavaScript
 Chart.js
 
-Project Structure
-Student-Sentiment-Analysis-System/
-│
-├── backend/
-│   ├── alembic/
-│   ├── app/
-│   │   ├── api/
-│   │   ├── core/
-│   │   ├── datasets/
-│   │   ├── models/
-│   │   ├── schemas/
-│   │   ├── services/
-│   │   │   ├── deberta_service.py
-│   │   │   ├── ensembles.py
-│   │   │   ├── preprocessing.py
-│   │   │   ├── roberta_service.py
-│   │   │   ├── training.py
-│   │   │   └── xgboost_service.py
-│   │   └── utils/
-│   ├── tests/
-│   ├── scripts/
-│   ├── requirements.txt
-│   └── main.py
-│
-├── frontend/
-│   ├── css/
-│   ├── js/
-│   └── index.html
-│
-├── .gitignore
-├── TODO.md
-├── folder-structure.txt
-└── run.py
-
+![Project Structure](https://github.com/user-attachments/assets/52678679-eea2-4945-b4b1-d8986c8e58f1)
 ![SSAS System Architecture](https://github.com/user-attachments/assets/895a4fb8-eff1-4277-9ff8-1e7b603a275c)
 
 Installation
