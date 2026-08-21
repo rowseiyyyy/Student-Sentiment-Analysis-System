@@ -6,9 +6,9 @@ The system collects student evaluations and analyzes open-ended feedback using *
 
 ---
 
-## ✨ Features
+## Features
 
-### 👨‍🎓 Student
+### Student
 
 * **Student login** using student number
 * **Likert-scale evaluations**
@@ -21,12 +21,12 @@ The system collects student evaluations and analyzes open-ended feedback using *
   * School Facilities
 * **Automatic sentiment analysis**
 
-### 👩‍🏫 Faculty
+### Faculty
 
 * **Faculty account access**
 * View **sentiment analysis results**
 
-### 🛠️ Administrator
+### Administrator
 
 * **Administrator authentication**
 * **Dataset management**
@@ -40,7 +40,7 @@ The system collects student evaluations and analyzes open-ended feedback using *
 
 ---
 
-## 🧠 Sentiment Analysis
+## Sentiment Analysis
 
 The system uses **three machine learning models** combined through a **weighted soft-voting ensemble**.
 
@@ -50,7 +50,7 @@ The system uses **three machine learning models** combined through a **weighted 
 | **DeBERTa** | Transformer-based sentiment classifier              |
 | **RoBERTa** | Transformer-based sentiment classifier              |
 
-### ⚖️ Weighted Ensemble
+### Weighted Ensemble
 
 ![Weighted Ensemble](https://github.com/user-attachments/assets/29fa62be-36db-469f-b3c3-fbf020bce353)
 
@@ -58,7 +58,7 @@ The predictions from the three models are combined using a **weighted soft-votin
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 ### Backend
 
@@ -91,19 +91,19 @@ The predictions from the three models are combined using a **weighted soft-votin
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ![Project Structure](https://github.com/user-attachments/assets/52678679-eea2-4945-b4b1-d8986c8e58f1)
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ![SSAS System Architecture](https://github.com/user-attachments/assets/895a4fb8-eff1-4277-9ff8-1e7b603a275c)
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### 1. Clone the Repository
 
@@ -163,7 +163,7 @@ python run.py
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Run the backend tests:
 
@@ -174,7 +174,7 @@ pytest
 
 ---
 
-## 📊 Model Evaluation
+## Model Evaluation
 
 The system supports model evaluation using:
 
@@ -189,13 +189,13 @@ These metrics are used to compare model performance and evaluate the effectivene
 
 ---
 
-## 🎓 Research Project
+## Research Project
 
 **Project:** Student Sentiment Analysis System
 **Institution:** Asia Technological School of Science and Arts (Asiatech)
 **Location:** Sta. Rosa, Laguna, Philippines
 
-### 👥 Researchers
+### Researchers
 
 * **Rosemay N. Lorena**
 * **Queenie Mae C. Libres**
@@ -203,7 +203,7 @@ These metrics are used to compare model performance and evaluate the effectivene
 
 ---
 
-## 📌 Project Overview
+## Project Overview
 
 The **Asiatech Student Sentiment Analysis System (SSAS)** provides an automated platform for collecting and analyzing student feedback.
 
