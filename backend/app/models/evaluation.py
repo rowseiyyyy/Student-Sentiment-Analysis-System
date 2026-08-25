@@ -3,10 +3,11 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.services.mismatch import MismatchType
 
 
 class EvaluationCategory(str, enum.Enum):
@@ -26,21 +27,23 @@ class Evaluation(Base):
     category: Mapped[EvaluationCategory] = mapped_column(Enum(EvaluationCategory), nullable=False)
     comment: Mapped[str] = mapped_column(Text, nullable=False)
     cleaned_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Overall sentiment label shown to faculty/admin: the text model's
-    # official_prediction when free text was submitted, otherwise the
-    # Likert-derived label (see likert_sentiment below).
     sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
-    # New structured evaluation fields
-    evaluatee: Mapped[str | None] = mapped_column(String(250), nullable=True)
-    strengths: Mapped[str | None] = mapped_column(Text, nullable=True)
-    areas_for_improvement: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # FIX: the evaluation form was consolidated down to a single
+    # open-ended "Share your thoughts" field (was previously two
+    # separate fields: strengths / areas_for_improvement). This column
+    # replaces both. See app/schemas/evaluation.py (EvaluationCreate /
+    # EvaluationOut) and app/api/evaluation.py, which were already
+    # updated to read/write `share_your_thoughts` — this model was the
+    # missing piece, and its absence was the direct cause of the 500
+    # ("Internal Server Error... is not valid JSON") on submit.
+    share_your_thoughts: Mapped[str | None] = mapped_column(Text, nullable=True)
     ratings: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    # Likert-scale classification: computed deterministically from `ratings`
-    # via app.services.likert.classify_likert. Kept fully separate from the
-    # text sentiment pipeline/columns above — Likert scores are never
-    # paraphrased into text and run through the NLP models.
     likert_sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True)
     likert_average: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_mismatch: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    mismatch_type: Mapped[str] = mapped_column(
+        String(30), default=MismatchType.NONE.value, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     @property

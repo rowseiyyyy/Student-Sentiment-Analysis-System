@@ -1,62 +1,44 @@
 ﻿/**
  * Asiatech Sentiment Analysis - Student Module
  * Updated for "Asiatech Feedback Casefile" paper theme design.
- * Handles student login (by student number) and evaluation form submission.
+ * Anonymous evaluation flow — no student login/ID required.
  * All evaluation questions, fields, and submit logic preserved.
  */
 
 const STUDENT = {
-    currentStudentNumber: null,
     currentCourse: null,
     currentYearLevel: null,
 
     init() {
-        const studentNum = sessionStorage.getItem('asiatech_student_number');
-        if (studentNum) {
-            this.currentStudentNumber = studentNum;
-            this.currentCourse = sessionStorage.getItem('asiatech_student_course') || '';
-            this.currentYearLevel = sessionStorage.getItem('asiatech_student_year_level') || '';
-            this.showEvalForm();
-        }
+        // Anonymous flow: no student identity is persisted or restored.
+        // Students always start at the login page and click "Open evaluation".
     },
 
     handleLogin(e) {
         e.preventDefault();
-        const studentNumber = document.getElementById('inp-sn').value.trim();
-        if (!studentNumber || studentNumber.length < 3) {
-            showToast('Please enter a valid student number.', 'warning');
-            return;
-        }
-
-        this.currentStudentNumber = studentNumber;
-        sessionStorage.setItem('asiatech_student_number', this.currentStudentNumber);
-        showToast(`Welcome, ${this.currentStudentNumber}! Please fill out the evaluation form.`, 'success');
+        // Anonymous evaluation — no student number required.
+        showToast('Welcome! Please fill out the evaluation form.', 'success');
         this.showEvalForm();
     },
 
     logout() {
-        sessionStorage.removeItem('asiatech_student_number');
         sessionStorage.removeItem('asiatech_student_course');
         sessionStorage.removeItem('asiatech_student_year_level');
-        this.currentStudentNumber = null;
         this.currentCourse = null;
         this.currentYearLevel = null;
         APP.goToPage('page-login');
         document.getElementById('nav-student').style.display = 'none';
     },
 
-showEvalForm() {
+    showEvalForm() {
         APP.goToPage('page-student-eval');
         document.getElementById('nav-student').style.display = 'flex';
-        document.getElementById('badge-student').textContent = '\u{1F393} ' + this.currentStudentNumber;
-        document.getElementById('student-id-disp').textContent = 'Student ID: ' + this.currentStudentNumber;
+        document.getElementById('badge-student').textContent = '\u{1F393} Anonymous';
+        document.getElementById('student-id-disp').textContent = '';
 
-        // Show the form area, hide the submissions area
-        const studentContent = document.getElementById('student-content');
+        // Show the form area
         const formArea = document.getElementById('student-form-area');
-        const submissionsArea = document.getElementById('student-submissions-area');
-        if (formArea) formArea.style.display = '';
-        if (submissionsArea) submissionsArea.style.display = 'none';
+        if (formArea) formArea.classList.remove('hidden-block');
 
         // Restore saved course/year
         if (this.currentCourse) {
@@ -67,87 +49,6 @@ showEvalForm() {
         }
 
         this.renderFormTab('professor');
-    },
-
-    async showSubmissions() {
-        APP.goToPage('page-student-eval');
-        document.getElementById('nav-student').style.display = 'flex';
-        document.getElementById('badge-student').textContent = '\u{1F393} ' + this.currentStudentNumber;
-        document.getElementById('student-id-disp').textContent = 'Student ID: ' + this.currentStudentNumber;
-
-        const studentContent = document.getElementById('student-content');
-        const formArea = document.getElementById('student-form-area');
-        const submissionsArea = document.getElementById('student-submissions-area');
-        if (formArea) formArea.style.display = 'none';
-
-        if (!submissionsArea) {
-            // Build the submissions area dynamically
-            const div = document.createElement('div');
-            div.id = 'student-submissions-area';
-            studentContent.appendChild(div);
-        }
-
-        const container = document.getElementById('student-submissions-area');
-        container.style.display = '';
-        container.innerHTML = '<div class="page-header"><h1><i class="fas fa-history"></i> My Submissions</h1><span class="date-note">Your submitted evaluations</span></div><div class="text-center mt-4"><div class="spinner"></div><p>Loading your submissions...</p></div>';
-
-        try {
-            const data = await API.getEvaluations({ page_size: 100 });
-            const items = Array.isArray(data.items) ? data.items : [];
-            if (items.length === 0) {
-                container.innerHTML = '<div class="page-header"><h1><i class="fas fa-history"></i> My Submissions</h1></div><div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-inbox"></i></div><h3>No Submissions Yet</h3><p>You haven\'t submitted any evaluations yet.</p></div></div>';
-                return;
-            }
-
-            const rows = items.map(function(item, idx) {
-                const category = item.category || 'N/A';
-                const sentiment = item.sentiment || 'N/A';
-                const sentBadge = sentimentBadge ? sentimentBadge(item.sentiment) : '<span class="badge badge-neutral">' + escapeHtml(sentiment) + '</span>';
-                const commentShort = item.comment ? (item.comment.length > 100 ? item.comment.substring(0, 100) + '...' : item.comment) : '';
-                return '<tr>' +
-                    '<td style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">' + (idx + 1) + '</td>' +
-                    '<td><span class="badge badge-' + (String(category).toLowerCase() === 'faculty' ? 'faculty' : String(category).toLowerCase() === 'staff' ? 'staff' : String(category).toLowerCase() === 'facilities' ? 'facilities' : 'payment') + '">' + escapeHtml(category) + '</span></td>' +
-                    '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(item.comment || '') + '">' + escapeHtml(commentShort) + '</td>' +
-                    '<td style="white-space:nowrap;">' + sentBadge + '</td>' +
-                    '<td style="font-family:var(--font-mono);font-size:.8rem;white-space:nowrap;">' + formatDate(item.created_at) + '</td>' +
-                    '<td style="white-space:nowrap;"><button class="btn btn-sm btn-primary" onclick="STUDENT.viewSubmission(\'' + item.id + '\')" title="View"><i class="fas fa-eye"></i></button></td>' +
-                '</tr>';
-            }).join('');
-
-            container.innerHTML =
-                '<div class="page-header"><h1><i class="fas fa-history"></i> My Submissions</h1><span class="date-note">' + items.length + ' total</span></div>' +
-                '<div class="card"><div class="table-container"><table>' +
-                    '<thead><tr><th>#</th><th>Category</th><th>Comment</th><th>Sentiment</th><th>Date</th><th>Actions</th></tr></thead>' +
-                    '<tbody>' + rows + '</tbody></table></div></div>';
-        } catch (error) {
-            container.innerHTML = '<div class="page-header"><h1><i class="fas fa-history"></i> My Submissions</h1></div><div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div><h3>Error</h3><p>' + error.message + '</p></div></div>';
-        }
-    },
-
-    async viewSubmission(id) {
-        showLoading('Loading submission...');
-        try {
-            const item = await API.getEvaluation(id);
-            hideLoading();
-            const category = item.category || 'N/A';
-            const sentiment = item.sentiment || 'N/A';
-            const html =
-                '<div class="modal-row"><div class="modal-field"><label>Category</label><p>' + escapeHtml(category) + '</p></div>' +
-                '<div class="modal-field"><label>Sentiment</label><p>' + sentimentBadge(item.sentiment) + '</p></div></div>' +
-                '<div class="modal-row"><div class="modal-field"><label>Date Submitted</label><p>' + formatDate(item.created_at) + '</p></div>' +
-                '<div class="modal-field"><label>Evaluatee</label><p>' + escapeHtml(item.evaluatee || 'N/A') + '</p></div></div>' +
-                '<div style="margin-top:1rem;"><h4 style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:.3rem;">Full Comment</h4><p style="white-space:pre-wrap;">' + escapeHtml(item.comment || 'N/A') + '</p></div>';
-            if (item.strengths) {
-                html = html + '<div style="margin-top:1rem;background:var(--pos-bg);padding:0.75rem;border:1px solid var(--paper-line);"><h4 style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--pos);margin-bottom:.3rem;">Strengths</h4><p style="font-size:.85rem;white-space:pre-wrap;">' + escapeHtml(item.strengths) + '</p></div>';
-            }
-            if (item.areas_for_improvement) {
-                html = html + '<div style="margin-top:1rem;background:var(--neg-bg);padding:0.75rem;border:1px solid var(--paper-line);"><h4 style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--neg);margin-bottom:.3rem;">Improvements</h4><p style="font-size:.85rem;white-space:pre-wrap;">' + escapeHtml(item.areas_for_improvement) + '</p></div>';
-            }
-            APP.openModal(html);
-        } catch (error) {
-            hideLoading();
-            showToast('Failed to load submission: ' + error.message, 'error');
-        }
     },
 
     renderFormTab(tab) {
@@ -174,118 +75,27 @@ showEvalForm() {
     },
 
     // ============================================================
-    // PROFESSOR FORM — All original questions/fields preserved
+    // PROFESSOR FORM — questions updated (9 rated items)
     // ============================================================
-    professorForm() {
+       professorForm() {
         return `
             <div class="eval-form-card">
                 <h2><i class="fas fa-chalkboard-teacher"></i> Professor Evaluation Form</h2>
                 <p class="form-desc">Please provide your honest feedback about your professor's teaching performance and professionalism.</p>
                 <form class="eval-form" id="professor-form">
-                    ${selectField('professor_name', 'Select the professor you are evaluating', [
-                        'Prof. Abellano, Polyana R.',
-                        'Prof. Aragon, Ana Rose',
-                        'Prof. Atienza, Leo',
-                        'Prof. Atienza, Rea',
-                        'Prof. Avendano, Alexander',
-                        'Prof. Bagunas, Norielene C.',
-                        'Prof. Ballad, Joshua',
-                        'Prof. Banga, Mary Jean',
-                        'Prof. Baroro, Von Ryan',
-                        'Prof. Barrete, Remegio Jr.',
-                        'Prof. Barroso, Ailyn',
-                        'Prof. Basuan, Keith Lenard',
-                        'Prof. Batayon, John Carlo R.',
-                        'Prof. Bayasbas, Rodel',
-                        'Prof. Bejer, Marilyn',
-                        'Prof. Bernardo, Myrtel',
-                        'Prof. Binasoy, Juliet',
-                        'Prof. Bonaobra, Carmela',
-                        'Prof. Buhay, Elizabeth',
-                        'Prof. Cabana, Mary Joy',
-                        'Prof. Camaclang, Camille',
-                        'Prof. Capacio, Mark Ryan',
-                        'Prof. Cera, Pauline Grace',
-                        'Prof. Cosep, Cyrill John',
-                        'Prof. De Guzman, Marie Charlene',
-                        'Prof. Deada, Lani',
-                        'Prof. Deblois, Mary Strelitzia',
-                        'Prof. Diano, Marivic',
-                        'Prof. Endencio, Vicmar',
-                        'Prof. Escuton, Darle Joy',
-                        'Prof. Eusoya, Mhilpe',
-                        'Prof. Farol, Jose III',
-                        'Prof. Flores, Jomhae',
-                        'Prof. Geraldez, Mademoiselle Irish',
-                        'Prof. Golloso, Joy',
-                        'Prof. Gomez, Romeo Jr.',
-                        'Prof. Guardarama, Cesiel',
-                        'Prof. Guarino, Ronnel',
-                        'Prof. Gumapac, Samuel',
-                        'Prof. Gutierrez, Malou',
-                        'Prof. Indicio, John Lester',
-                        'Prof. Indino, Creselito',
-                        'Prof. Intia, John Francis R.',
-                        'Prof. Iyoy, Nerie',
-                        'Prof. Jasmin, Jose Mari',
-                        'Prof. Jebunan, Bianca N.',
-                        'Prof. Julianda, Bryan',
-                        'Prof. Lafuente, Joel',
-                        'Prof. Lalap, Rose Ann',
-                        'Prof. Lascano, Clark Allen Y.',
-                        'Prof. Libas, Sem O.',
-                        'Prof. Lleve, Shelalin G.',
-                        'Prof. Maghanoy, Charissa',
-                        'Prof. Mallari, Abigail',
-                        'Prof. Manarin, Crishel Aeye',
-                        'Prof. Mapote, Harvie',
-                        'Prof. Maquinad, Sheila',
-                        'Prof. Mendoza, Joanne',
-                        'Prof. Miranda, Christine',
-                        'Prof. Natividad, Angel',
-                        'Prof. Nava, Clara Mae',
-                        'Prof. Ocampo, Rodelmar',
-                        'Prof. Oliva, Catherine',
-                        'Prof. Paciente, Aila Marie',
-                        'Prof. Payos, John Paul',
-                        'Prof. Plenago, Adrian',
-                        'Prof. Ramos, Kaizzer Paul',
-                        'Prof. Ramos, Marigrace',
-                        'Prof. Reformo, Jasper Keith',
-                        'Prof. Respende, John Ray',
-                        'Prof. Roman, Rhizza',
-                        'Prof. Sabao, Joemari',
-                        'Prof. Salazar, Jefrey',
-                        'Prof. Samson, Alliah',
-                        'Prof. Seastres, Agustin',
-                        'Prof. Sumbilon, Roy',
-                        'Prof. Tolentino, Jonathan',
-                        'Prof. Tuazon, Rozaida',
-                        'Prof. Tuquilar, Eduardo',
-                        'Prof. Veridiano, Johana',
-                        'Prof. Veridiano, Johani',
-                        'Prof. Veron, Jeff Fred',
-                        'Prof. Victorio, Joaquin',
-                        'Prof. Villarama, Bon Jovi',
-                        'Prof. Zamora, Kerr'
-                    ], 'Choose a professor')}
-                    <div class="form-group">
-                        <label for="subject"><i class="fas fa-book"></i> Subject/Course handled by this professor</label>
-                        <input type="text" id="subject" name="subject" class="form-control" placeholder="Type the subject/course name..." required />
-                    </div>
                     <div class="form-section" style="margin-top:1.5rem;">
-                        <h4 style="margin-bottom:0.75rem;">Rate the following aspects (1 = Very Poor, 5 = Excellent):</h4>
-                        ${likertScale('mastery', 'This professor demonstrates mastery of the subject matter.')}
-                        ${likertScale('teaching_quality', 'This professor delivers lessons with good teaching quality.')}
-                        ${likertScale('clarity', 'This professor communicates and explains lessons clearly.')}
-                        ${likertScale('fairness', 'This professor grades and evaluates students fairly.')}
-                        ${likertScale('punctuality', 'Rate this professor\'s punctuality and attendance.')}
-                        ${likertScale('approachability', 'Rate this professor\'s approachability.')}
-                        ${likertScale('classroom_mgmt', 'Rate this professor\'s classroom management.')}
+                        <h4 style="margin-bottom:0.75rem;">Rate the following aspects:</h4>
+                        ${likertScale('teaching_quality', 'The professor delivers lessons with good teaching quality.')}
+                        ${likertScale('mastery', 'The professor demonstrates mastery of the subject matter.')}
+                        ${likertScale('clarity', 'The professor communicates and explains lessons clearly.')}
+                        ${likertScale('fairness', 'The professor grades and evaluates students fairly.')}
+                        ${likertScale('punctuality', 'The professor is punctual and has regular attendance.')}
+                        ${likertScale('approachability', 'The professor is approachable and willing to help students.')}
+                        ${likertScale('feedback', 'The professor provides timely and constructive feedback on students\' performance.')}
+                        ${likertScale('classroom_mgmt', 'The professor manages the classroom effectively.')}
+                        ${likertScale('teaching_style', 'The professor\'s teaching style is effective this semester.')}
                     </div>
-                    ${textareaField('teaching_style', 'What can you say about this professor\'s teaching style this semester?', 'Share your thoughts...')}
-                    ${textareaField('strengths', 'What are this professor\'s strengths?', 'List the professor\'s strengths...')}
-                    ${textareaField('improvements', 'What can this professor improve on?', 'Suggest areas for improvement...')}
+                    ${textareaField('share_your_thoughts', 'Share your thoughts about this professor (teaching style, strengths, areas for improvement, or anything else).', 'Share your thoughts...')}
                     <button type="submit" class="btn btn-primary btn-block btn-lg mt-3">
                         <i class="fas fa-paper-plane"></i> Submit Professor Evaluation
                     </button>
@@ -295,7 +105,7 @@ showEvalForm() {
     },
 
     // ============================================================
-    // STAFF FORM — All original questions/fields preserved
+    // STAFF FORM — questions updated
     // ============================================================
     staffForm() {
         return `
@@ -304,18 +114,17 @@ showEvalForm() {
                 <p class="form-desc">Thank you for your feedback. Please answer the following questions based on your recent experience with our school staff.</p>
                 <form class="eval-form" id="staff-form">
                     <div class="form-section">
-                        <h4 style="margin-bottom:0.75rem;">Rate the following aspects (1 = Very Poor, 5 = Excellent):</h4>
-                        ${likertScale('safety', 'The guards make me feel safe and greet me warmly.')}
-                        ${likertScale('registrar', 'The registrar\'s office staff are patient and helpful.')}
-                        ${likertScale('cashier', 'Transactions at the cashier are stress-free.')}
-                        ${likertScale('canteen', 'The canteen staff serve us warmly.')}
-                        ${likertScale('substitute', 'Substitutes and temporary staff are well-prepared.')}
-                        ${likertScale('office_staff', 'Office staff quickly respond to requests.')}
-                        ${likertScale('admin_comm', 'Administration keeps students well-informed.')}
-                        ${likertScale('maintenance', 'Maintenance staff do an excellent job.')}
+                        <h4 style="margin-bottom:0.75rem;">Rate the following aspects:</h4>
+                        ${likertScale('safety', 'The guards make me feel safe and greet me warmly whenever I enter the campus.')}
+                        ${likertScale('registrar', 'The registrar\'s office staff are patient and helpful when answering questions about documents, records, and enrollment.')}
+                        ${likertScale('cashier', 'Transactions at the cashier or accounting window are stress-free and handled with professionalism.')}
+                        ${likertScale('canteen', 'The canteen staff serve us warmly and keep the food service area clean and organized.')}
+                        ${likertScale('substitute', 'Substitutes and temporary staff are well-prepared and keep our regular routines going smoothly.')}
+                        ${likertScale('office_staff', 'The office staff quickly reply whenever I ask for help or need paperwork done.')}
+                        ${likertScale('admin_comm', 'The school administration keeps us well updated through social media about campus announcements and events.')}
+                        ${likertScale('maintenance', 'The maintenance and hallway staff do a wonderful job keeping our school surroundings safe and clean.')}
                     </div>
-                    ${textareaField('positive_impact', 'What specific behavior of the staff made a positive impact?', 'Share your thoughts...')}
-                    ${textareaField('staff_improvements', 'What can staff improve to provide better service?', 'Share your thoughts...')}
+                    ${textareaField('share_your_thoughts', 'Share your thoughts about our staff (what stood out, what could be improved, or anything else).', 'Share your thoughts...')}
                     <button type="submit" class="btn btn-primary btn-block btn-lg mt-3">
                         <i class="fas fa-paper-plane"></i> Submit Staff Evaluation
                     </button>
@@ -325,7 +134,7 @@ showEvalForm() {
     },
 
     // ============================================================
-    // FACILITIES FORM — All original questions/fields preserved
+    // FACILITIES FORM — questions updated
     // ============================================================
     facilitiesForm() {
         return `
@@ -334,18 +143,17 @@ showEvalForm() {
                 <p class="form-desc">Please evaluate the school's facilities based on your recent experience.</p>
                 <form class="eval-form" id="facilities-form">
                     <div class="form-section">
-                        <h4 style="margin-bottom:0.75rem;">Rate the following aspects (1 = Very Poor, 5 = Excellent):</h4>
-                        ${likertScale('spaces', 'The school has great spaces such as benches, study areas, and shaded outdoor spaces.')}
-                        ${likertScale('furniture', 'Classroom tables and chairs are in good condition.')}
-                        ${likertScale('cleanliness', 'General cleanliness is consistently maintained throughout the school facilities.')}
-                        ${likertScale('bathrooms', 'The bathrooms are clean and well-maintained.')}
-                        ${likertScale('cafeteria', 'The cafeteria has a clean dining area with sufficient seating.')}
-                        ${likertScale('monitors', 'Classroom monitor systems are functioning properly.')}
-                        ${likertScale('computers', 'Laboratory computers are easy to use and properly maintained.')}
-                        ${likertScale('classrooms', 'Classrooms are bright, clean, and comfortable for learning.')}
+                        <h4 style="margin-bottom:0.75rem;">Rate the following aspects:</h4>
+                        ${likertScale('spaces', 'The school has great spaces like hanging spots, benches, and trees.')}
+                        ${likertScale('furniture', 'The classroom tables and chairs are all in good condition.')}
+                        ${likertScale('cleanliness', 'General cleanliness in all facilities is observed.')}
+                        ${likertScale('bathrooms', 'The bathrooms are always clean and smell fresh.')}
+                        ${likertScale('cafeteria', 'The cafeteria or canteen has a clean dining space with plenty of room to sit and eat.')}
+                        ${likertScale('monitors', 'The monitor systems in the classrooms are all working properly.')}
+                        ${likertScale('computers', 'The lab computers are all easy to use and are well-managed.')}
+                        ${likertScale('classrooms', 'The classrooms are always bright, clean, and well-maintained, making me comfortable to work properly.')}
                     </div>
-                    ${textareaField('positive_facilities', 'Describe the most positive thing you noticed about the school facilities.', 'Share your thoughts...')}
-                    ${textareaField('facilities_improvements', 'What improvements or maintenance would you recommend for the school facilities?', 'Share your thoughts...')}
+                    ${textareaField('share_your_thoughts', 'Share your thoughts about our facilities (what stood out, what needs improvement, or anything else).', 'Share your thoughts...')}
                     <button type="submit" class="btn btn-primary btn-block btn-lg mt-3">
                         <i class="fas fa-paper-plane"></i> Submit Facilities Evaluation
                     </button>
@@ -355,7 +163,8 @@ showEvalForm() {
     },
 
     // ============================================================
-    // PAYMENTS FORM — All original questions/fields preserved
+    // PAYMENTS FORM — questions updated ("online" question replaced
+    // by two new items: fee-info clarity and digital banking trust)
     // ============================================================
     paymentsForm() {
         return `
@@ -364,17 +173,17 @@ showEvalForm() {
                 <p class="form-desc">Please answer the following questions based on your recent experience with the payment and accounting services.</p>
                 <form class="eval-form" id="payments-form">
                     <div class="form-section">
-                        <h4 style="margin-bottom:0.75rem;">Rate the following aspects (1 = Very Poor, 5 = Excellent):</h4>
-                        ${likertScale('accessibility', 'The payment portal or payment counter is easily accessible during convenient hours.')}
-                        ${likertScale('processing', 'My payments and fee clearances are processed promptly.')}
-                        ${likertScale('queues', 'Payment queues move efficiently, even during peak periods.')}
-                        ${likertScale('online', 'Online payment services are reliable and convenient.')}
-                        ${likertScale('courteous', 'Payment personnel are courteous, helpful, and responsive to payment-related concerns.')}
-                        ${likertScale('accounting', 'Accounting and registrar personnel are polite, professional, and responsive when handling payment or document-related inquiries.')}
-                        ${likertScale('security', 'I feel confident that my personal and financial information is secure during transactions.')}
+                        <h4 style="margin-bottom:0.75rem;">Rate the following aspects:</h4>
+                        ${likertScale('accessibility', 'The payment portal/counter is easily accessible at convenient times for my schedule.')}
+                        ${likertScale('processing', 'My payments or fee clearances are processed and posted to my account in a timely manner.')}
+                        ${likertScale('queues', 'The on-site payment queues move quickly and efficiently, even during peak days.')}
+                        ${likertScale('courteous', 'Payment personnel are courteous, helpful, and prompt in addressing payment-related inquiries or concerns.')}
+                        ${likertScale('accounting', 'Accounting and registrar personnel are helpful, polite, and responsive when addressing payment and document-related inquiries or issues.')}
+                        ${likertScale('security', 'I feel confident that my personal and financial information is secure when making transactions.')}
+                        ${likertScale('info_clarity', 'The payment process provides clear and accurate information about my fees, balances, and transactions.')}
+                        ${likertScale('digital_trust', 'I trust that my personal and financial information is protected when using the digital banking information system for transactions.')}
                     </div>
-                    ${textareaField('payment_challenges', 'What specific challenges or difficulties have you experienced when making payments or transacting with the accounting/payment office?', 'Share your thoughts...')}
-                    ${textareaField('payment_recommendations', 'What recommendations would you suggest to make the payment process more efficient and user-friendly?', 'Share your thoughts...')}
+                    ${textareaField('share_your_thoughts', 'Share your thoughts about our payment process (challenges you faced, suggestions, or anything else).', 'Share your thoughts...')}
                     <button type="submit" class="btn btn-primary btn-block btn-lg mt-3">
                         <i class="fas fa-paper-plane"></i> Submit Payment Evaluation
                     </button>
@@ -385,6 +194,16 @@ showEvalForm() {
 
     // ============================================================
     // FORM SUBMIT — All original logic preserved
+    // FIX (C1): Stop building a client-side `comment` string that
+    // tacks "Average rating: X/5" onto real text. That polluted
+    // string was being sent as `comment`, and the backend's
+    // _build_text_for_sentiment() uses `comment` as-is when present,
+    // completely bypassing the backend fix that keeps Likert scores
+    // out of the sentiment text. Now we only send the raw fields
+    // (strengths, areas_for_improvement, ratings) and let the
+    // backend do the joining — comment is left null.
+    //
+    // Anonymous flow: student_id is no longer sent/tracked.
     // ============================================================
     async handleFormSubmit(e, category) {
         e.preventDefault();
@@ -400,28 +219,20 @@ showEvalForm() {
 
         const categoryName = categoryMap[category] || 'Evaluation';
         const ratings = {};
-        let strengthsText = '';
-        let improvementsText = '';
+        let thoughtsText = '';
         let evaluatee = '';
 
         for (const [key, value] of formData.entries()) {
             const num = parseInt(value, 10);
             if (!Number.isNaN(num) && num >= 1 && num <= 5) {
                 ratings[key] = num;
-           } else if (value && value.trim().length > 0) {
+            } else if (value && value.trim().length > 0) {
                 if (key === 'professor_name') {
                     evaluatee = value.trim();
-                } else if (key === 'strengths') {
-                    strengthsText = strengthsText
-                        ? strengthsText + '\n\n' + value.trim()
+                } else if (key === 'share_your_thoughts') {
+                    thoughtsText = thoughtsText
+                        ? thoughtsText + '\n\n' + value.trim()
                         : value.trim();
-                } else if (key === 'teaching_style') {
-                    const teachingStyleText = 'Teaching style: ' + value.trim();
-                    strengthsText = strengthsText
-                        ? strengthsText + '\n\n' + teachingStyleText
-                        : teachingStyleText;
-                } else if (key === 'improvements' || key === 'staff_improvements' || key === 'facilities_improvements' || key === 'payment_recommendations') {
-                    improvementsText = value.trim();
                 }
             }
         }
@@ -431,15 +242,13 @@ showEvalForm() {
         const course = courseEl ? courseEl.value : '';
         const yearLevel = yearLevelEl ? yearLevelEl.value : '';
 
-        if (!course) {
-    showToast('Please select your course/program.', 'warning');
-    return;
-}
-if (!yearLevel) {
-    showToast('Please select your year level.', 'warning');
-    return;
-}
-const emptyTextarea = Array.from(form.querySelectorAll('textarea[required]'))
+                if (!course) {
+            showToast('Please select your course/program.', 'warning');
+            return;
+        }
+        // Year level is completely optional — no validation for it.
+
+        const emptyTextarea = Array.from(form.querySelectorAll('textarea[required]'))
             .find(function(el) { return el.value.trim().length === 0; });
         if (emptyTextarea) {
             showToast('Please answer all questions before submitting.', 'warning');
@@ -456,30 +265,23 @@ const emptyTextarea = Array.from(form.querySelectorAll('textarea[required]'))
             sessionStorage.setItem('asiatech_student_year_level', yearLevel);
         }
 
-        const allRatings = Object.values(ratings);
-        const avgRating = allRatings.length > 0
-            ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length).toFixed(1)
-            : 'N/A';
-
-        const commentParts = [];
-        if (strengthsText) commentParts.push(`Strengths: ${strengthsText}`);
-        if (improvementsText) commentParts.push(`Areas for improvement: ${improvementsText}`);
-        if (avgRating !== 'N/A') commentParts.push(`Average rating: ${avgRating}/5`);
-        const comment = commentParts.length > 0
-            ? commentParts.join('. ')
-            : `${categoryName} evaluation submitted`;
-
+        // NOTE: no client-side `comment` construction anymore.
+        // Do not compute avgRating-into-comment here — the backend's
+        // _build_text_for_sentiment() is the single source of truth
+        // for joining strengths/improvements/ratings into sentiment text.
         const payload = {
             category: categoryName,
-            comment,
+            comment: null,
             evaluatee: evaluatee || null,
-            strengths: strengthsText || null,
-            areas_for_improvement: improvementsText || null,
+            share_your_thoughts: thoughtsText || null,
             ratings: Object.keys(ratings).length > 0 ? ratings : null,
-            student_id: this.currentStudentNumber,
+            student_id: null,
             course: course || null,
             year_level: yearLevel || null
         };
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
 
         showLoading('Submitting your evaluation...');
 
@@ -514,6 +316,7 @@ const emptyTextarea = Array.from(form.querySelectorAll('textarea[required]'))
             form.reset();
         } catch (error) {
             showToast(`Failed to submit: ${error.message}`, 'error');
+            if (submitBtn) submitBtn.disabled = false;
         } finally {
             hideLoading();
         }

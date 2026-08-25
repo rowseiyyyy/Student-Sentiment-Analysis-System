@@ -1,4 +1,4 @@
-"""add evaluatee, strengths, areas_for_improvement, ratings to evaluations;
+"""add, strengths, areas_for_improvement, ratings to evaluations;
 add student_id, course, year_level to users
 
 Revision ID: 0002
@@ -24,7 +24,6 @@ def upgrade() -> None:
     op.create_index("ix_users_student_id", "users", ["student_id"], unique=False)
 
     # Add columns to evaluations table
-    op.add_column("evaluations", sa.Column("evaluatee", sa.String(250), nullable=True))
     op.add_column("evaluations", sa.Column("strengths", sa.Text, nullable=True))
     op.add_column("evaluations", sa.Column("areas_for_improvement", sa.Text, nullable=True))
     op.add_column("evaluations", sa.Column("ratings", sa.JSON, nullable=True))
@@ -35,7 +34,6 @@ def downgrade() -> None:
     op.drop_column("evaluations", "ratings")
     op.drop_column("evaluations", "areas_for_improvement")
     op.drop_column("evaluations", "strengths")
-    op.drop_column("evaluations", "evaluatee")
 
     # Remove columns from users table
     op.drop_index("ix_users_student_id", table_name="users")

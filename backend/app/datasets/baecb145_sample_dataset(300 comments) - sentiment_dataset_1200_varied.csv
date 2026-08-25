@@ -1,0 +1,301 @@
+Course,Year Level,Category,Comment,Sentiment,Date
+BSCS,4,Facilities,"Overall, Standard lang ang kondisyon ng canteen, walang masyadong reklamo. At saka, Manageable naman ang traffic sa hallway kahit peak hours. Sana mapansin ito.",Neutral,2026-08-06
+BSIS,2,Staff,"Base sa experience ko, Naramdaman ko na sincere sila sa pagtulong, hindi lang basta trabaho lang para sa kanila. At saka, Ang bait ng staff sa registrar, tinulungan ako agad sa concern ko. Sana mapansin ito.",Positive,2026-08-01
+BSN,3,Payments,"Nagka-error yung system nang magbayad ako, kinailangan kong ulitin ng tatlong beses. At saka, Ilang araw bago ma-reflect ang bayad ko sa system, nag-alala ako baka mabansag late.",Negative,2026-08-14
+BSIT,2,Payments,"Base sa experience ko, Clear ang breakdown ng fees, walang hidden charges na nakakagulat. Also, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. Sana po maayos pa.",Positive,2026-08-21
+BSCS,2,Faculty,"Honestly, Hirap kausapin, parang ayaw talaga sumagot sa concerns namin. Kasabay nito, Feeling ko sobrang favoritism, iba yung treatment sa ibang section.",Negative,2026-08-12
+BEED,2,Faculty,"For me, Palaging cancelled ang klase pero hindi namin alam kung ano ang gagawin instead. Plus, Sobrang laganap ng typo sa slides, mukhang hindi pa na-proofread. Yun lang po.",Negative,2026-08-02
+BSN,4,Facilities,"Base sa experience ko, Marumi ang mga CR, matagal nang hindi na-clean ayon sa nakikita ko. Plus, Palaging discconnect ang wifi, nakakaabala sa mga submission namin. Sana mapansin ito.",Negative,2026-08-20
+BSIT,4,Payments,"Base sa experience ko, Maayos ang tracking ng balance ko, laging updated ang statement of account.",Positive,2026-08-01
+BEED,2,Staff,"Hindi ma-contact ang office, ilang beses akong tumawag walang sumasagot. Sana mapansin ito.",Negative,2026-08-14
+BSIS,3,Staff,"Overall, Ang galing ng customer service, sinagot lahat ng tanong ko nang maayos. Yun lang po.",Positive,2026-08-15
+BSIT,1,Payments,"Base sa experience ko, Gumagana naman ang portal kahit minsan medyo mabagal mag-load. Standard lang ang fees, wala namang malaking pagbabago kumpara noon.",Neutral,2026-08-04
+BSIT,1,Staff,"Overall, Naramdaman ko na sincere sila sa pagtulong, hindi lang basta trabaho lang para sa kanila. Solved agad nila yung concern ko kahit medyo complicated pa yun.",Positive,2026-08-18
+BSBA,2,Facilities,Sobrang init sa loob ng room kasi sira ang aircon for weeks na. Sana ma-continue.,Negative,2026-08-04
+BSN,4,Facilities,"Base sa experience ko, Ang linis at ayos ng library ngayon, sobrang conducive mag-aral. Plus, Salamat sa maayos na CRs, laging malinis kapag pumupunta ako. Sana po maayos pa.",Positive,2026-08-07
+BSIS,3,Faculty,"For me, Okay lang naman ang klase, standard lang, walang masyadong kakaiba. At saka, Medyo puro lecture pero at least clear naman ang mga concepts.",Neutral,2026-08-04
+BSCS,4,Faculty,"Honestly, Nakakatuwa kasi may humor pa sa gitna ng mahirap na lesson, hindi nakakaantok. Patient siya sa mga tanong namin kahit paulit-ulit, sobrang bait niya explain ng explain. Sana mapansin ito.",Positive,2026-08-03
+BSIT,3,Faculty,"Sobrang helpful ng consultation hours, laging may time para sa amin. Sana po maayos pa.",Positive,2026-08-10
+BSIT,3,Payments,"Nag-crash ang portal habang nagbabayad ako, hindi ko alam kung na-charge na ako o hindi. Also, Nahirapan akong makipag-ayos sa refund ko, sobrang tagal ng proseso. That's it naman.",Negative,2026-08-20
+BSIS,1,Facilities,"Honestly, Ang ganda ng bagong study hub, sulit gamitin lalo na tuwing exam week. Also, Ang linis at ayos ng library ngayon, sobrang conducive mag-aral.",Positive,2026-08-18
+BSN,3,Staff,"Approachable sila lalo na yung nasa front desk, madali lang lapitan. Nagpapasalamat ako sa tulong nila, naayos agad yung isyu ko sa records.",Positive,2026-08-18
+BSCS,1,Staff,"Sa totoo lang, Fine lang ang experience ko, wala akong major issue sa transaction. Dagdag pa rito, Nagawa naman yung request ko, konting hintay lang pero okay pa rin. Sana po maayos pa.",Neutral,2026-08-02
+BSIS,3,Payments,"Base sa experience ko, Manageable ang installment plan, kahit papaano nakakaabot naman ako. Standard lang ang fees, wala namang malaking pagbabago kumpara noon.",Neutral,2026-08-01
+BSCS,1,Staff,"Sa totoo lang, Ang bait ng staff sa registrar, tinulungan ako agad sa concern ko. At saka, Naramdaman ko na sincere sila sa pagtulong, hindi lang basta trabaho lang para sa kanila. Sana mapansin ito.",Positive,2026-08-04
+BSIT,4,Facilities,"Honestly, Sapat naman ang espasyo sa classroom kahit medyo crowded minsan.",Neutral,2026-08-01
+BSIT,2,Staff,"Honestly, Nakakalungkot kasi kulang ang staff kaya matagal talaga ang serbisyo. Sana po maayos pa.",Negative,2026-08-20
+BSIT,3,Facilities,"Sa totoo lang, Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa. Yun lang po.",Negative,2026-08-12
+BEED,4,Faculty,"For me, Hindi makasagot ng maayos sa mga tanong, parang hindi rin sure sa topic. At saka, Sobrang laganap ng typo sa slides, mukhang hindi pa na-proofread. That's it naman.",Negative,2026-08-20
+BSCS,3,Faculty,"Honestly, Nahihirapan akong sumunod sa lecture kasi sobrang bilis at walang recap. Also, Wala akong natutunan sa buong semester, puro readings na wala namang discussion. Yun lang po.",Negative,2026-08-08
+BSN,1,Faculty,"Ok lang ang setup, minsan mabilis mag-move sa next topic pero survivable.",Neutral,2026-08-15
+BSIS,1,Faculty,"Grading criteria hindi malinaw, iba-iba ang score kahit parehas lang ang sagot.",Negative,2026-08-19
+BSBA,2,Faculty,"Overall, Parang galit palagi kapag nagtatanong kami, nakakatakot lumapit. Dagdag pa rito, Hindi makasagot ng maayos sa mga tanong, parang hindi rin sure sa topic.",Negative,2026-08-11
+BSN,2,Payments,"Overall, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. Kasabay nito, Ang bilis ng confirmation pagkatapos magbayad, walang problema sa receipt. Sana ma-continue.",Positive,2026-08-12
+BSBA,4,Facilities,"Honestly, Maayos na ang signage sa buong campus, hindi na ako nalilito saan pupunta. Sana po maayos pa.",Positive,2026-08-10
+BSIS,1,Faculty,"For me, Sobrang laganap ng typo sa slides, mukhang hindi pa na-proofread. Dagdag pa rito, Palaging cancelled ang klase pero hindi namin alam kung ano ang gagawin instead.",Negative,2026-08-19
+BEED,4,Facilities,"Base sa experience ko, Maayos na ang signage sa buong campus, hindi na ako nalilito saan pupunta. Dagdag pa rito, Ang linis at ayos ng library ngayon, sobrang conducive mag-aral. Sana po maayos pa.",Positive,2026-08-02
+BSIT,2,Payments,"Honestly, Sapat naman ang info na nakalagay sa invoice, though pwede pa dagdagan ng detalye. Okay lang ang proseso, walang malaking hassle sa pagbabayad.",Neutral,2026-08-08
+BSA,4,Payments,"For me, Standard lang ang fees, wala namang malaking pagbabago kumpara noon. That's it naman.",Neutral,2026-08-18
+BSIT,4,Payments,"Sobrang convenient ng bagong payment portal, hindi na kailangan pumila. That's it naman.",Positive,2026-08-12
+BEED,4,Faculty,"For me, Minsan late siya pumasok pero mahigpit sa amin kapag nahuli kami. Kasabay nito, Late palagi mag-post ng grades kaya hindi namin alam kung saan kami kulang. Sana mapansin ito.",Negative,2026-08-19
+BSIS,1,Faculty,"Sobrang harsh ng comments sa papers namin, hindi constructive. Sana ma-continue.",Negative,2026-08-08
+BEED,4,Facilities,"Gumagana naman ang mga equipment kahit medyo luma na. Plus, Standard lang ang kondisyon ng canteen, walang masyadong reklamo. Sana po maayos pa.",Neutral,2026-08-17
+BSA,3,Facilities,"Maganda na ang wifi sa campus, hindi na nade-delay ang mga online activities namin. At saka, Napansin kong mas maayos na ang aircon sa mga labs, hindi na sobrang init. That's it naman.",Positive,2026-08-17
+BEED,1,Faculty,"For me, Feeling ko mas naintindihan ko ang subject dahil sa paraan ng pagtuturo niya kumpara sa ibang prof. Kasabay nito, Kudos talaga, hindi boring ang lecture kahit tatlong oras. Sana ma-continue.",Positive,2026-08-15
+BSBA,3,Faculty,"Overall, Buong klase, sobrang engaged lahat kasi may mga case studies na kawili-wili. At saka, Sobrang organized ng modules and lahat ng deadlines clear from day one.",Positive,2026-08-14
+BSA,3,Payments,"Base sa experience ko, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. Also, Sobrang convenient ng bagong payment portal, hindi na kailangan pumila.",Positive,2026-08-19
+BSCS,2,Facilities,"Sa totoo lang, Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa. Dagdag pa rito, Palaging discconnect ang wifi, nakakaabala sa mga submission namin. Sana ma-continue.",Negative,2026-08-20
+BSCS,4,Facilities,"Base sa experience ko, Sobrang comfortable ng bagong chairs sa classroom, hindi na masakit ang likod. Maayos na ang signage sa buong campus, hindi na ako nalilito saan pupunta. Sana ma-continue.",Positive,2026-08-18
+BSIT,3,Staff,"Karaniwang klase ng service, hindi masama pero hindi rin sobrang astig.",Neutral,2026-08-11
+BSIT,1,Facilities,"Sa totoo lang, Sira ang projector kaya hirap kaming makita ang mga slides. Kasabay nito, Marumi ang mga CR, matagal nang hindi na-clean ayon sa nakikita ko. That's it naman.",Negative,2026-08-19
+BSIT,2,Facilities,"Overall, Marumi ang mga CR, matagal nang hindi na-clean ayon sa nakikita ko. Also, Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa.",Negative,2026-08-12
+BSCS,3,Faculty,"Base sa experience ko, Nakakalito ang instructions, iba-iba ang sinasabi kada session. Sana ma-continue.",Negative,2026-08-01
+BSBA,4,Facilities,"Sa totoo lang, Maputik at madulas ang daanan tuwing umuulan, delikado talaga. Plus, Marumi ang mga CR, matagal nang hindi na-clean ayon sa nakikita ko.",Negative,2026-08-17
+BSCS,2,Payments,"Base sa experience ko, Okay lang ang proseso, walang malaking hassle sa pagbabayad. Dagdag pa rito, Nagawa naman ang bayad ko kahit medyo malabo yung instructions sa simula. Sana ma-continue.",Neutral,2026-08-07
+BSIT,1,Payments,"For me, Nag-crash ang portal habang nagbabayad ako, hindi ko alam kung na-charge na ako o hindi. Sana ma-continue.",Negative,2026-08-10
+BSN,2,Staff,"Nagawa ang kailangan ko kahit medyo kailangan kong balikan ng ilang beses. Kasabay nito, Sinagot naman lahat ng katanungan ko kahit hindi masyadong detalyado. Sana po maayos pa.",Neutral,2026-08-18
+BEED,3,Faculty,"Overall, Feeling ko sobrang favoritism, iba yung treatment sa ibang section. Sana po maayos pa.",Negative,2026-08-21
+BSA,1,Payments,"Base sa experience ko, Hindi pantay ang na-post na balance ko sa totoong binayaran ko.",Negative,2026-08-11
+BSA,3,Facilities,"Sa totoo lang, Manageable naman ang traffic sa hallway kahit peak hours. Kasabay nito, Gumagana naman ang mga equipment kahit medyo luma na. Yun lang po.",Neutral,2026-08-09
+BSIT,2,Staff,"Honestly, Naramdaman ko na sincere sila sa pagtulong, hindi lang basta trabaho lang para sa kanila. Napakabilis at organized ng proseso, isang beses lang ako pumunta tapos na agad. Sana po maayos pa.",Positive,2026-08-02
+BSIS,2,Faculty,"Overall, Consistent naman sa schedule pero konti lang ang interaction sa class.",Neutral,2026-08-11
+BSIS,3,Faculty,"Sa totoo lang, Feeling ko sobrang favoritism, iba yung treatment sa ibang section. At saka, Grabe ang dami ng requirements na binigay overnight lang, sobrang stressful. Sana mapansin ito.",Negative,2026-08-21
+BSA,4,Payments,"Base sa experience ko, Hindi pantay ang na-post na balance ko sa totoong binayaran ko. At saka, Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Yun lang po.",Negative,2026-08-18
+BSCS,2,Payments,"Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Dagdag pa rito, Nahirapan akong makipag-ayos sa refund ko, sobrang tagal ng proseso.",Negative,2026-08-19
+BSIT,2,Staff,"Friendly talaga sila kausap, hindi ka mararamdamang burden kahit maraming tanong. Plus, Salamat sa staff na patient magpaliwanag ng steps para sa clearance ko. Sana mapansin ito.",Positive,2026-08-05
+BSBA,3,Facilities,"Matagal nang sira ang aircon pero wala pa ring inaayos. At saka, Sobrang init sa loob ng room kasi sira ang aircon for weeks na. Sana ma-continue.",Negative,2026-08-09
+BSBA,1,Payments,"Nagawa naman ang bayad ko kahit medyo malabo yung instructions sa simula. Manageable ang installment plan, kahit papaano nakakaabot naman ako. Yun lang po.",Neutral,2026-08-02
+BEED,3,Facilities,"Base sa experience ko, Palaging discconnect ang wifi, nakakaabala sa mga submission namin. Sana mapansin ito.",Negative,2026-08-13
+BSA,3,Faculty,"Hindi makasagot ng maayos sa mga tanong, parang hindi rin sure sa topic. Late palagi mag-post ng grades kaya hindi namin alam kung saan kami kulang. Yun lang po.",Negative,2026-08-18
+BSIS,2,Payments,"Base sa experience ko, Madali lang mag-bayad online, ilang minuto lang tapos na agad ang transaction. Also, Maayos ang tracking ng balance ko, laging updated ang statement of account.",Positive,2026-08-01
+BSIS,4,Facilities,Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa. Sana mapansin ito.,Negative,2026-08-09
+BSIT,2,Facilities,"Sa totoo lang, Sobrang comfortable ng bagong chairs sa classroom, hindi na masakit ang likod. Kasabay nito, Well-maintained ang mga equipment sa laboratory, gumagana lahat nang maayos. Sana po maayos pa.",Positive,2026-08-07
+BSBA,1,Payments,"Base sa experience ko, Clear ang breakdown ng fees, walang hidden charges na nakakagulat. Sana po maayos pa.",Positive,2026-08-09
+BSA,4,Facilities,"Base sa experience ko, Sapat naman ang espasyo sa classroom kahit medyo crowded minsan. Plus, Okay lang naman ang mga pasilidad, wala namang malaking problema. That's it naman.",Neutral,2026-08-13
+BEED,2,Payments,"Sa totoo lang, Napakadali ma-access ang payment history online, malinaw lahat ng transaction. Dagdag pa rito, Ang bilis ng confirmation pagkatapos magbayad, walang problema sa receipt. Sana po maayos pa.",Positive,2026-08-11
+BSN,4,Faculty,"Honestly, Medyo puro lecture pero at least clear naman ang mga concepts. Sana po maayos pa.",Neutral,2026-08-06
+BSCS,1,Facilities,"Honestly, Standard lang ang kondisyon ng canteen, walang masyadong reklamo. Also, Functional pa rin ang mga computer sa lab kahit mabagal konti.",Neutral,2026-08-03
+BSIS,3,Staff,"Base sa experience ko, Nakakalungkot kasi kulang ang staff kaya matagal talaga ang serbisyo. Also, Sobrang bagal, parang walang urgency kahit alam nilang may deadline kami. Sana ma-continue.",Negative,2026-08-04
+BSIS,4,Faculty,"Medyo puro lecture pero at least clear naman ang mga concepts. Kasabay nito, Fine naman siya bilang teacher, gets ko naman ang mga tinuturo. Sana mapansin ito.",Neutral,2026-08-01
+BSBA,1,Facilities,Gumagana naman ang mga equipment kahit medyo luma na. Sana po maayos pa.,Neutral,2026-08-11
+BSIT,3,Facilities,"For me, Salamat sa maayos na CRs, laging malinis kapag pumupunta ako. Plus, Ang ganda ng bagong study hub, sulit gamitin lalo na tuwing exam week. Sana po maayos pa.",Positive,2026-08-15
+BSN,3,Faculty,"Grasya na lang ang klase kasi laging may recap bago pumunta sa bagong topic. Dagdag pa rito, Ang saya ng klase dahil interactive at hindi puro lecture lang, may activities talaga. Yun lang po.",Positive,2026-08-15
+BSA,2,Staff,"Base sa experience ko, Sinagot naman lahat ng katanungan ko kahit hindi masyadong detalyado. Sapat naman ang tulong, though pwede pang paganahan ang follow-through. Sana po maayos pa.",Neutral,2026-08-19
+BSN,3,Facilities,"Base sa experience ko, Maputik at madulas ang daanan tuwing umuulan, delikado talaga.",Negative,2026-08-14
+BSBA,1,Faculty,"Base sa experience ko, Average lang, may improvement pero pwede pa i-improve ang engagement. Yun lang po.",Neutral,2026-08-02
+BSCS,3,Facilities,"For me, Standard lang ang kondisyon ng canteen, walang masyadong reklamo. Dagdag pa rito, Manageable naman ang traffic sa hallway kahit peak hours. That's it naman.",Neutral,2026-08-09
+BSBA,1,Staff,"Honestly, Ilang beses akong bumalik dahil hindi complete ang binigay nilang instructions. Dagdag pa rito, Ang tagal ng pila, mahigit isang oras ako naghintay para lang sa simpleng request. Sana po maayos pa.",Negative,2026-08-18
+BSCS,3,Facilities,"Maputik at madulas ang daanan tuwing umuulan, delikado talaga. Kasabay nito, Sira ang projector kaya hirap kaming makita ang mga slides. Sana ma-continue.",Negative,2026-08-01
+BSBA,4,Faculty,"Nakakatuwa kasi may humor pa sa gitna ng mahirap na lesson, hindi nakakaantok. That's it naman.",Positive,2026-08-09
+BSIT,1,Faculty,"Overall, Late palagi mag-post ng grades kaya hindi namin alam kung saan kami kulang. At saka, Nakakalito ang instructions, iba-iba ang sinasabi kada session. Sana po maayos pa.",Negative,2026-08-19
+BSBA,1,Faculty,"Okay lang naman ang klase, standard lang, walang masyadong kakaiba. Sana mapansin ito.",Neutral,2026-08-20
+BSBA,1,Facilities,"Base sa experience ko, Sobrang comfortable ng bagong chairs sa classroom, hindi na masakit ang likod. Yun lang po.",Positive,2026-08-11
+BSBA,2,Facilities,"Sapat naman ang espasyo sa classroom kahit medyo crowded minsan. Kasabay nito, Manageable naman ang traffic sa hallway kahit peak hours. Sana po maayos pa.",Neutral,2026-08-10
+BSBA,3,Payments,"Overall, Ilang araw bago ma-reflect ang bayad ko sa system, nag-alala ako baka mabansag late. Sana po maayos pa.",Negative,2026-08-16
+BSIS,1,Faculty,"Sa totoo lang, Feeling ko mas naintindihan ko ang subject dahil sa paraan ng pagtuturo niya kumpara sa ibang prof. At saka, Sobrang organized ng modules and lahat ng deadlines clear from day one.",Positive,2026-08-03
+BEED,2,Payments,"Sa totoo lang, Hindi pantay ang na-post na balance ko sa totoong binayaran ko. Dagdag pa rito, Nag-crash ang portal habang nagbabayad ako, hindi ko alam kung na-charge na ako o hindi. Sana mapansin ito.",Negative,2026-08-20
+BSIT,4,Facilities,"Sa totoo lang, Manageable naman ang traffic sa hallway kahit peak hours. Also, Okay lang naman ang mga pasilidad, wala namang malaking problema.",Neutral,2026-08-12
+BSBA,3,Facilities,"Overall, Maayos na ang signage sa buong campus, hindi na ako nalilito saan pupunta. Also, Ang linis at ayos ng library ngayon, sobrang conducive mag-aral. Sana ma-continue.",Positive,2026-08-13
+BSN,3,Facilities,"Sa totoo lang, Marumi ang mga CR, matagal nang hindi na-clean ayon sa nakikita ko. Kasabay nito, Sobrang init sa loob ng room kasi sira ang aircon for weeks na. Sana ma-continue.",Negative,2026-08-11
+BSCS,4,Faculty,"Nasusundan ko naman ang lesson kahit medyo mabilis minsan. Kasabay nito, Manageable ang workload, though pwede pang dagdagan ng examples. That's it naman.",Neutral,2026-08-17
+BSN,3,Payments,"Base sa experience ko, Salamat sa flexible payment terms, malaking tulong para sa amin na estudyante. Sana ma-continue.",Positive,2026-08-02
+BSIT,2,Facilities,"Sa totoo lang, Maganda na ang wifi sa campus, hindi na nade-delay ang mga online activities namin. That's it naman.",Positive,2026-08-01
+BSBA,2,Payments,"Base sa experience ko, Clear ang breakdown ng fees, walang hidden charges na nakakagulat. Plus, Salamat sa flexible payment terms, malaking tulong para sa amin na estudyante.",Positive,2026-08-02
+BSIS,2,Faculty,"Honestly, Sobrang laganap ng typo sa slides, mukhang hindi pa na-proofread.",Negative,2026-08-14
+BSA,1,Payments,"Sa totoo lang, Sapat naman ang info na nakalagay sa invoice, though pwede pa dagdagan ng detalye. That's it naman.",Neutral,2026-08-09
+BSIS,4,Staff,"Overall, Sinagot naman lahat ng katanungan ko kahit hindi masyadong detalyado. Fine lang ang experience ko, wala akong major issue sa transaction. Yun lang po.",Neutral,2026-08-14
+BSCS,2,Staff,"Base sa experience ko, Walang malinaw na proseso, iba-iba ang sinasabi ng bawat staff. Ilang beses akong bumalik dahil hindi complete ang binigay nilang instructions. Yun lang po.",Negative,2026-08-11
+BSCS,1,Payments,"Overall, Salamat sa flexible payment terms, malaking tulong para sa amin na estudyante. That's it naman.",Positive,2026-08-08
+BSBA,4,Faculty,"Patient siya sa mga tanong namin kahit paulit-ulit, sobrang bait niya explain ng explain. Nakakatuwa kasi may humor pa sa gitna ng mahirap na lesson, hindi nakakaantok. Sana ma-continue.",Positive,2026-08-04
+BEED,1,Staff,"Honestly, Karaniwang klase ng service, hindi masama pero hindi rin sobrang astig. Kasabay nito, Sapat naman ang tulong, though pwede pang paganahan ang follow-through. Sana mapansin ito.",Neutral,2026-08-07
+BSCS,4,Staff,"Base sa experience ko, Karaniwang klase ng service, hindi masama pero hindi rin sobrang astig. Also, Sapat naman ang tulong, though pwede pang paganahan ang follow-through. Yun lang po.",Neutral,2026-08-12
+BSIS,3,Faculty,"Base sa experience ko, Straightforward ang lectures, wala namang major issue. Plus, Sakto lang ang pace, hindi mabilis pero hindi rin masyadong mabagal. That's it naman.",Neutral,2026-08-15
+BSA,4,Facilities,"Sobrang comfortable ng bagong chairs sa classroom, hindi na masakit ang likod. Salamat sa maayos na CRs, laging malinis kapag pumupunta ako.",Positive,2026-08-07
+BSA,2,Staff,"Overall, Standard lang ang service, walang masyadong extraordinary pero gumagana naman. At saka, Nagawa ang kailangan ko kahit medyo kailangan kong balikan ng ilang beses.",Neutral,2026-08-13
+BSA,1,Facilities,"Sa totoo lang, Sobrang init sa loob ng room kasi sira ang aircon for weeks na. Dagdag pa rito, Palaging discconnect ang wifi, nakakaabala sa mga submission namin. Sana ma-continue.",Negative,2026-08-21
+BEED,3,Faculty,"Ok lang ang setup, minsan mabilis mag-move sa next topic pero survivable. Plus, Gets ko naman kahit papaano, though mas gusto ko sana may mas maraming halimbawa. That's it naman.",Neutral,2026-08-12
+BSA,3,Staff,"Honestly, Hindi ma-contact ang office, ilang beses akong tumawag walang sumasagot. Plus, Nawala yung documents ko, kailangan ko pang mag-resubmit ng lahat. Sana po maayos pa.",Negative,2026-08-11
+BEED,3,Facilities,"Overall, Sobrang init sa loob ng room kasi sira ang aircon for weeks na. Kasabay nito, Palaging discconnect ang wifi, nakakaabala sa mga submission namin. That's it naman.",Negative,2026-08-05
+BSN,2,Facilities,"Matagal nang sira ang aircon pero wala pa ring inaayos. Marumi ang mga CR, matagal nang hindi na-clean ayon sa nakikita ko. Yun lang po.",Negative,2026-08-04
+BSIT,2,Faculty,"Overall, Feeling ko sobrang favoritism, iba yung treatment sa ibang section. Dagdag pa rito, Palaging cancelled ang klase pero hindi namin alam kung ano ang gagawin instead.",Negative,2026-08-21
+BSIT,2,Faculty,"Palaging cancelled ang klase pero hindi namin alam kung ano ang gagawin instead. Dagdag pa rito, Parang galit palagi kapag nagtatanong kami, nakakatakot lumapit. Sana mapansin ito.",Negative,2026-08-15
+BEED,3,Facilities,"Sa totoo lang, Manageable naman ang traffic sa hallway kahit peak hours. Sana ma-continue.",Neutral,2026-08-03
+BSN,4,Staff,"Base sa experience ko, Nagpapasalamat ako sa tulong nila, naayos agad yung isyu ko sa records. Also, Ang galing ng customer service, sinagot lahat ng tanong ko nang maayos.",Positive,2026-08-10
+BSIS,2,Staff,"For me, Friendly talaga sila kausap, hindi ka mararamdamang burden kahit maraming tanong. Dagdag pa rito, Naramdaman ko na sincere sila sa pagtulong, hindi lang basta trabaho lang para sa kanila. Sana ma-continue.",Positive,2026-08-03
+BSA,3,Payments,"Sa totoo lang, Manageable ang installment plan, kahit papaano nakakaabot naman ako. Sana mapansin ito.",Neutral,2026-08-08
+BSN,3,Facilities,"Honestly, Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa. That's it naman.",Negative,2026-08-12
+BSA,2,Staff,"Overall, Sobrang unorganized ng linya, nagulo lahat kasi walang numbering system.",Negative,2026-08-19
+BSBA,2,Payments,"Maayos ang tracking ng balance ko, laging updated ang statement of account. Sana ma-continue.",Positive,2026-08-13
+BSIT,4,Payments,"Base sa experience ko, Ang bilis ng confirmation pagkatapos magbayad, walang problema sa receipt. Yun lang po.",Positive,2026-08-19
+BSIS,2,Faculty,"Buong klase, sobrang engaged lahat kasi may mga case studies na kawili-wili. Plus, Feeling ko mas naintindihan ko ang subject dahil sa paraan ng pagtuturo niya kumpara sa ibang prof. Sana ma-continue.",Positive,2026-08-13
+BSBA,3,Faculty,"Base sa experience ko, Nakaka-inspire yung dedication niya sa amin, sobrang malaking tulong sa pag-aaral ko. Yun lang po.",Positive,2026-08-02
+BSN,4,Faculty,"Overall, Consistent naman sa schedule pero konti lang ang interaction sa class. Kasabay nito, Average lang, may improvement pero pwede pa i-improve ang engagement. Sana mapansin ito.",Neutral,2026-08-12
+BSCS,1,Faculty,"For me, Patient siya sa mga tanong namin kahit paulit-ulit, sobrang bait niya explain ng explain. Effective yung teaching style, gusto ko pumasok kahit umaga pa.",Positive,2026-08-06
+BSA,4,Payments,"Overall, Nahirapan akong makipag-ayos sa refund ko, sobrang tagal ng proseso. At saka, Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Sana mapansin ito.",Negative,2026-08-03
+BSBA,3,Staff,"Honestly, Medyo mabagal ang proseso pero natapos naman sa huli. Sana ma-continue.",Neutral,2026-08-04
+BSA,1,Staff,"Overall, Walang malinaw na proseso, iba-iba ang sinasabi ng bawat staff. Sana ma-continue.",Negative,2026-08-15
+BSN,4,Faculty,"Proud ako maging student niya, malaki ang natutunan ko this semester. Also, Kudos talaga, hindi boring ang lecture kahit tatlong oras. Sana mapansin ito.",Positive,2026-08-04
+BSIT,2,Payments,"Sobrang convenient ng bagong payment portal, hindi na kailangan pumila. Kasabay nito, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. Sana ma-continue.",Positive,2026-08-08
+BSIS,4,Faculty,"Base sa experience ko, Karaniwan lang ang delivery, hindi masyadong exciting pero informative naman. Dagdag pa rito, Walang malaking reklamo, pero pwede pa ring paganahin nang konti ang klase.",Neutral,2026-08-18
+BSCS,1,Payments,"Overall, Ang bilis ng confirmation pagkatapos magbayad, walang problema sa receipt. Plus, Salamat sa flexible payment terms, malaking tulong para sa amin na estudyante.",Positive,2026-08-05
+BSIS,2,Facilities,"For me, Sira ang projector kaya hirap kaming makita ang mga slides. Sana po maayos pa.",Negative,2026-08-12
+BSBA,2,Payments,"Overall, Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Kasabay nito, Walang senyales o notification kapag may urgent na balance, nagulat na lang ako. Sana po maayos pa.",Negative,2026-08-16
+BSIT,1,Faculty,"Average lang, may improvement pero pwede pa i-improve ang engagement. Walang malaking reklamo, pero pwede pa ring paganahin nang konti ang klase. Yun lang po.",Neutral,2026-08-05
+BSIT,2,Payments,"For me, Gumagana naman ang portal kahit minsan medyo mabagal mag-load. Okay lang ang proseso, walang malaking hassle sa pagbabayad. Sana ma-continue.",Neutral,2026-08-02
+BSN,1,Facilities,"Base sa experience ko, Gumagana naman ang mga equipment kahit medyo luma na. Kasabay nito, Manageable naman ang traffic sa hallway kahit peak hours. That's it naman.",Neutral,2026-08-18
+BSA,3,Faculty,"Parang galit palagi kapag nagtatanong kami, nakakatakot lumapit. Grading criteria hindi malinaw, iba-iba ang score kahit parehas lang ang sagot. That's it naman.",Negative,2026-08-17
+BSIT,2,Facilities,"Base sa experience ko, Manageable naman ang traffic sa hallway kahit peak hours. Plus, Gumagana naman ang mga equipment kahit medyo luma na.",Neutral,2026-08-01
+BSIS,3,Staff,"Honestly, Solved agad nila yung concern ko kahit medyo complicated pa yun. Sana ma-continue.",Positive,2026-08-06
+BSIT,3,Faculty,"Base sa experience ko, Nakaka-frustrate kasi hindi na-explain ng maayos bago pa kami binigyan ng exam. At saka, Grading criteria hindi malinaw, iba-iba ang score kahit parehas lang ang sagot. That's it naman.",Negative,2026-08-20
+BEED,4,Payments,"For me, Clear ang breakdown ng fees, walang hidden charges na nakakagulat. That's it naman.",Positive,2026-08-17
+BSIS,3,Staff,"Honestly, Ilang beses akong bumalik dahil hindi complete ang binigay nilang instructions. Kasabay nito, Nawala yung documents ko, kailangan ko pang mag-resubmit ng lahat.",Negative,2026-08-06
+BSIS,2,Faculty,"Sufficient ang materials na ibinigay, though di gaanong interactive. At saka, Karaniwan lang ang delivery, hindi masyadong exciting pero informative naman. Sana mapansin ito.",Neutral,2026-08-21
+BSBA,4,Payments,"Sa totoo lang, Maayos ang tracking ng balance ko, laging updated ang statement of account. Sana po maayos pa.",Positive,2026-08-03
+BSN,4,Payments,"Honestly, Hindi pantay ang na-post na balance ko sa totoong binayaran ko. Dagdag pa rito, Nagka-error yung system nang magbayad ako, kinailangan kong ulitin ng tatlong beses. That's it naman.",Negative,2026-08-14
+BSIS,1,Payments,"Sa totoo lang, Clear ang breakdown ng fees, walang hidden charges na nakakagulat.",Positive,2026-08-18
+BSA,2,Payments,"Madali lang mag-bayad online, ilang minuto lang tapos na agad ang transaction. Salamat sa flexible payment terms, malaking tulong para sa amin na estudyante. Sana ma-continue.",Positive,2026-08-21
+BEED,4,Faculty,"For me, Hindi makasagot ng maayos sa mga tanong, parang hindi rin sure sa topic. Yun lang po.",Negative,2026-08-20
+BSCS,1,Payments,"Base sa experience ko, Nagawa naman ang bayad ko kahit medyo malabo yung instructions sa simula. Gumagana naman ang portal kahit minsan medyo mabagal mag-load. Sana mapansin ito.",Neutral,2026-08-06
+BSBA,4,Staff,Medyo mabagal ang proseso pero natapos naman sa huli. Sana mapansin ito.,Neutral,2026-08-11
+BSIS,2,Staff,"Honestly, Nagpapasalamat ako sa tulong nila, naayos agad yung isyu ko sa records. Plus, Salamat sa staff na patient magpaliwanag ng steps para sa clearance ko. Sana po maayos pa.",Positive,2026-08-06
+BSIT,2,Facilities,"For me, Ang ganda ng bagong study hub, sulit gamitin lalo na tuwing exam week. Yun lang po.",Positive,2026-08-05
+BSN,4,Payments,"Base sa experience ko, Sapat naman ang info na nakalagay sa invoice, though pwede pa dagdagan ng detalye. Kasabay nito, Manageable ang installment plan, kahit papaano nakakaabot naman ako. Sana po maayos pa.",Neutral,2026-08-09
+BSIS,4,Staff,"Base sa experience ko, Ang tagal ng pila, mahigit isang oras ako naghintay para lang sa simpleng request. That's it naman.",Negative,2026-08-03
+BSA,3,Facilities,"Sa totoo lang, Functional pa rin ang mga computer sa lab kahit mabagal konti. Okay lang naman ang mga pasilidad, wala namang malaking problema.",Neutral,2026-08-19
+BSIS,3,Faculty,"Patient siya sa mga tanong namin kahit paulit-ulit, sobrang bait niya explain ng explain.",Positive,2026-08-08
+BSA,2,Staff,"Honestly, Fine lang ang experience ko, wala akong major issue sa transaction. Kasabay nito, Okay lang naman, ginawa naman nila trabaho nila kahit medyo tahimik. That's it naman.",Neutral,2026-08-18
+BSA,4,Payments,"Honestly, Gumagana naman ang portal kahit minsan medyo mabagal mag-load. Yun lang po.",Neutral,2026-08-10
+BSA,4,Faculty,"Base sa experience ko, Nakaka-frustrate kasi hindi na-explain ng maayos bago pa kami binigyan ng exam. Sana ma-continue.",Negative,2026-08-13
+BSIS,3,Staff,"Sobrang bilis ng pag-proseso ng request ko, hindi na ako naghintay ng matagal. At saka, Very accommodating sila kahit maraming tao, hindi sila nagmamadali sa amin.",Positive,2026-08-07
+BSCS,2,Faculty,"Overall, Hindi makasagot ng maayos sa mga tanong, parang hindi rin sure sa topic. At saka, Grabe ang dami ng requirements na binigay overnight lang, sobrang stressful. That's it naman.",Negative,2026-08-10
+BEED,4,Facilities,"Honestly, Matagal nang sira ang aircon pero wala pa ring inaayos. Dagdag pa rito, Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa. Sana po maayos pa.",Negative,2026-08-09
+BSN,2,Staff,"Sobrang bagal, parang walang urgency kahit alam nilang may deadline kami. Kasabay nito, Rude yung pagsagot sa akin kahit magalang naman ako magtanong. Sana po maayos pa.",Negative,2026-08-10
+BSN,4,Facilities,"Overall, Ang linis at ayos ng library ngayon, sobrang conducive mag-aral. Also, Maayos na ang signage sa buong campus, hindi na ako nalilito saan pupunta.",Positive,2026-08-17
+BSA,1,Faculty,"Straightforward ang lectures, wala namang major issue. Kasabay nito, Karaniwan lang ang delivery, hindi masyadong exciting pero informative naman.",Neutral,2026-08-11
+BSN,4,Faculty,"Sa totoo lang, Grading criteria hindi malinaw, iba-iba ang score kahit parehas lang ang sagot. Plus, Sobrang harsh ng comments sa papers namin, hindi constructive. Sana po maayos pa.",Negative,2026-08-11
+BEED,2,Facilities,"For me, Manageable naman ang traffic sa hallway kahit peak hours. Dagdag pa rito, Okay lang naman ang mga pasilidad, wala namang malaking problema. Sana po maayos pa.",Neutral,2026-08-19
+BSCS,1,Payments,"Overall, Sapat naman ang info na nakalagay sa invoice, though pwede pa dagdagan ng detalye. Plus, Nagawa naman ang bayad ko kahit medyo malabo yung instructions sa simula.",Neutral,2026-08-02
+BSIT,4,Staff,"Honestly, Ang tagal ng pila, mahigit isang oras ako naghintay para lang sa simpleng request. At saka, Sobrang bagal, parang walang urgency kahit alam nilang may deadline kami.",Negative,2026-08-07
+BSIT,4,Faculty,"Fine naman siya bilang teacher, gets ko naman ang mga tinuturo. Kasabay nito, Sufficient ang materials na ibinigay, though di gaanong interactive. Yun lang po.",Neutral,2026-08-04
+BSBA,2,Facilities,"Honestly, Well-maintained ang mga equipment sa laboratory, gumagana lahat nang maayos. Dagdag pa rito, Ang ganda ng bagong study hub, sulit gamitin lalo na tuwing exam week.",Positive,2026-08-18
+BSIT,1,Payments,"For me, Maayos ang tracking ng balance ko, laging updated ang statement of account. Plus, Ang bilis ng confirmation pagkatapos magbayad, walang problema sa receipt. Sana ma-continue.",Positive,2026-08-04
+BSCS,3,Payments,"For me, Ilang araw bago ma-reflect ang bayad ko sa system, nag-alala ako baka mabansag late. At saka, Walang senyales o notification kapag may urgent na balance, nagulat na lang ako.",Negative,2026-08-08
+BEED,3,Payments,"Base sa experience ko, Okay lang ang proseso, walang malaking hassle sa pagbabayad. Dagdag pa rito, Manageable ang installment plan, kahit papaano nakakaabot naman ako.",Neutral,2026-08-13
+BSCS,2,Staff,"Hindi ma-contact ang office, ilang beses akong tumawag walang sumasagot. Kasabay nito, Rude yung pagsagot sa akin kahit magalang naman ako magtanong.",Negative,2026-08-21
+BSCS,3,Faculty,"Grasya na lang ang klase kasi laging may recap bago pumunta sa bagong topic. Plus, Feeling ko mas naintindihan ko ang subject dahil sa paraan ng pagtuturo niya kumpara sa ibang prof. Yun lang po.",Positive,2026-08-16
+BSA,2,Staff,"Sobrang bagal, parang walang urgency kahit alam nilang may deadline kami. Also, Ilang beses akong bumalik dahil hindi complete ang binigay nilang instructions.",Negative,2026-08-01
+BSIT,2,Faculty,"Sa totoo lang, Minsan late siya pumasok pero mahigpit sa amin kapag nahuli kami. That's it naman.",Negative,2026-08-11
+BSA,3,Facilities,"Overall, Sobrang siksikan sa room, kulang ang upuan para sa lahat ng estudyante.",Negative,2026-08-16
+BSIS,3,Staff,"Sobrang bilis ng pag-proseso ng request ko, hindi na ako naghintay ng matagal. Also, Efficient sila mag-assist, alam nila agad kung ano gagawin ko. Sana mapansin ito.",Positive,2026-08-15
+BSIS,2,Staff,"For me, Efficient sila mag-assist, alam nila agad kung ano gagawin ko. Sana mapansin ito.",Positive,2026-08-10
+BSBA,2,Faculty,"Sa totoo lang, Sufficient ang materials na ibinigay, though di gaanong interactive. Dagdag pa rito, Ok lang ang setup, minsan mabilis mag-move sa next topic pero survivable.",Neutral,2026-08-07
+BSA,2,Staff,"Base sa experience ko, Fine lang ang experience ko, wala akong major issue sa transaction. Sapat naman ang tulong, though pwede pang paganahan ang follow-through.",Neutral,2026-08-05
+BSN,3,Faculty,"For me, Ok lang ang setup, minsan mabilis mag-move sa next topic pero survivable. Also, Straightforward ang lectures, wala namang major issue.",Neutral,2026-08-19
+BSA,1,Faculty,"Base sa experience ko, Sobrang harsh ng comments sa papers namin, hindi constructive. Also, Minsan late siya pumasok pero mahigpit sa amin kapag nahuli kami. Sana po maayos pa.",Negative,2026-08-19
+BEED,4,Facilities,"Overall, Maganda na ang wifi sa campus, hindi na nade-delay ang mga online activities namin. At saka, Maayos na ang signage sa buong campus, hindi na ako nalilito saan pupunta. Yun lang po.",Positive,2026-08-02
+BSIT,4,Faculty,"Sa totoo lang, Grabe, ang galing mag-explain, may mga real-life examples pa na madaling ma-relate. Sana ma-continue.",Positive,2026-08-16
+BEED,1,Facilities,"Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa. Also, Matagal nang sira ang aircon pero wala pa ring inaayos. That's it naman.",Negative,2026-08-16
+BSBA,4,Faculty,"Sa totoo lang, Nakakatuwa kasi may humor pa sa gitna ng mahirap na lesson, hindi nakakaantok. Kasabay nito, Ang linaw ng instructions niya, walang naguguluhan sa requirements. Sana po maayos pa.",Positive,2026-08-10
+BSN,3,Faculty,"Overall, Sobrang helpful ng consultation hours, laging may time para sa amin. Also, Napakadetalyado ng feedback sa mga output namin, malaking tulong para umimprove.",Positive,2026-08-16
+BSBA,3,Facilities,"Base sa experience ko, Ang ganda ng bagong study hub, sulit gamitin lalo na tuwing exam week. Plus, Salamat sa maayos na CRs, laging malinis kapag pumupunta ako.",Positive,2026-08-14
+BEED,2,Facilities,"Palaging discconnect ang wifi, nakakaabala sa mga submission namin. Dagdag pa rito, Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa.",Negative,2026-08-20
+BSIT,1,Payments,"Honestly, Manageable ang installment plan, kahit papaano nakakaabot naman ako. Plus, Gumagana naman ang portal kahit minsan medyo mabagal mag-load. That's it naman.",Neutral,2026-08-14
+BSN,1,Payments,"Nagka-error yung system nang magbayad ako, kinailangan kong ulitin ng tatlong beses. Dagdag pa rito, Hindi pantay ang na-post na balance ko sa totoong binayaran ko.",Negative,2026-08-07
+BSA,4,Facilities,"For me, Standard lang ang kondisyon ng canteen, walang masyadong reklamo. Sana mapansin ito.",Neutral,2026-08-01
+BSIS,3,Faculty,"Hindi makasagot ng maayos sa mga tanong, parang hindi rin sure sa topic. Kasabay nito, Feeling ko sobrang favoritism, iba yung treatment sa ibang section.",Negative,2026-08-03
+BSBA,4,Payments,"Nahirapan akong makipag-ayos sa refund ko, sobrang tagal ng proseso. Also, Ilang araw bago ma-reflect ang bayad ko sa system, nag-alala ako baka mabansag late.",Negative,2026-08-20
+BSCS,1,Staff,"Honestly, Very accommodating sila kahit maraming tao, hindi sila nagmamadali sa amin. Napakabilis at organized ng proseso, isang beses lang ako pumunta tapos na agad.",Positive,2026-08-21
+BSIS,3,Facilities,"Sa totoo lang, Sobrang siksikan sa room, kulang ang upuan para sa lahat ng estudyante. Plus, Matagal nang sira ang aircon pero wala pa ring inaayos. That's it naman.",Negative,2026-08-18
+BSIS,2,Payments,"Honestly, Sapat naman ang info na nakalagay sa invoice, though pwede pa dagdagan ng detalye. Manageable ang installment plan, kahit papaano nakakaabot naman ako. That's it naman.",Neutral,2026-08-01
+BSBA,2,Faculty,"For me, Sobrang laganap ng typo sa slides, mukhang hindi pa na-proofread. That's it naman.",Negative,2026-08-07
+BSN,3,Faculty,"For me, Sufficient ang materials na ibinigay, though di gaanong interactive. Dagdag pa rito, Consistent naman sa schedule pero konti lang ang interaction sa class. That's it naman.",Neutral,2026-08-21
+BSIS,1,Faculty,"Palaging cancelled ang klase pero hindi namin alam kung ano ang gagawin instead. Kasabay nito, Feeling ko sobrang favoritism, iba yung treatment sa ibang section. Sana mapansin ito.",Negative,2026-08-06
+BSN,4,Faculty,"Wala akong natutunan sa buong semester, puro readings na wala namang discussion. Grading criteria hindi malinaw, iba-iba ang score kahit parehas lang ang sagot. Sana mapansin ito.",Negative,2026-08-14
+BSA,1,Staff,"Honestly, Naantala ang enrollment ko dahil sa mali nilang input sa system. That's it naman.",Negative,2026-08-20
+BEED,3,Payments,"Base sa experience ko, Ilang araw bago ma-reflect ang bayad ko sa system, nag-alala ako baka mabansag late. Plus, Confusing ang breakdown ng fees, parang may extra charge na hindi ko na-expect. Sana mapansin ito.",Negative,2026-08-03
+BSCS,1,Staff,"Very accommodating sila kahit maraming tao, hindi sila nagmamadali sa amin. Naramdaman ko na sincere sila sa pagtulong, hindi lang basta trabaho lang para sa kanila.",Positive,2026-08-16
+BSIS,2,Staff,"Karaniwang klase ng service, hindi masama pero hindi rin sobrang astig. At saka, Medyo mabagal ang proseso pero natapos naman sa huli. Sana ma-continue.",Neutral,2026-08-20
+BSA,2,Faculty,"For me, Wala akong natutunan sa buong semester, puro readings na wala namang discussion. At saka, Late palagi mag-post ng grades kaya hindi namin alam kung saan kami kulang.",Negative,2026-08-07
+BSBA,1,Payments,"Napakadali ma-access ang payment history online, malinaw lahat ng transaction. Also, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. That's it naman.",Positive,2026-08-05
+BSBA,4,Facilities,"Base sa experience ko, Functional pa rin ang mga computer sa lab kahit mabagal konti. Also, Gumagana naman ang mga equipment kahit medyo luma na.",Neutral,2026-08-03
+BSIT,1,Faculty,"Honestly, Grading criteria hindi malinaw, iba-iba ang score kahit parehas lang ang sagot. Dagdag pa rito, Minsan late siya pumasok pero mahigpit sa amin kapag nahuli kami. Sana po maayos pa.",Negative,2026-08-19
+BSN,3,Payments,"Overall, Nagka-error yung system nang magbayad ako, kinailangan kong ulitin ng tatlong beses. At saka, Walang senyales o notification kapag may urgent na balance, nagulat na lang ako. Sana mapansin ito.",Negative,2026-08-03
+BSIS,3,Payments,"Base sa experience ko, Hindi pantay ang na-post na balance ko sa totoong binayaran ko. Kasabay nito, Confusing ang breakdown ng fees, parang may extra charge na hindi ko na-expect. Sana ma-continue.",Negative,2026-08-09
+BSBA,1,Staff,"Friendly talaga sila kausap, hindi ka mararamdamang burden kahit maraming tanong. Kasabay nito, Very accommodating sila kahit maraming tao, hindi sila nagmamadali sa amin. That's it naman.",Positive,2026-08-17
+BSA,4,Payments,"For me, Ilang araw bago ma-reflect ang bayad ko sa system, nag-alala ako baka mabansag late. Plus, Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Sana ma-continue.",Negative,2026-08-05
+BSCS,2,Staff,"Base sa experience ko, Karaniwang klase ng service, hindi masama pero hindi rin sobrang astig. Sana mapansin ito.",Neutral,2026-08-13
+BSN,4,Staff,"For me, Nagawa naman yung request ko, konting hintay lang pero okay pa rin. Dagdag pa rito, Medyo mabagal ang proseso pero natapos naman sa huli.",Neutral,2026-08-07
+BSBA,1,Staff,"Honestly, Very accommodating sila kahit maraming tao, hindi sila nagmamadali sa amin.",Positive,2026-08-19
+BSIT,4,Payments,"Maayos ang tracking ng balance ko, laging updated ang statement of account. Also, Napakadali ma-access ang payment history online, malinaw lahat ng transaction. Yun lang po.",Positive,2026-08-16
+BSBA,2,Faculty,"Walang malaking reklamo, pero pwede pa ring paganahin nang konti ang klase. Dagdag pa rito, Ok lang ang setup, minsan mabilis mag-move sa next topic pero survivable. Yun lang po.",Neutral,2026-08-09
+BEED,4,Faculty,"Kudos talaga, hindi boring ang lecture kahit tatlong oras. Kasabay nito, Napakadetalyado ng feedback sa mga output namin, malaking tulong para umimprove. Sana mapansin ito.",Positive,2026-08-03
+BSCS,2,Faculty,"Base sa experience ko, Buong klase, sobrang engaged lahat kasi may mga case studies na kawili-wili. Also, Napakadetalyado ng feedback sa mga output namin, malaking tulong para umimprove.",Positive,2026-08-16
+BSIT,4,Payments,"Nahirapan akong makipag-ayos sa refund ko, sobrang tagal ng proseso. Plus, Nagka-error yung system nang magbayad ako, kinailangan kong ulitin ng tatlong beses. Sana po maayos pa.",Negative,2026-08-09
+BSIT,4,Facilities,"For me, Sapat naman ang espasyo sa classroom kahit medyo crowded minsan. Kasabay nito, Okay lang naman ang mga pasilidad, wala namang malaking problema. Sana mapansin ito.",Neutral,2026-08-06
+BSN,4,Facilities,"Base sa experience ko, Well-maintained ang mga equipment sa laboratory, gumagana lahat nang maayos. Dagdag pa rito, Napansin kong mas maayos na ang aircon sa mga labs, hindi na sobrang init. Yun lang po.",Positive,2026-08-04
+BEED,4,Faculty,"Talaga pong natutuwa ako sa paraan ng pagtuturo ni Sir—kahit mahirap ang topic, naiintindihan ko agad. Also, Patient siya sa mga tanong namin kahit paulit-ulit, sobrang bait niya explain ng explain. Sana ma-continue.",Positive,2026-08-16
+BSN,1,Staff,"Sa totoo lang, Very accommodating sila kahit maraming tao, hindi sila nagmamadali sa amin. Sana ma-continue.",Positive,2026-08-14
+BSA,1,Faculty,"Base sa experience ko, Sufficient ang materials na ibinigay, though di gaanong interactive. Passable ang klase, may mga part lang na medyo mahirap sundan. Sana mapansin ito.",Neutral,2026-08-17
+BSIT,1,Staff,"Honestly, Hindi ma-contact ang office, ilang beses akong tumawag walang sumasagot. Also, Ang tagal ng pila, mahigit isang oras ako naghintay para lang sa simpleng request. Sana mapansin ito.",Negative,2026-08-10
+BSN,1,Staff,"Ang galing ng customer service, sinagot lahat ng tanong ko nang maayos. Plus, Sobrang bilis ng pag-proseso ng request ko, hindi na ako naghintay ng matagal. Sana mapansin ito.",Positive,2026-08-16
+BSA,1,Staff,"Base sa experience ko, Ang bait ng staff sa registrar, tinulungan ako agad sa concern ko. Sobrang bilis ng pag-proseso ng request ko, hindi na ako naghintay ng matagal. Sana mapansin ito.",Positive,2026-08-20
+BSA,1,Facilities,"Maayos na ang signage sa buong campus, hindi na ako nalilito saan pupunta. Salamat sa maayos na CRs, laging malinis kapag pumupunta ako.",Positive,2026-08-02
+BSCS,3,Faculty,"Base sa experience ko, Feeling ko sobrang favoritism, iba yung treatment sa ibang section.",Negative,2026-08-18
+BSIS,3,Payments,"Base sa experience ko, Nagawa naman ang bayad ko kahit medyo malabo yung instructions sa simula. Standard lang ang fees, wala namang malaking pagbabago kumpara noon.",Neutral,2026-08-09
+BSA,2,Faculty,"Sa totoo lang, Sakto lang ang pace, hindi mabilis pero hindi rin masyadong mabagal. Also, Medyo puro lecture pero at least clear naman ang mga concepts.",Neutral,2026-08-17
+BEED,1,Facilities,"Sa totoo lang, Maganda na ang wifi sa campus, hindi na nade-delay ang mga online activities namin. At saka, Ang ganda ng bagong study hub, sulit gamitin lalo na tuwing exam week.",Positive,2026-08-14
+BSIS,3,Payments,"Salamat sa flexible payment terms, malaking tulong para sa amin na estudyante. Also, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. That's it naman.",Positive,2026-08-14
+BSCS,3,Staff,"Overall, Nagawa ang kailangan ko kahit medyo kailangan kong balikan ng ilang beses. Sana po maayos pa.",Neutral,2026-08-20
+BEED,1,Faculty,"Honestly, Kahit strict, makikita mo naman na gusto niya kami matuto ng maayos. At saka, Nagustuhan ko yung ginawa niyang group projects, naging mas fun ang pag-aaral. Sana mapansin ito.",Positive,2026-08-19
+BSN,2,Staff,"Honestly, Salamat sa staff na patient magpaliwanag ng steps para sa clearance ko. Sana mapansin ito.",Positive,2026-08-18
+BSN,3,Facilities,"Ang linis at ayos ng library ngayon, sobrang conducive mag-aral. At saka, Sobrang comfortable ng bagong chairs sa classroom, hindi na masakit ang likod. Sana mapansin ito.",Positive,2026-08-06
+BSIS,1,Facilities,"For me, Salamat sa maayos na CRs, laging malinis kapag pumupunta ako. Kasabay nito, Well-maintained ang mga equipment sa laboratory, gumagana lahat nang maayos.",Positive,2026-08-08
+BSIT,1,Payments,"For me, Hindi pantay ang na-post na balance ko sa totoong binayaran ko.",Negative,2026-08-06
+BSIT,4,Payments,"Ang bilis ng confirmation pagkatapos magbayad, walang problema sa receipt.",Positive,2026-08-16
+BSA,3,Facilities,"Overall, Manageable naman ang traffic sa hallway kahit peak hours. Also, Standard lang ang kondisyon ng canteen, walang masyadong reklamo.",Neutral,2026-08-17
+BSA,2,Payments,"Sapat naman ang info na nakalagay sa invoice, though pwede pa dagdagan ng detalye. Sana ma-continue.",Neutral,2026-08-10
+BSIT,4,Faculty,"For me, Nakakatuwa kasi may humor pa sa gitna ng mahirap na lesson, hindi nakakaantok. Napakadetalyado ng feedback sa mga output namin, malaking tulong para umimprove. Yun lang po.",Positive,2026-08-07
+BSN,4,Payments,"Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. Maayos ang tracking ng balance ko, laging updated ang statement of account.",Positive,2026-08-08
+BSA,4,Payments,"Sa totoo lang, Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Hindi pantay ang na-post na balance ko sa totoong binayaran ko. That's it naman.",Negative,2026-08-10
+BSIT,4,Facilities,"Base sa experience ko, Matagal nang sira ang aircon pero wala pa ring inaayos. Dagdag pa rito, Maputik at madulas ang daanan tuwing umuulan, delikado talaga. That's it naman.",Negative,2026-08-17
+BSIT,1,Payments,"For me, Gumagana naman ang portal kahit minsan medyo mabagal mag-load. Sana po maayos pa.",Neutral,2026-08-16
+BSCS,2,Faculty,"Proud ako maging student niya, malaki ang natutunan ko this semester. Sana mapansin ito.",Positive,2026-08-03
+BSBA,4,Faculty,"For me, Ang bilis niya sumagot sa messages namin, super approachable talaga.",Positive,2026-08-20
+BSN,3,Faculty,"Sa totoo lang, Average lang, may improvement pero pwede pa i-improve ang engagement. At saka, Nasusundan ko naman ang lesson kahit medyo mabilis minsan. That's it naman.",Neutral,2026-08-20
+BSIT,4,Staff,"Honestly, Rude yung pagsagot sa akin kahit magalang naman ako magtanong. Naantala ang enrollment ko dahil sa mali nilang input sa system. Sana ma-continue.",Negative,2026-08-06
+BEED,2,Payments,"Overall, Standard lang ang fees, wala namang malaking pagbabago kumpara noon. Dagdag pa rito, Gumagana naman ang portal kahit minsan medyo mabagal mag-load. Yun lang po.",Neutral,2026-08-20
+BSIT,4,Facilities,"Sobrang siksikan sa room, kulang ang upuan para sa lahat ng estudyante. Kulang ang ilaw sa hallway kaya madilim tuwing gabi may klase pa. That's it naman.",Negative,2026-08-18
+BSA,4,Facilities,"Base sa experience ko, Functional pa rin ang mga computer sa lab kahit mabagal konti.",Neutral,2026-08-16
+BEED,4,Staff,"Sa totoo lang, Efficient sila mag-assist, alam nila agad kung ano gagawin ko. At saka, Friendly talaga sila kausap, hindi ka mararamdamang burden kahit maraming tanong.",Positive,2026-08-05
+BSN,4,Payments,"Maayos ang tracking ng balance ko, laging updated ang statement of account. Dagdag pa rito, Salamat sa flexible payment terms, malaking tulong para sa amin na estudyante. Sana mapansin ito.",Positive,2026-08-15
+BSIT,2,Payments,"For me, Nagka-error yung system nang magbayad ako, kinailangan kong ulitin ng tatlong beses. Kasabay nito, Nag-crash ang portal habang nagbabayad ako, hindi ko alam kung na-charge na ako o hindi. Sana po maayos pa.",Negative,2026-08-15
+BSBA,3,Staff,"For me, Sobrang bilis ng pag-proseso ng request ko, hindi na ako naghintay ng matagal. That's it naman.",Positive,2026-08-12
+BSIT,3,Staff,"Base sa experience ko, Ang galing ng customer service, sinagot lahat ng tanong ko nang maayos. Plus, Naramdaman ko na sincere sila sa pagtulong, hindi lang basta trabaho lang para sa kanila. Yun lang po.",Positive,2026-08-12
+BSIS,4,Payments,"For me, Nagka-error yung system nang magbayad ako, kinailangan kong ulitin ng tatlong beses. Plus, Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Sana mapansin ito.",Negative,2026-08-12
+BSCS,1,Payments,"Sa totoo lang, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. That's it naman.",Positive,2026-08-04
+BSBA,2,Payments,"Honestly, Nagka-error yung system nang magbayad ako, kinailangan kong ulitin ng tatlong beses. Yun lang po.",Negative,2026-08-18
+BSCS,4,Facilities,"For me, Sobrang siksikan sa room, kulang ang upuan para sa lahat ng estudyante. Sana mapansin ito.",Negative,2026-08-07
+BSBA,4,Staff,"Very accommodating sila kahit maraming tao, hindi sila nagmamadali sa amin. Dagdag pa rito, Salamat sa staff na patient magpaliwanag ng steps para sa clearance ko.",Positive,2026-08-01
+BSN,1,Payments,"Overall, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. Also, Clear ang breakdown ng fees, walang hidden charges na nakakagulat. Yun lang po.",Positive,2026-08-06
+BSN,2,Payments,"Base sa experience ko, Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Sana po maayos pa.",Negative,2026-08-05
+BSIS,1,Staff,"Honestly, Nawala yung documents ko, kailangan ko pang mag-resubmit ng lahat. Dagdag pa rito, Naantala ang enrollment ko dahil sa mali nilang input sa system. That's it naman.",Negative,2026-08-13
+BSBA,1,Facilities,Sapat naman ang espasyo sa classroom kahit medyo crowded minsan. Sana mapansin ito.,Neutral,2026-08-15
+BSA,4,Staff,"Overall, Salamat sa staff na patient magpaliwanag ng steps para sa clearance ko. Kasabay nito, Efficient sila mag-assist, alam nila agad kung ano gagawin ko.",Positive,2026-08-21
+BSIT,4,Faculty,Sobrang organized ng modules and lahat ng deadlines clear from day one.,Positive,2026-08-07
+BSIS,2,Faculty,"Fine naman siya bilang teacher, gets ko naman ang mga tinuturo. At saka, Walang malaking reklamo, pero pwede pa ring paganahin nang konti ang klase.",Neutral,2026-08-16
+BSIT,1,Payments,"For me, Confusing ang breakdown ng fees, parang may extra charge na hindi ko na-expect. Sobrang taas ng miscellaneous fees na hindi naman malinaw kung para saan. Sana mapansin ito.",Negative,2026-08-08
+BEED,4,Payments,"Sa totoo lang, Nahirapan akong makipag-ayos sa refund ko, sobrang tagal ng proseso.",Negative,2026-08-06
+BSIT,2,Staff,"Overall, Ilang beses akong bumalik dahil hindi complete ang binigay nilang instructions. Sana po maayos pa.",Negative,2026-08-04
+BSBA,1,Facilities,"For me, Manageable naman ang traffic sa hallway kahit peak hours. Sana po maayos pa.",Neutral,2026-08-19
+BSCS,4,Payments,"Honestly, Napakabilis maprocess ang refund ko, hindi ko inaasahan na ganoon kabilis. Sana po maayos pa.",Positive,2026-08-03
+BSN,4,Staff,"Ilang beses akong bumalik dahil hindi complete ang binigay nilang instructions. Dagdag pa rito, Naantala ang enrollment ko dahil sa mali nilang input sa system. Sana po maayos pa.",Negative,2026-08-05
+BSN,1,Payments,"Base sa experience ko, Standard lang ang fees, wala namang malaking pagbabago kumpara noon. Kasabay nito, Nagawa naman ang bayad ko kahit medyo malabo yung instructions sa simula. Yun lang po.",Neutral,2026-08-03
+BSN,1,Facilities,"For me, Maputik at madulas ang daanan tuwing umuulan, delikado talaga. Sana mapansin ito.",Negative,2026-08-16
+BSA,4,Payments,"Nagawa naman ang bayad ko kahit medyo malabo yung instructions sa simula. Dagdag pa rito, Standard lang ang fees, wala namang malaking pagbabago kumpara noon. Yun lang po.",Neutral,2026-08-15
+BEED,4,Payments,Nagawa naman ang bayad ko kahit medyo malabo yung instructions sa simula. Sana po maayos pa.,Neutral,2026-08-02
+BSCS,4,Faculty,"Sa totoo lang, Wala akong natutunan sa buong semester, puro readings na wala namang discussion. Dagdag pa rito, Palaging cancelled ang klase pero hindi namin alam kung ano ang gagawin instead. Yun lang po.",Negative,2026-08-07
+BSIT,3,Facilities,"Matagal nang sira ang aircon pero wala pa ring inaayos. Dagdag pa rito, Palaging discconnect ang wifi, nakakaabala sa mga submission namin. Sana ma-continue.",Negative,2026-08-01
+BSN,3,Facilities,"Base sa experience ko, Ang linis at ayos ng library ngayon, sobrang conducive mag-aral. Dagdag pa rito, Napansin kong mas maayos na ang aircon sa mga labs, hindi na sobrang init. Sana ma-continue.",Positive,2026-08-15
+BSBA,4,Faculty,"Okay lang naman ang klase, standard lang, walang masyadong kakaiba. Dagdag pa rito, Nasusundan ko naman ang lesson kahit medyo mabilis minsan. Sana mapansin ito.",Neutral,2026-08-07
+BEED,3,Staff,"Overall, Sapat naman ang tulong, though pwede pang paganahan ang follow-through. Sana mapansin ito.",Neutral,2026-08-12
+BSIS,4,Staff,"Honestly, Naantala ang enrollment ko dahil sa mali nilang input sa system. Plus, Hindi ma-contact ang office, ilang beses akong tumawag walang sumasagot. Sana ma-continue.",Negative,2026-08-15

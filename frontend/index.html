@@ -43,10 +43,6 @@
 
                 <!-- Student Login -->
                 <form id="login-form-student" onsubmit="STUDENT.handleLogin(event)">
-                    <div class="form-group">
-                        <label for="inp-sn"><i class="fas fa-id-card"></i> Student number</label>
-                        <input type="text" id="inp-sn" class="form-control" placeholder="1-23****" required>
-                    </div>
                     <button type="submit" class="btn btn-primary btn-block btn-lg">
                         <i class="fas fa-arrow-right"></i> Open evaluation →
                     </button>
@@ -118,13 +114,13 @@
                         <label><i class="fas fa-lock"></i> Password</label>
                         <input type="password" class="form-control" id="inp-rpass" placeholder="••••••••" required>
                     </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-user-tag"></i> Role</label>
-                        <select class="form-control" id="inp-rrole">
-                            <option value="faculty">Faculty</option>
-                            <option value="administrator">Administrator</option>
-                        </select>
-                    </div>
+                   <div class="form-group">
+                    <label for="inp-rrole"><i class="fas fa-user-tag"></i> Role</label>
+                    <select class="form-control" id="inp-rrole">
+                        <option value="faculty">Faculty</option>
+                        <option value="administrator">Administrator</option>
+                    </select>
+                </div>
                     <button type="submit" class="btn btn-primary btn-block btn-lg">
                         <i class="fas fa-user-plus"></i> Create account →
                     </button>
@@ -147,7 +143,6 @@
             </div>
 <ul class="nav-links">
                 <li><button class="active" data-stab="form"><i class="fas fa-edit"></i> Evaluation Form</button></li>
-                <li><button data-stab="submissions"><i class="fas fa-history"></i> My Submissions</button></li>
             </ul>
             <div class="nav-user">
                 <span class="user-badge" id="badge-student"></span>
@@ -162,10 +157,10 @@
                     <span class="date-note" id="student-id-disp"></span>
                 </div>
                 <!-- Course / Year Level Selector -->
-                <div class="card" style="padding:1rem 1.25rem;margin-bottom:1rem;">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                        <div class="form-group" style="margin-bottom:0;">
-                            <label for="sel-course"><i class="fas fa-book"></i> Course / Program</label>
+              <div class="card course-year-card">
+    <div class="course-year-grid">
+        <div class="form-group form-group--tight">
+            <label for="sel-course"><i class="fas fa-book"></i> Course / Program</label>
                             <select class="form-control" id="sel-course" required>
                                 <option value="">Select your course</option>
                                 <option>Associate in Computer Technology</option>
@@ -183,8 +178,8 @@
                     
                             </select>
                         </div>
-                        <div class="form-group" style="margin-bottom:0;">
-                            <label for="sel-year"><i class="fas fa-layer-group"></i> Year Level</label>
+                                <div class="form-group form-group--tight">
+            <label for="sel-year"><i class="fas fa-layer-group"></i> Year Level</label>
                             <select class="form-control" id="sel-year" required>
                                 <option value="">Select year level</option>
                                 <option>1st Year</option>
@@ -204,7 +199,6 @@
                 </div>
                 <div id="eval-form-content"></div>
             </div>
-            <div id="student-submissions-area" style="display:none;"></div>
         </div>
     </div>
 
@@ -221,8 +215,7 @@
                 <li><button class="active" data-tab="overview"><i class="fas fa-chart-pie"></i> Overview</button></li>
                 <li><button data-tab="responses"><i class="fas fa-table"></i> Responses</button></li>
                 <li><button data-tab="analytics"><i class="fas fa-chart-line"></i> Analytics</button></li>
-                <li><button data-tab="ml"><i class="fas fa-brain"></i> ML Training</button></li>
-                <li><button data-tab="import"><i class="fas fa-upload"></i> Import Data</button></li>
+                <li><button data-tab="ml"><i class="fas fa-chart-bar"></i> Model Results</button></li>
             </ul>
             <div class="nav-user">
                 <span class="user-badge" id="badge-admin"></span>
@@ -262,7 +255,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3><i class="fas fa-file-alt"></i> Evaluation Detail</h3>
-                <button class="modal-close" onclick="APP.closeModal()"><i class="fas fa-times"></i></button>
+                <button class="modal-close" onclick="APP.closeModal()" aria-label="Close"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body" id="modal-body"></div>
         </div>
@@ -276,4 +269,3 @@
     <script src="js/app.js"></script>
 </body>
 </html>
-

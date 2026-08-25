@@ -1,66 +1,156 @@
 """
 File import service for bulk-uploading compiled student evaluation data
-from Excel (.xlsx, .xls) and CSV (.csv) files exported from Google Forms,
-Microsoft Forms, or the institution's evaluation system.
+from Excel (.xlsx, .xls) and CSV (.csv) files exported from Google Forms.
+
+Rewritten to import FULL evaluation-form-equivalent data (not just a
+bare comment + category), so imported rows behave identically to a
+normal student submission through the live form:
+
+  - Student ID / Course / Year Level  -> looked up or created as a User,
+    exactly like app.api.evaluation.submit_evaluation does. Rows with no
+    Student ID are imported anonymously (user_id = None), same as the
+    live anonymous flow.
+  - Evaluatee (professor name)         -> Evaluation.evaluatee
+  - Open-ended comment                 -> Evaluation.share_your_thoughts
+    (NOT Evaluation.comment — that field is reserved for the
+    Likert-only fallback text, matching submit_evaluation's behavior).
+  - Likert ratings (1-5 per aspect)    -> Evaluation.ratings (JSON),
+    using the SAME aspect keys as the live forms in student.js, scoped
+    per category (Faculty/Staff/Facilities/Payment each have a
+    different question set).
+  - Sentiment is ALWAYS computed here via run_prediction_pipeline
+    (XGBoost + DeBERTa + RoBERTa ensemble) — a Sentiment column in the
+    uploaded file, if present, is intentionally ignored.
+
+One file = one category. The admin selects the category (Faculty /
+Staff / Facilities / Payment) in the UI before uploading, because each
+category's Google Form has a different rating-question layout and
+mixing them in one auto-detected pass is unreliable. A Category column
+in the file, if present, is only cross-checked against the selection
+and never trusted on its own.
 
 Workflow
 --------
-1. parse_uploaded_file  — reads the raw file into a list of dicts (rows).
-2. validate_imported_data  — checks column presence, valid categories,
-   non-empty comments, and returns clean rows + per-row errors.
-3. process_imported_evaluations  — bulk-inserts valid Evaluation records
-   (and optionally runs the full prediction pipeline on each).
+1. parse_uploaded_file      — reads the raw file into a list of dicts.
+2. validate_imported_data   — resolves columns, validates each row,
+                               returns (clean_rows, error_rows).
+3. process_imported_evaluations — creates/looks-up Users, runs the
+                               live prediction pipeline, and inserts
+                               full Evaluation + Prediction records.
 """
 from __future__ import annotations
 
 import csv
+import re
+import secrets
 from pathlib import Path
 from typing import Any
 
 import openpyxl
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
 from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction
+from app.models.user import User, UserRole
+from app.services.likert import classify_likert
+from app.services.mismatch import detect_mismatch
 from app.services.prediction import run_prediction_pipeline
 from app.services.preprocessing import clean_for_classical
 from app.utils.logger import logger
 
 # ---------------------------------------------------------------------------
-# Constants
+# Column detection keywords
 # ---------------------------------------------------------------------------
 
-REQUIRED_COLUMN_MAP = {
-    "category": [
-        "category", "categories", "aspect", "area", "type",
-        "evaluation category", "evaluation aspect",
-    ],
-    "comment": [
-        "comment", "comments", "feedback", "suggestion", "suggestions",
-        "remarks", "review", "message", "text", "response",
-        "your feedback", "your comments", "your suggestions",
-        "open-ended feedback", "student feedback",
-    ],
-}
+CATEGORY_COL_KEYWORDS = [
+    "category", "categories", "aspect", "area", "type",
+    "evaluation category", "evaluation aspect",
+]
 
-TIMESTAMP_KEYWORDS = [
+COMMENT_COL_KEYWORDS = [
+    "share your thoughts", "your thoughts", "comment", "comments",
+    "feedback", "suggestion", "suggestions", "remarks", "review",
+    "message", "text", "response", "your feedback", "your comments",
+    "your suggestions", "open-ended feedback", "student feedback",
+]
+
+EVALUATEE_COL_KEYWORDS = [
+    "evaluatee", "professor", "professor name", "instructor",
+    "instructor name", "select the professor", "name of professor",
+    "staff name", "subject/course handled",
+]
+
+STUDENT_ID_COL_KEYWORDS = [
+    "student id", "student number", "student no", "id number", "id no",
+]
+
+COURSE_COL_KEYWORDS = ["course", "program", "course/program"]
+
+YEAR_LEVEL_COL_KEYWORDS = ["year level", "year"]
+
+TIMESTAMP_COL_KEYWORDS = [
     "timestamp", "date", "time", "submitted", "submission date",
     "submission time", "datetime", "date submitted",
 ]
 
-VALID_CATEGORIES = {c.value.lower() for c in EvaluationCategory}
+# Per-category Likert aspect keys, mapped to the keyword(s) most likely
+# to appear in a Google Form export header for that question. These
+# mirror the exact question text used in js/student.js so headers that
+# are the full question (Google Forms' default export behavior) still
+# match via substring search.
+RATING_KEYWORDS_BY_CATEGORY: dict[str, dict[str, list[str]]] = {
+    "Faculty": {
+        "mastery": ["mastery of the subject", "mastery"],
+        "teaching_quality": ["teaching quality", "good teaching"],
+        "clarity": ["communicates and explains", "clarity"],
+        "fairness": ["grades and evaluates", "fairness", "fairly"],
+        "punctuality": ["punctuality and attendance", "punctuality"],
+        "approachability": ["approachability"],
+        "classroom_mgmt": ["classroom management"],
+    },
+    "Staff": {
+        "safety": ["guards make me feel safe", "safety"],
+        "registrar": ["registrar"],
+        "cashier": ["cashier"],
+        "canteen": ["canteen"],
+        "substitute": ["substitutes and temporary staff", "substitute"],
+        "office_staff": ["office staff"],
+        "admin_comm": ["administration keeps students", "admin_comm", "well-informed"],
+        "maintenance": ["maintenance staff", "maintenance"],
+    },
+    "Facilities": {
+        "spaces": ["great spaces", "benches, study areas", "spaces"],
+        "furniture": ["tables and chairs", "furniture"],
+        "cleanliness": ["general cleanliness", "cleanliness"],
+        "bathrooms": ["bathrooms"],
+        "cafeteria": ["cafeteria"],
+        "monitors": ["classroom monitor", "monitors"],
+        "computers": ["laboratory computers", "computers"],
+        "classrooms": ["classrooms are bright", "classrooms"],
+    },
+    "Payment": {
+        "accessibility": ["payment portal", "accessib"],
+        "processing": ["processed promptly", "processing"],
+        "queues": ["payment queues", "queues"],
+        "online": ["online payment", "online"],
+        "courteous": ["payment personnel are courteous", "courteous"],
+        "accounting": ["accounting and registrar personnel", "accounting"],
+        "security": ["personal and financial information is secure", "security"],
+    },
+}
+
+VALID_CATEGORIES = {c.value for c in EvaluationCategory}
+
 
 # ---------------------------------------------------------------------------
-# Custom exceptions
+# Exceptions
 # ---------------------------------------------------------------------------
 
 
 class ImportValidationError(Exception):
     """Raised when the uploaded file fails structural validation."""
-
-
-class ImportRowError(Exception):
-    """Raised when an individual row fails validation."""
 
 
 # ---------------------------------------------------------------------------
@@ -69,8 +159,6 @@ class ImportRowError(Exception):
 
 
 class ImportResult:
-    """Holds a summary of the import operation."""
-
     def __init__(self) -> None:
         self.total_rows: int = 0
         self.imported: int = 0
@@ -92,56 +180,61 @@ class ImportResult:
 
 
 def _normalise_header(name: str) -> str:
-    """Lower-case, strip whitespace, and collapse multiple spaces."""
-    return " ".join(name.strip().lower().split())
+    return " ".join(str(name).strip().lower().split())
 
 
-def _detect_column(headers: list[str], keywords: list[str]) -> int | None:
-    """Return the index of the first header that contains any of the
-    given *keywords* (case-insensitive, partial match)."""
-    normalised = [_normalise_header(h) for h in headers]
+def _find_column(headers: list[str], keywords: list[str]) -> str | None:
+    """Return the original header text of the first column whose
+    normalised text contains (or is contained in) any keyword."""
+    normalised = {h: _normalise_header(h) for h in headers}
     for kw in keywords:
         kw_norm = _normalise_header(kw)
-        for idx, hdr in enumerate(normalised):
-            if kw_norm in hdr or hdr in kw_norm:
-                return idx
+        for original, norm in normalised.items():
+            if kw_norm in norm or norm in kw_norm:
+                return original
     return None
 
 
-def _resolve_column_map(
-    headers: list[str],
-) -> dict[str, int]:
-    """Return ``{'category': <index>, 'comment': <index>}``.
+def _find_rating_columns(headers: list[str], category: str) -> dict[str, str]:
+    """Return {aspect_key: header_text} for every Likert aspect column
+    detected for the given category."""
+    keyword_map = RATING_KEYWORDS_BY_CATEGORY.get(category, {})
+    found: dict[str, str] = {}
+    normalised = {h: _normalise_header(h) for h in headers}
+    for aspect_key, keywords in keyword_map.items():
+        for kw in keywords:
+            kw_norm = _normalise_header(kw)
+            match = next((orig for orig, norm in normalised.items() if kw_norm in norm), None)
+            if match:
+                found[aspect_key] = match
+                break
+    return found
 
-    Raises ``ImportValidationError`` if either column cannot be detected.
+
+def resolve_column_map(headers: list[str], category: str) -> dict[str, Any]:
+    """Resolve all relevant columns for the given category.
+
+    Raises ImportValidationError if a Comment-equivalent column can't
+    be found — that's the one column every row must have.
     """
-    cat_idx = _detect_column(headers, REQUIRED_COLUMN_MAP["category"])
-    com_idx = _detect_column(headers, REQUIRED_COLUMN_MAP["comment"])
-    ts_idx = _detect_column(headers, TIMESTAMP_KEYWORDS)
-
-    if cat_idx is None and len(headers) >= 2:
-        # Fallback: assume the second column is the category
-        cat_idx = 1
-
-    if com_idx is None and len(headers) >= 3:
-        # Fallback: assume the third (or last) column is the comment
-        com_idx = 2 if cat_idx != 2 else 3
-    elif com_idx is None and len(headers) >= 1:
-        # If only one column, assume it is the comment
-        com_idx = 0
-
-    if cat_idx is None:
+    comment_col = _find_column(headers, COMMENT_COL_KEYWORDS)
+    if comment_col is None:
         raise ImportValidationError(
-            "Could not detect a 'Category' column. Expected column names "
-            f"containing one of: {REQUIRED_COLUMN_MAP['category']}"
-        )
-    if com_idx is None:
-        raise ImportValidationError(
-            "Could not detect a 'Comment' column. Expected column names "
-            f"containing one of: {REQUIRED_COLUMN_MAP['comment']}"
+            "Could not find a 'Share your thoughts' / comment column. "
+            "Expected a header containing one of: "
+            f"{COMMENT_COL_KEYWORDS[:5]}..."
         )
 
-    return {"category": cat_idx, "comment": com_idx, "timestamp": ts_idx}
+    return {
+        "category": _find_column(headers, CATEGORY_COL_KEYWORDS),
+        "comment": comment_col,
+        "evaluatee": _find_column(headers, EVALUATEE_COL_KEYWORDS),
+        "student_id": _find_column(headers, STUDENT_ID_COL_KEYWORDS),
+        "course": _find_column(headers, COURSE_COL_KEYWORDS),
+        "year_level": _find_column(headers, YEAR_LEVEL_COL_KEYWORDS),
+        "timestamp": _find_column(headers, TIMESTAMP_COL_KEYWORDS),
+        "ratings": _find_rating_columns(headers, category),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -162,17 +255,12 @@ def get_extension(filename: str) -> str:
 
 
 def _read_csv_rows(file_path: Path) -> list[list[str]]:
-    """Read a CSV file and return rows as lists of strings."""
     with open(file_path, newline="", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
-        rows = []
-        for row in reader:
-            rows.append([cell.strip() for cell in row])
-    return rows
+        return [[cell.strip() for cell in row] for row in reader]
 
 
 def _read_excel_rows(file_path: Path) -> list[list[str]]:
-    """Read an Excel file (xlsx/xls) and return rows as lists of strings."""
     wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
     ws = wb.active
     rows: list[list[str]] = []
@@ -183,31 +271,10 @@ def _read_excel_rows(file_path: Path) -> list[list[str]]:
 
 
 def parse_uploaded_file(file_path: Path) -> list[dict[str, Any]]:
-    """Parse an uploaded file into a list of dictionaries keyed by the
-    original column headers.
-
-    Parameters
-    ----------
-    file_path : Path
-        Path to the uploaded file.
-
-    Returns
-    -------
-    list[dict[str, Any]]
-        Each dict represents a data row, keyed by the column header.
-
-    Raises
-    ------
-    ImportValidationError
-        If the file cannot be read or has no data rows.
-    """
     ext = file_path.suffix.lower()
     logger.info(f"Parsing uploaded file: {file_path.name} (format: {ext})")
 
-    if ext == ".csv":
-        raw_rows = _read_csv_rows(file_path)
-    else:  # .xlsx, .xls
-        raw_rows = _read_excel_rows(file_path)
+    raw_rows = _read_csv_rows(file_path) if ext == ".csv" else _read_excel_rows(file_path)
 
     if not raw_rows:
         raise ImportValidationError("The uploaded file appears to be empty.")
@@ -218,16 +285,40 @@ def parse_uploaded_file(file_path: Path) -> list[dict[str, Any]]:
     if not data_rows:
         raise ImportValidationError("The uploaded file contains a header row but no data rows.")
 
-    # Build result
     result = []
     for row in data_rows:
-        # Pad short rows with empty strings
         while len(row) < len(headers):
             row.append("")
+        # Skip fully blank rows (common trailing rows in Excel exports)
+        if not any(cell.strip() for cell in row):
+            continue
         result.append(dict(zip(headers, row)))
 
-    logger.info(f"Parsed {len(result)} rows from {file_path.name}")
+    logger.info(f"Parsed {len(result)} data rows from {file_path.name}")
     return result
+
+
+# ---------------------------------------------------------------------------
+# Value parsing helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_rating_value(raw: str) -> int | None:
+    """Parse a Likert cell into an int 1-5. Handles plain numbers as
+    well as Google Forms' common 'X - Label' export format."""
+    if not raw:
+        return None
+    raw = raw.strip()
+    try:
+        val = int(float(raw))
+        if 1 <= val <= 5:
+            return val
+    except ValueError:
+        pass
+    match = re.search(r"[1-5]", raw)
+    if match:
+        return int(match.group())
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -235,190 +326,212 @@ def parse_uploaded_file(file_path: Path) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _normalise_category(value: str) -> str:
-    """Try to match a raw category value to one of the official
-    ``EvaluationCategory`` values."""
-    val = value.strip().lower()
-    for cat in EvaluationCategory:
-        if cat.value.lower() == val:
-            return cat.value
-        # Fuzzy: e.g. "instructor" -> "Faculty", " Admin " -> "Staff"
-    # Manual common mappings
-    aliases = {
-        "instructor": "Faculty",
-        "teacher": "Faculty",
-        "professor": "Faculty",
-        "faculty member": "Faculty",
-        "admin": "Staff",
-        "administration": "Staff",
-        "employee": "Staff",
-        "personnel": "Staff",
-        "payment": "Payment",
-        "billing": "Payment",
-        "finance": "Payment",
-        "facility": "Facilities",
-        "facilities": "Facilities",
-        "campus": "Facilities",
-        "infrastructure": "Facilities",
-    }
-    return aliases.get(val, value.strip().title())
-
-
 def validate_imported_data(
     rows: list[dict[str, Any]],
-    column_map: dict[str, int | None] | None = None,
+    category: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Validate parsed rows and separate into clean and error rows.
+    """Validate parsed rows for the given (admin-selected) category.
 
-    Parameters
-    ----------
-    rows : list[dict]
-        Parsed rows (from ``parse_uploaded_file``).
-    column_map : dict or None
-        Optional pre-resolved column map. If ``None`` it is auto-detected.
-
-    Returns
-    -------
-    tuple[list[dict], list[dict]]
-        (clean_rows, error_rows) where each error row dict has an
-        ``_errors`` key containing a list of error messages.
+    Returns (clean_rows, error_rows). Each clean row is a dict ready
+    for process_imported_evaluations: category, share_your_thoughts,
+    evaluatee, ratings, student_id, course, year_level, timestamp.
     """
+    if category not in VALID_CATEGORIES:
+        raise ImportValidationError(
+            f"'{category}' is not a valid category. Must be one of: {sorted(VALID_CATEGORIES)}"
+        )
+
     if not rows:
         return [], []
 
-    # Resolve column mapping
     headers = list(rows[0].keys())
-    if column_map is None:
-        column_map = _resolve_column_map(headers)
-
-    cat_col = headers[column_map["category"]]
-    com_col = headers[column_map["comment"]]
-    ts_col = headers[column_map["timestamp"]] if column_map.get("timestamp") is not None else None
+    col_map = resolve_column_map(headers, category)
 
     clean: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
 
-    for row_idx, row in enumerate(rows, start=2):  # +2 because 0-indexed + header
+    for row_idx, row in enumerate(rows, start=2):  # +2: header row + 0-index
         row_errors: list[str] = []
-        raw_comment = row.get(com_col, "").strip()
-        raw_category = row.get(cat_col, "").strip()
 
-        # --- Comment validation ---
-        if not raw_comment:
-            row_errors.append("Comment is empty or missing.")
-        elif len(raw_comment) < 3:
+        raw_comment = (row.get(col_map["comment"]) or "").strip()
+
+        ratings: dict[str, int] = {}
+        for aspect_key, header in col_map["ratings"].items():
+            parsed = _parse_rating_value(row.get(header, ""))
+            if parsed is not None:
+                ratings[aspect_key] = parsed
+
+        # A row needs at least a comment OR at least one rating —
+        # mirrors the live submit_evaluation requirement.
+        if not raw_comment and not ratings:
+            row_errors.append("Row has neither a comment nor any ratings filled in.")
+        elif raw_comment and len(raw_comment) < 3:
             row_errors.append("Comment is too short (minimum 3 characters).")
         elif len(raw_comment) > 5000:
             row_errors.append("Comment exceeds the maximum length of 5000 characters.")
 
-        # --- Category validation ---
-        if not raw_category:
-            row_errors.append("Category is empty or missing.")
-        else:
-            normalised_cat = _normalise_category(raw_category)
-            if normalised_cat not in VALID_CATEGORIES and normalised_cat not in {c.value for c in EvaluationCategory}:
+        # Cross-check an in-file category column, if present, against
+        # the admin's selection — mismatch is a warning-level error so
+        # a student who submitted the wrong form doesn't get silently
+        # miscategorized.
+        if col_map["category"]:
+            file_cat = (row.get(col_map["category"]) or "").strip()
+            if file_cat and file_cat.lower() != category.lower():
                 row_errors.append(
-                    f"Invalid category '{raw_category}'. "
-                    f"Must be one of: {', '.join(c.value for c in EvaluationCategory)}"
+                    f"Row's Category column says '{file_cat}' but you selected "
+                    f"'{category}' for this import — skipped to avoid miscategorizing it."
                 )
 
+        evaluatee = None
+        if col_map["evaluatee"]:
+            evaluatee = (row.get(col_map["evaluatee"]) or "").strip() or None
+            if category != "Faculty":
+                evaluatee = None  # evaluatee is only meaningful for Faculty
+
+        student_id = (row.get(col_map["student_id"]) or "").strip() if col_map["student_id"] else ""
+        course = (row.get(col_map["course"]) or "").strip() if col_map["course"] else ""
+        year_level = (row.get(col_map["year_level"]) or "").strip() if col_map["year_level"] else ""
+        timestamp = (row.get(col_map["timestamp"]) or "").strip() if col_map["timestamp"] else ""
+
         if row_errors:
-            error_entry = dict(row)  # shallow copy
-            error_entry["_row"] = row_idx
-            error_entry["_errors"] = row_errors
+            error_entry = {
+                "_row": row_idx,
+                "_errors": row_errors,
+                "_preview": raw_comment[:100] or f"({category} — ratings only)",
+            }
             errors.append(error_entry)
         else:
-            entry = {
-                "category": _normalise_category(raw_category),
-                "comment": raw_comment,
-            }
-            if ts_col and row.get(ts_col):
-                entry["timestamp"] = row[ts_col].strip()
-            clean.append(entry)
+            clean.append({
+                "category": category,
+                "share_your_thoughts": raw_comment or None,
+                "evaluatee": evaluatee,
+                "ratings": ratings or None,
+                "student_id": student_id or None,
+                "course": course or None,
+                "year_level": year_level or None,
+                "timestamp": timestamp or None,
+            })
 
     return clean, errors
 
 
 # ---------------------------------------------------------------------------
-# DB processing
+# DB processing — mirrors app.api.evaluation.submit_evaluation
 # ---------------------------------------------------------------------------
+
+
+def _get_or_create_student_user(db: Session, student_id: str, course: str | None, year_level: str | None) -> str | None:
+    """Look up or create a User for this student_id, same pattern as
+    submit_evaluation. Returns the user_id, or None on failure."""
+    existing_user = db.query(User).filter(User.student_id == student_id).first()
+    if existing_user:
+        if course:
+            existing_user.course = course
+        if year_level:
+            existing_user.year_level = year_level
+        return existing_user.id
+
+    new_user = User(
+        full_name=student_id,
+        email=f"anon-{student_id}@placeholder.asiatech.local",
+        hashed_password=hash_password(secrets.token_urlsafe(32)),
+        role=UserRole.STUDENT,
+        student_id=student_id,
+        course=course,
+        year_level=year_level,
+        is_active=True,
+    )
+    db.add(new_user)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        existing_user = db.query(User).filter(User.student_id == student_id).first()
+        return existing_user.id if existing_user else None
+    return new_user.id
 
 
 def process_imported_evaluations(
     db: Session,
     clean_rows: list[dict[str, Any]],
-    user_id: str | None = None,
     run_prediction: bool = True,
 ) -> ImportResult:
-    """Insert validated evaluation rows into the database and optionally
-    run the full sentiment prediction pipeline on each.
-
-    Parameters
-    ----------
-    db : Session
-        SQLAlchemy database session.
-    clean_rows : list[dict]
-        Validated rows (output of ``validate_imported_data``).
-    user_id : str or None
-        If provided, associate evaluations with this user (administrator).
-    run_prediction : bool
-        Whether to run the prediction pipeline on each imported evaluation.
-
-    Returns
-    -------
-    ImportResult
-        Summary of the import operation.
-    """
+    """Insert validated rows as full Evaluation records — same shape,
+    same prediction pipeline, same mismatch detection as a live
+    student submission via POST /evaluation. NOTE: unlike the previous
+    version of this function, this does NOT attribute rows to the
+    importing admin. Each row is attributed to its own student_id (if
+    given) or left anonymous (user_id = None), matching the live flow."""
     result = ImportResult()
     result.total_rows = len(clean_rows)
 
     for idx, row in enumerate(clean_rows):
-        # Use a savepoint (nested transaction) so each row is isolated
         sp = db.begin_nested()
         try:
+            user_id = None
+            if row.get("student_id"):
+                user_id = _get_or_create_student_user(
+                    db, row["student_id"], row.get("course"), row.get("year_level")
+                )
+
+            likert_label = None
+            likert_average = None
+            if row.get("ratings"):
+                likert_label, likert_average = classify_likert(row["ratings"])
+
+            text_for_sentiment = row.get("share_your_thoughts")
+            stored_comment = text_for_sentiment or f"{row['category']} evaluation (Likert only)"
+
+            official_sentiment = likert_label
+            official_confidence = None
+            prediction_result = None
+
+            if run_prediction and text_for_sentiment:
+                prediction_result = run_prediction_pipeline(db, text_for_sentiment)
+                official_sentiment = prediction_result["official_prediction"]
+                official_confidence = prediction_result["confidence_score"]
+
             evaluation = Evaluation(
                 user_id=user_id,
-                category=row["category"],
-                comment=row["comment"],
-                cleaned_comment=clean_for_classical(row["comment"]),
+                category=EvaluationCategory(row["category"]),
+                comment=stored_comment,
+                cleaned_comment=clean_for_classical(text_for_sentiment) if text_for_sentiment else None,
+                evaluatee=row.get("evaluatee"),
+                share_your_thoughts=text_for_sentiment,
+                ratings=row.get("ratings"),
+                likert_sentiment=likert_label,
+                likert_average=likert_average,
+                sentiment=official_sentiment,
             )
-            db.add(evaluation)
-            db.flush()  # Get the evaluation ID
 
-            if run_prediction:
-                try:
-                    prediction_result = run_prediction_pipeline(db, row["comment"])
-                    prediction = Prediction(
-                        evaluation_id=evaluation.id,
-                        svm_prediction=prediction_result["svm_prediction"],
-                        svm_confidence=prediction_result["svm_confidence"],
-                        random_forest_prediction=prediction_result["random_forest_prediction"],
-                        random_forest_confidence=prediction_result["random_forest_confidence"],
-                        naive_bayes_prediction=prediction_result["naive_bayes_prediction"],
-                        naive_bayes_confidence=prediction_result["naive_bayes_confidence"],
-                        bert_prediction=prediction_result["bert_prediction"],
-                        bert_confidence=prediction_result["bert_confidence"],
-                        xgb_prediction=prediction_result["xgb_prediction"],
-                        xgb_confidence=prediction_result["xgb_confidence"],
-                        deberta_prediction=prediction_result["deberta_prediction"],
-                        deberta_confidence=prediction_result["deberta_confidence"],
-                        roberta_prediction=prediction_result["roberta_prediction"],
-                        roberta_confidence=prediction_result["roberta_confidence"],
-                        official_prediction=prediction_result["official_prediction"],
-                        algorithm_used=prediction_result["algorithm_used"],
-                        confidence_score=prediction_result["confidence_score"],
-                        processing_time_ms=prediction_result["processing_time_ms"],
-                    )
-                    db.add(prediction)
-                    # Store the official sentiment label directly on the
-                    # evaluation row.
-                    evaluation.sentiment = prediction_result["official_prediction"]
-                except RuntimeError as exc:
-                    logger.warning(
-                        f"Prediction pipeline failed for imported evaluation "
-                        f"({evaluation.id}): {exc}"
-                    )
-                    # Evaluation is still saved even if prediction fails
+            if likert_label is not None and text_for_sentiment and official_confidence is not None:
+                mismatch = detect_mismatch(
+                    likert_label=likert_label,
+                    likert_average=likert_average,
+                    sentiment_label=official_sentiment,
+                    sentiment_confidence=official_confidence,
+                )
+                evaluation.is_mismatch = mismatch.is_mismatch
+                evaluation.mismatch_type = mismatch.mismatch_type.value
+
+            db.add(evaluation)
+            db.flush()
+
+            if prediction_result is not None:
+                prediction = Prediction(
+                    evaluation_id=evaluation.id,
+                    xgb_prediction=prediction_result["xgb_prediction"],
+                    xgb_confidence=prediction_result["xgb_confidence"],
+                    deberta_prediction=prediction_result["deberta_prediction"],
+                    deberta_confidence=prediction_result["deberta_confidence"],
+                    roberta_prediction=prediction_result["roberta_prediction"],
+                    roberta_confidence=prediction_result["roberta_confidence"],
+                    official_prediction=prediction_result["official_prediction"],
+                    algorithm_used=prediction_result["algorithm_used"],
+                    confidence_score=prediction_result["confidence_score"],
+                    processing_time_ms=prediction_result["processing_time_ms"],
+                )
+                db.add(prediction)
 
             sp.commit()
             result.imported += 1
@@ -429,7 +542,7 @@ def process_imported_evaluations(
             result.failed += 1
             result.errors.append({
                 "row": idx + 1,
-                "comment": row.get("comment", "")[:100],
+                "comment": (row.get("share_your_thoughts") or "")[:100],
                 "error": str(exc),
             })
             continue
@@ -440,4 +553,3 @@ def process_imported_evaluations(
         f"{result.failed} failed out of {result.total_rows} total rows."
     )
     return result
-

@@ -126,14 +126,24 @@ def word_frequency(db: Session, sentiment: SentimentLabel, top_n: int = 30) -> d
 
 
 def top_comments(db: Session, kind: str, limit: int = 10) -> dict:
-    """kind='complaints' -> highest-confidence Negative comments.
-    kind='appreciations' -> highest-confidence Positive comments."""
+    """kind='complaints' -> highest-confidence, purely Negative comments.
+    kind='appreciations' -> highest-confidence, purely Positive comments.
+
+    "Purely" means the comment's ML sentiment is NOT contradicted by the
+    same submission's Likert rating (Evaluation.is_mismatch is False).
+    A comment whose text reads negative but whose Likert score reads
+    positive (or vice versa) is a mixed signal, not a clean complaint or
+    appreciation, so it's excluded here even if its text-sentiment
+    confidence is high. See app.services.mismatch for how is_mismatch is
+    derived.
+    """
     target = SentimentLabel.NEGATIVE if kind == "complaints" else SentimentLabel.POSITIVE
 
     rows = (
         db.query(Evaluation, Prediction)
         .join(Prediction, Prediction.evaluation_id == Evaluation.id)
         .filter(Prediction.official_prediction == target)
+        .filter(Evaluation.is_mismatch.is_(False))
         .order_by(Prediction.confidence_score.desc())
         .limit(limit)
         .all()

@@ -1,6 +1,15 @@
 import uuid
 from pathlib import Path
 
+import json
+
+from app.services.training import (
+    
+    import_training_results,
+    replace_transformer_artifacts,
+    replace_xgboost_artifacts,
+)
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
@@ -17,6 +26,7 @@ from app.schemas.ml import (
     ModelComparisonRow,
     TrainingHistoryOut,
     TrainRequest,
+    ImportResultsResponse
 )
 from app.services.training import (
     DatasetValidationError,
@@ -42,86 +52,53 @@ APPROVED_ALGORITHMS = (
 )
 
 
-@router.post("/dataset/upload", status_code=status.HTTP_201_CREATED)
-async def upload_dataset(
-    file: UploadFile = File(...),
-    current_user: User = Depends(require_admin),
-):
-    if not file.filename or not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .csv files are accepted.")
 
-    settings.DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-    dest_filename = f"{uuid.uuid4().hex[:8]}_{file.filename}"
-    dest_path = settings.DATASETS_DIR / dest_filename
-
-    content = await file.read()
-    with open(dest_path, "wb") as buffer:
-        buffer.write(content)
-
-    try:
-        df = load_and_validate_dataset(dest_path)
-    except DatasetValidationError as exc:
-        dest_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-
-    return {
-        "filename": dest_filename,
-        "rows": len(df),
-        "categories": sorted(df["category"].unique().tolist()) if "category" in df.columns else [],
-        "sentiment_distribution": df["sentiment"].value_counts().to_dict(),
-    }
-
-
-@router.post("/train", response_model=dict)
-def train_models(
-    payload: TrainRequest,
+@router.post("/import-results", response_model=ImportResultsResponse)
+async def import_results(
+    metrics_json: UploadFile = File(...),
+    xgb_model: UploadFile | None = File(None),
+    xgb_vectorizer: UploadFile | None = File(None),
+    deberta_archive: UploadFile | None = File(None),
+    roberta_archive: UploadFile | None = File(None),
+    set_production: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Research-mode: trains SVM + Naive Bayes + Random Forest and
-    evaluates BERT on the specified dataset, then automatically promotes
-    the best-performing model to production."""
-    if not payload.dataset_filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="dataset_filename is required. Upload a dataset via /ml/dataset/upload first.",
-        )
-
-    csv_path = settings.DATASETS_DIR / payload.dataset_filename
-    if not csv_path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset file not found.")
+    """Import metrics (and optionally model weights) produced by a Colab
+    training run, in place of local /ml/train."""
+    try:
+        raw = await metrics_json.read()
+        metrics_by_algorithm = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid metrics JSON: {exc}")
 
     try:
-        summary = run_full_training(
+        outcome = import_training_results(
             db,
-            csv_path,
-            n_estimators=payload.n_estimators,
-            max_depth=payload.max_depth,
-            min_samples_split=payload.min_samples_split,
+            metrics_by_algorithm=metrics_by_algorithm,
+            dataset_filename=None,
+            set_production=set_production,
         )
     except DatasetValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
-    return {
-        "message": "Training completed successfully.",
-        "best_model": summary["best_model"],
-        "metrics": {
-            algo: {k: v for k, v in metrics.items() if k not in ("confusion_matrix", "classification_report")}
-            for algo, metrics in summary["results"].items()
-        },
-    }
+    artifacts_updated: list[str] = []
+    if xgb_model and xgb_vectorizer:
+        replace_xgboost_artifacts(await xgb_model.read(), await xgb_vectorizer.read())
+        artifacts_updated.append("XGBoost")
+    if deberta_archive:
+        replace_transformer_artifacts(await deberta_archive.read(), Path(settings.DEBERTA_MODEL_PATH))
+        artifacts_updated.append("DeBERTa")
+    if roberta_archive:
+        replace_transformer_artifacts(await roberta_archive.read(), Path(settings.ROBERTA_MODEL_PATH))
+        artifacts_updated.append("RoBERTa")
 
-
-@router.post("/retrain", response_model=dict)
-def retrain_models(
-    payload: TrainRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
-):
-    """Alias for /train intended for retraining on an updated dataset;
-    kept as a distinct endpoint per the API spec for clarity in the
-    Admin Panel / audit trail."""
-    return train_models(payload, db, current_user)
+    return ImportResultsResponse(
+        message="Import complete.",
+        imported_algorithms=outcome["imported_algorithms"],
+        production_model=outcome["production_model"],
+        artifacts_updated=artifacts_updated,
+    )
 
 
 @router.get("/models", response_model=list[TrainingHistoryOut])

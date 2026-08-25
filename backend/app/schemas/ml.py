@@ -11,7 +11,12 @@ class TrainRequest(BaseModel):
     max_depth: int | None = None
     min_samples_split: int = 2
 
-
+class ImportResultsResponse(BaseModel):
+    message: str
+    imported_algorithms: list[str]
+    production_model: str
+    artifacts_updated: list[str]
+    
 class TrainingHistoryOut(BaseModel):
     id: str
     algorithm: TrainingAlgorithm

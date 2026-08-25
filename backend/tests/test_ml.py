@@ -97,15 +97,16 @@ def test_rollback_nonexistent_run_returns_404(client):
 
 
 def test_confusion_matrix_requires_trained_model(client, db_session):
-    from unittest.mock import patch
-
+    """No TrainingHistory row exists yet for this algorithm, so the
+    confusion-matrix endpoint should report 404. (The endpoint only
+    queries TrainingHistory -- it never checks a service's is_ready() --
+    so no model needs to be mocked as loaded for this test.)"""
     token = _register_admin_and_login(client, email="cmadmin@example.com")
-    with patch("app.services.svm_service.svm_service.is_ready", return_value=True):
-        response = client.get(
-            "/api/v1/ml/confusion-matrix",
-            params={"algorithm": "SVM"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+    response = client.get(
+        "/api/v1/ml/confusion-matrix",
+        params={"algorithm": "XGBoost"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert response.status_code == 404
 
 

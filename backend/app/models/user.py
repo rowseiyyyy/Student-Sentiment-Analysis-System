@@ -32,4 +32,9 @@ class User(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    evaluations = relationship("Evaluation", back_populates="submitted_by", cascade="all, delete-orphan")
+    # NOTE: cascade intentionally excludes "delete"/"delete-orphan". The
+    # Evaluation.user_id FK is ondelete="SET NULL" -- evaluation/prediction
+    # history must survive a user record being deleted (research data must
+    # be preserved). "all, delete-orphan" would instead have SQLAlchemy
+    # actively delete every Evaluation belonging to a deleted User.
+    evaluations = relationship("Evaluation", back_populates="submitted_by", cascade="save-update, merge")

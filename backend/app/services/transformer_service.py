@@ -26,7 +26,8 @@ class TransformerSentimentService:
         if self.model is not None:
             return
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
-        source = str(self.artifact_path) if self.artifact_path.exists() else self.checkpoint_name
+        has_saved_model = self.artifact_path.exists() and (self.artifact_path / "config.json").exists()
+        source = str(self.artifact_path) if has_saved_model else self.checkpoint_name
         self.tokenizer = AutoTokenizer.from_pretrained(source)
         self.model = AutoModelForSequenceClassification.from_pretrained(
             source, num_labels=3, id2label=dict(enumerate(CLASS_ORDER)), label2id=LABEL_TO_ID,
@@ -91,8 +92,15 @@ class TransformerSentimentService:
             tokens["label"] = [label2id[label] for label in batch["label"]]
             return tokens
 
-        train_dataset = Dataset.from_dict({"text": train_texts, "label": train_labels}).map(_encode, batched=True)
-        val_dataset = Dataset.from_dict({"text": val_texts, "label": val_labels}).map(_encode, batched=True)
+        # Apply the same cleaning used at inference time (see predict()) so
+        # the model is trained and evaluated on the same text distribution
+        # it will see in production, avoiding train/serve skew.
+        train_texts_clean = [clean_for_transformer(text) for text in train_texts]
+        val_texts_clean = [clean_for_transformer(text) for text in val_texts]
+
+        train_dataset = Dataset.from_dict({"text": train_texts_clean, "label": train_labels}).map(_encode, batched=True)
+        val_dataset = Dataset.from_dict({"text": val_texts_clean, "label": val_labels}).map(_encode, batched=True)
+
         train_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
         val_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
 
@@ -102,7 +110,7 @@ class TransformerSentimentService:
             per_device_eval_batch_size=batch_size,
             learning_rate=float(learning_rate),
             num_train_epochs=int(epochs),
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             save_strategy="epoch",
             save_total_limit=1,
             load_best_model_at_end=True,

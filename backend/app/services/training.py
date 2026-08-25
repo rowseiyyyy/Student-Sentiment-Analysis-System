@@ -24,6 +24,10 @@ from __future__ import annotations
 
 import json
 import time
+
+import zipfile
+import shutil
+
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -60,6 +64,104 @@ VALID_SENTIMENTS = {"Positive", "Neutral", "Negative"}
 VALID_CATEGORIES = {"Faculty", "Staff", "Payment", "Facilities"}
 RESPONSE_COLUMN_ALIASES = ("comment", "comments", "feedback", "response", "responses", "remarks", "review", "text")
 LABEL_COLUMN_ALIASES = ("sentiment", "label")
+
+def import_training_results(
+    db: Session,
+    metrics_by_algorithm: dict[str, dict],
+    dataset_filename: str | None,
+    set_production: str | None = None,
+) -> dict:
+    """Persist metrics produced by an external (Colab) training run as
+    TrainingHistory rows, without running any local training.
+
+    `metrics_by_algorithm` maps approach name (e.g. "XGBoost",
+    "DeBERTa", "RoBERTa", or an approved ensemble name) to a metrics
+    dict shaped like the ones `run_full_training` already produces:
+    accuracy, precision, recall, f1_score, macro_f1, weighted_f1,
+    confusion_matrix {labels, matrix}, classification_report, and
+    optionally training_time_seconds / inference_time_ms / hyperparameters.
+    """
+    imported: list[str] = []
+    for approach_name, metrics in metrics_by_algorithm.items():
+        algorithm = APPROACH_TO_ALGORITHM.get(approach_name)
+        if algorithm is None:
+            raise DatasetValidationError(f"Unknown approach '{approach_name}' in metrics JSON.")
+
+        history = TrainingHistory(
+            algorithm=algorithm,
+            status=TrainingStatus.RUNNING,
+            dataset_filename=dataset_filename or metrics.get("dataset_filename") or "colab_import",
+            dataset_size=metrics.get("dataset_size"),
+        )
+        db.add(history)
+        db.commit()
+        db.refresh(history)
+        _persist_history(db, history, metrics, TrainingStatus.COMPLETED)
+        imported.append(approach_name)
+
+    if not imported:
+        raise DatasetValidationError("Metrics JSON did not contain any recognized approaches.")
+
+    if set_production:
+        if set_production not in imported:
+            raise DatasetValidationError(
+                f"'{set_production}' was requested as production but wasn't in the imported metrics."
+            )
+        best_algorithm = set_production
+    else:
+        best_algorithm = max(
+            imported,
+            key=lambda name: float(metrics_by_algorithm[name].get("weighted_f1", -1.0)),
+        )
+
+    _mark_production_model(db, APPROACH_TO_ALGORITHM[best_algorithm])
+    serializable = {
+        name: {k: v for k, v in metrics_by_algorithm[name].items() if k not in ("validation", "weights")}
+        for name in imported
+    }
+    _write_comparison_artifacts(serializable, best_algorithm)
+    sync_deployment_metadata(db, best_algorithm)
+
+    return {"imported_algorithms": imported, "production_model": best_algorithm}
+
+
+def replace_xgboost_artifacts(model_bytes: bytes, vectorizer_bytes: bytes) -> None:
+    settings.ML_DIR.mkdir(parents=True, exist_ok=True)
+    Path(settings.XGB_MODEL_PATH).write_bytes(model_bytes)
+    Path(settings.XGB_TFIDF_VECTORIZER_PATH).write_bytes(vectorizer_bytes)
+    xgboost_service._try_load()  # reload in-place so no restart needed
+
+
+def replace_transformer_artifacts(zip_bytes: bytes, target_dir: Path) -> None:
+    """Extract a zipped HuggingFace model directory (config.json,
+    model.safetensors, tokenizer files, etc.) into target_dir,
+    overwriting what's there. DeBERTa/RoBERTa services currently load
+    once at import time, so a server restart is needed to pick this up
+    unless their service classes are extended with a reload method."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    tmp_extract = target_dir.parent / f"_tmp_extract_{target_dir.name}"
+    if tmp_extract.exists():
+        shutil.rmtree(tmp_extract)
+    tmp_extract.mkdir(parents=True)
+
+    tmp_zip_path = tmp_extract / "upload.zip"
+    tmp_zip_path.write_bytes(zip_bytes)
+    with zipfile.ZipFile(tmp_zip_path, "r") as zf:
+        zf.extractall(tmp_extract)
+    tmp_zip_path.unlink()
+
+    for item in target_dir.iterdir():
+        if item.is_file():
+            item.unlink()
+    for item in tmp_extract.iterdir():
+        dest = target_dir / item.name
+        if dest.exists():
+            if dest.is_dir():
+                shutil.rmtree(dest)
+            else:
+                dest.unlink()
+        shutil.move(str(item), str(dest))
+    shutil.rmtree(tmp_extract)
 
 
 def _normalise_category(value: str) -> str:
@@ -412,7 +514,7 @@ def run_full_training(
         _persist_history(db, deberta_history, debert_metrics, TrainingStatus.COMPLETED)
         results["DeBERTa"] = debert_metrics
     except Exception as exc:  # noqa: BLE001
-        logger.warning("DeBERTa training failed: %s", exc)
+        logger.exception(f"DeBERTa training failed: {exc}")
         deberta_history.status = TrainingStatus.FAILED; deberta_history.notes = str(exc); db.commit()
 
     roberta_history = TrainingHistory(
@@ -454,7 +556,7 @@ def run_full_training(
         _persist_history(db, roberta_history, roberta_metrics, TrainingStatus.COMPLETED)
         results["RoBERTa"] = roberta_metrics
     except Exception as exc:  # noqa: BLE001
-        logger.warning("RoBERTa training failed: %s", exc)
+        logger.exception(f"RoBERTa training failed: {exc}")
         roberta_history.status = TrainingStatus.FAILED; roberta_history.notes = str(exc); db.commit()
 
     if not test_model_probabilities["XGBoost"] or not test_model_probabilities["DeBERTa"] or not test_model_probabilities["RoBERTa"]:
@@ -510,7 +612,15 @@ def run_full_training(
         db.add(ensemble_history); db.commit(); db.refresh(ensemble_history)
         _persist_history(db, ensemble_history, ensemble_metrics, TrainingStatus.COMPLETED)
 
-    best_algorithm = max(results, key=lambda key: float(results[key].get("weighted_f1", -1.0)))
+    def _validation_score(metrics: dict) -> float:
+        """Model/ensemble selection must use validation performance, never
+        the held-out test set, so the final reported test metrics remain an
+        unbiased estimate of generalization for whichever approach wins."""
+        validation = metrics.get("validation") or {}
+        return float(validation.get("weighted_f1", -1.0))
+
+    best_algorithm = max(results, key=lambda key: _validation_score(results[key]))
+
     _mark_production_model(db, APPROACH_TO_ALGORITHM[best_algorithm])
     serializable = {
         name: {k: v for k, v in metrics.items() if k not in ("validation", "weights")}

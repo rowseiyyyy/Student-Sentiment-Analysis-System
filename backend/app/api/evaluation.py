@@ -1,42 +1,50 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, get_current_user_optional, require_admin
 from app.core.database import get_db
 from app.core.limiter import limiter
+from app.core.security import hash_password
 from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction
 from app.models.user import User, UserRole
-from app.schemas.evaluation import EvaluationCreate, EvaluationListResponse, EvaluationOut, StudentInfo
+from app.schemas.evaluation import (
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    EvaluationCreate,
+    EvaluationListResponse,
+    EvaluationOut,
+    StudentInfo,
+)
 from app.services.likert import classify_likert
+from app.services.mismatch import MismatchType, detect_mismatch
 from app.services.preprocessing import clean_for_classical
 from app.services.prediction import run_prediction_pipeline
 
 router = APIRouter(prefix="/evaluation", tags=["Evaluations"])
 
+_SORTABLE_FIELDS = {
+    "created_at",
+    "category",
+    "sentiment",
+    "likert_sentiment",
+    "likert_average",
+    "evaluatee",
+}
+
 
 def _build_text_for_sentiment(payload: EvaluationCreate) -> str | None:
-    """Build the free-text string to run through the NLP sentiment pipeline.
-
-    Returns ``None`` when the student provided no genuine free text (a
-    Likert-only submission). Likert ratings are numeric and must never be
-    paraphrased into a sentence (e.g. "Average rating: 4.5/5") and fed to
-    the text sentiment models — that produces meaningless predictions on
-    text the models were never trained to see. Likert scoring is handled
-    separately via ``classify_likert``.
-    """
     if payload.comment and payload.comment.strip():
         return payload.comment.strip()
-    parts = []
-    if payload.strengths and payload.strengths.strip():
-        parts.append(f"Strengths: {payload.strengths.strip()}")
-    if payload.areas_for_improvement and payload.areas_for_improvement.strip():
-        parts.append(f"Areas for improvement: {payload.areas_for_improvement.strip()}")
-    return parts[0] if parts else None
+    if payload.share_your_thoughts and payload.share_your_thoughts.strip():
+        return payload.share_your_thoughts.strip()
+    return None
 
 
 def _attach_student_info(evaluation: Evaluation) -> StudentInfo | None:
-    """Attach student info from user relationship."""
     if evaluation.submitted_by:
         return StudentInfo(
             student_id=evaluation.submitted_by.student_id,
@@ -48,7 +56,6 @@ def _attach_student_info(evaluation: Evaluation) -> StudentInfo | None:
 
 
 def _can_view_all_evaluations(user: User) -> bool:
-    """Faculty and administrators can see the shared evaluation dataset for reporting."""
     return user.role in {UserRole.ADMINISTRATOR, UserRole.FACULTY}
 
 
@@ -60,24 +67,13 @@ def submit_evaluation(
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
-    """Students submit Likert ratings and/or open-ended feedback. Likert
-    ratings are scored with a deterministic numeric aggregation
-    (``classify_likert``); free text is run through the full approved
-    text-sentiment pipeline (XGBoost + DeBERTa + RoBERTa / ensembles). The
-    two are independent — a submission may contain either, or both."""
-
-    # Require at least one meaningful field: a comment, strengths /
-    # areas_for_improvement, or Likert ratings. This allows imported/minimal
-    # rows and Likert-only submissions to pass while still enforcing that
-    # students actually submitted *something*.
-    has_strengths = bool(payload.strengths and payload.strengths.strip())
-    has_improvement = bool(payload.areas_for_improvement and payload.areas_for_improvement.strip())
+    has_thoughts = bool(payload.share_your_thoughts and payload.share_your_thoughts.strip())
     has_comment = bool(payload.comment and payload.comment.strip())
     has_ratings = bool(payload.ratings)
-    if not (has_strengths or has_improvement or has_comment or has_ratings):
+    if not (has_thoughts or has_comment or has_ratings):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please provide your feedback (ratings, comment, strengths, or areas for improvement).",
+            detail="Please provide your feedback (ratings or your thoughts).",
         )
 
     likert_label: str | None = None
@@ -87,26 +83,27 @@ def submit_evaluation(
             likert_label, likert_average = classify_likert(payload.ratings)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-    # Handle student info for anonymous submissions (create/update user record)
+
+    # User lookup/creation still needs to happen early and be flushed
+    # (not committed) so we have a user_id to attach to the evaluation.
+    # flush() makes the row visible within this transaction without
+    # publishing it to other connections/admins the way commit() does.
     user_id = current_user.id if current_user else None
     if not current_user and payload.student_id:
-        # Try to find existing user by student_id or create a new one
         existing_user = db.query(User).filter(
             User.student_id == payload.student_id
         ).first()
         if existing_user:
             user_id = existing_user.id
-            # Update course/year_level if provided
             if payload.course:
                 existing_user.course = payload.course
             if payload.year_level:
                 existing_user.year_level = payload.year_level
         else:
-            # Create a new student user
             new_user = User(
                 full_name=payload.student_id,
-                email=f"{payload.student_id}@asiatech.edu.ph",
-                hashed_password="",  # No password for anonymous students
+                email=f"anon-{payload.student_id}@placeholder.asiatech.local",
+                hashed_password=hash_password(secrets.token_urlsafe(32)),
                 role=UserRole.STUDENT,
                 student_id=payload.student_id,
                 course=payload.course,
@@ -114,14 +111,40 @@ def submit_evaluation(
                 is_active=True,
             )
             db.add(new_user)
-            db.flush()
-            user_id = new_user.id
+            try:
+                db.flush()
+            except IntegrityError:
+                db.rollback()
+                existing_user = db.query(User).filter(User.student_id == payload.student_id).first()
+                if existing_user is None:
+                    raise
+                user_id = existing_user.id
+            else:
+                user_id = new_user.id
 
     text_for_sentiment = _build_text_for_sentiment(payload)
-    # `comment` is still stored for display/search even for ratings-only
-    # submissions, but a placeholder is used instead of feeding a fabricated
-    # sentence into the NLP pipeline (see _build_text_for_sentiment).
     stored_comment = text_for_sentiment or f"{payload.category.value} evaluation (Likert only)"
+
+    # --- Run sentiment analysis BEFORE creating/committing the Evaluation row ---
+    # This is the actual fix: previously we committed the Evaluation here,
+    # then ran the (slow) prediction pipeline, then committed again. That
+    # left a real, fully-populated row visible to admins for however long
+    # the AI models took to respond — before the student had even gotten
+    # their "Submitted!" confirmation. Now nothing is written to the
+    # database until we have the complete row, sentiment included.
+    official_sentiment = likert_label  # default when there is no free text at all
+    official_confidence: float | None = None
+    prediction_result = None
+
+    if text_for_sentiment:
+        try:
+            prediction_result = run_prediction_pipeline(db, text_for_sentiment)
+        except RuntimeError as exc:
+            # No evaluation row was ever created, so there's nothing to
+            # roll back/delete here — simply surface the error.
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+        official_sentiment = prediction_result["official_prediction"]
+        official_confidence = prediction_result["confidence_score"]
 
     evaluation = Evaluation(
         user_id=user_id,
@@ -129,62 +152,51 @@ def submit_evaluation(
         comment=stored_comment,
         cleaned_comment=clean_for_classical(text_for_sentiment) if text_for_sentiment else None,
         evaluatee=payload.evaluatee,
-        strengths=payload.strengths,
-        areas_for_improvement=payload.areas_for_improvement,
+        share_your_thoughts=payload.share_your_thoughts,
         ratings=payload.ratings,
         likert_sentiment=likert_label,
         likert_average=likert_average,
+        sentiment=official_sentiment,
     )
+
+    # Mismatch is only meaningful when BOTH a Likert score and a text
+    # sentiment prediction exist for this submission (see detect_mismatch
+    # docstring). Ratings-only or comment-only submissions have nothing
+    # to compare, so they're left as the safe defaults (False / "none").
+    if likert_label is not None and text_for_sentiment and official_confidence is not None:
+        mismatch = detect_mismatch(
+            likert_label=likert_label,
+            likert_average=likert_average,
+            sentiment_label=official_sentiment,
+            sentiment_confidence=official_confidence,
+        )
+        evaluation.is_mismatch = mismatch.is_mismatch
+        evaluation.mismatch_type = mismatch.mismatch_type.value
+
+    # --- Single commit point: the row only ever appears once, complete ---
     db.add(evaluation)
     db.commit()
     db.refresh(evaluation)
 
-    official_sentiment = likert_label  # default when there is no free text at all
-
-    if text_for_sentiment:
-        try:
-            result = run_prediction_pipeline(db, text_for_sentiment)
-        except RuntimeError as exc:
-            db.delete(evaluation)
-            db.commit()
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
-
+    if prediction_result is not None:
         prediction = Prediction(
-            evaluation_id=evaluation.id,
-            svm_prediction=result["svm_prediction"],
-            svm_confidence=result["svm_confidence"],
-            random_forest_prediction=result["random_forest_prediction"],
-            random_forest_confidence=result["random_forest_confidence"],
-            naive_bayes_prediction=result["naive_bayes_prediction"],
-            naive_bayes_confidence=result["naive_bayes_confidence"],
-            bert_prediction=result["bert_prediction"],
-            bert_confidence=result["bert_confidence"],
-            xgb_prediction=result["xgb_prediction"],
-            xgb_confidence=result["xgb_confidence"],
-            deberta_prediction=result["deberta_prediction"],
-            deberta_confidence=result["deberta_confidence"],
-            roberta_prediction=result["roberta_prediction"],
-            roberta_confidence=result["roberta_confidence"],
-            official_prediction=result["official_prediction"],
-            algorithm_used=result["algorithm_used"],
-            confidence_score=result["confidence_score"],
-            processing_time_ms=result["processing_time_ms"],
+             evaluation_id=evaluation.id,
+            xgb_prediction=prediction_result["xgb_prediction"],
+            xgb_confidence=prediction_result["xgb_confidence"],
+            deberta_prediction=prediction_result["deberta_prediction"],
+            deberta_confidence=prediction_result["deberta_confidence"],
+            roberta_prediction=prediction_result["roberta_prediction"],
+            roberta_confidence=prediction_result["roberta_confidence"],
+            official_prediction=prediction_result["official_prediction"],
+            algorithm_used=prediction_result["algorithm_used"],
+            confidence_score=prediction_result["confidence_score"],
+            processing_time_ms=prediction_result["processing_time_ms"],
         )
         db.add(prediction)
         db.commit()
-        # The text model's official prediction takes precedence when free
-        # text was actually submitted; Likert score remains stored
-        # separately on the evaluation regardless (see likert_sentiment).
-        official_sentiment = result["official_prediction"]
 
-    # Store the overall sentiment label directly on the evaluation row.
-    evaluation.sentiment = official_sentiment
-    db.commit()
-    db.refresh(evaluation)
-
-    # Attach student info
     evaluation.submitted_by = db.query(User).filter(User.id == user_id).first() if user_id else None
-    
+
     return evaluation
 
 
@@ -197,12 +209,12 @@ def list_evaluations(
     page_size: int = Query(20, ge=1, le=10000),
     search: str | None = None,
     has_submission: bool | None = Query(None, description="Filter to only entries with actual submitted content"),
+    needs_review: bool | None = Query(None, description="Filter to only entries flagged as a Likert/sentiment mismatch"),
     sort_by: str | None = None,
     sort_order: str | None = "desc",
 ):
     query = db.query(Evaluation).options(joinedload(Evaluation.submitted_by))
 
-    # Students may only see their own submissions; faculty and administrators see all.
     if not _can_view_all_evaluations(current_user):
         query = query.filter(Evaluation.user_id == current_user.id)
 
@@ -213,26 +225,32 @@ def list_evaluations(
         search_term = f"%{search}%"
         query = query.filter(
             Evaluation.comment.ilike(search_term)
-            | Evaluation.strengths.ilike(search_term)
-            | Evaluation.areas_for_improvement.ilike(search_term)
+            | Evaluation.share_your_thoughts.ilike(search_term)
             | Evaluation.evaluatee.ilike(search_term)
         )
 
-    # Filter to only entries that have actual submitted content (strengths or areas_for_improvement)
     if has_submission:
-        query = query.filter(
-            (Evaluation.strengths.isnot(None) & (Evaluation.strengths != ""))
-            | (Evaluation.areas_for_improvement.isnot(None) & (Evaluation.areas_for_improvement != ""))
+        query = query.outerjoin(
+            Prediction, Prediction.evaluation_id == Evaluation.id
+        ).filter(
+            (Evaluation.share_your_thoughts.isnot(None) & (Evaluation.share_your_thoughts != ""))
+            | Evaluation.ratings.isnot(None)
+            | Prediction.id.isnot(None)
         )
 
-    # Sorting
-    sort_column = getattr(Evaluation, sort_by, None) if sort_by else None
+    if needs_review:
+        query = query.filter(Evaluation.is_mismatch.is_(True))
+
+    SORTABLE_FIELDS = {
+        "created_at": Evaluation.created_at,
+        "category": Evaluation.category,
+        "sentiment": Evaluation.sentiment,
+        "likert_sentiment": Evaluation.likert_sentiment,
+        "likert_average": Evaluation.likert_average,
+    }
+    sort_column = SORTABLE_FIELDS.get(sort_by) if sort_by else None
     if sort_column is not None:
-        order_fn = getattr(sort_column, sort_order if sort_order == "asc" else "desc", None)
-        if order_fn:
-            query = query.order_by(order_fn())
-        else:
-            query = query.order_by(Evaluation.created_at.desc())
+        query = query.order_by(sort_column.asc() if sort_order == "asc" else sort_column.desc())
     else:
         query = query.order_by(Evaluation.created_at.desc())
 
@@ -275,3 +293,40 @@ def delete_evaluation(
     db.delete(evaluation)
     db.commit()
     return None
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteResponse)
+def bulk_delete_evaluations(
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Delete multiple evaluations in one request. Accepts a list of
+    evaluation ids; ids that don't exist are silently skipped and reported
+    back in ``not_found`` so the admin UI can show an accurate result even
+    if the table was refreshed concurrently."""
+
+    if not payload.ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one evaluation id to delete.",
+        )
+
+    # De-dupe while preserving intent; a client could send the same id twice.
+    requested_ids = list(dict.fromkeys(payload.ids))
+
+    existing = (
+        db.query(Evaluation.id)
+        .filter(Evaluation.id.in_(requested_ids))
+        .all()
+    )
+    existing_ids = {row.id for row in existing}
+    not_found = [eid for eid in requested_ids if eid not in existing_ids]
+
+    if existing_ids:
+        db.query(Evaluation).filter(Evaluation.id.in_(existing_ids)).delete(
+            synchronize_session=False
+        )
+        db.commit()
+
+    return BulkDeleteResponse(deleted_count=len(existing_ids), not_found=list(not_found))

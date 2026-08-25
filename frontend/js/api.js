@@ -162,17 +162,18 @@ async refreshToken(refreshToken) {
     },
 
 async getEvaluations(params = {}) {
-        const query = new URLSearchParams();
-        if (params.category) query.set('category', params.category);
-        if (params.page) query.set('page', params.page);
-        if (params.page_size) query.set('page_size', params.page_size);
-        if (params.has_submission !== undefined && params.has_submission !== null) query.set('has_submission', params.has_submission);
-        if (params.search) query.set('search', params.search);
-        if (params.sort_by) query.set('sort_by', params.sort_by);
-        if (params.sort_order) query.set('sort_order', params.sort_order);
-        const qs = query.toString();
-        return this.get(`/evaluation${qs ? '?' + qs : ''}`);
-    },
+    const query = new URLSearchParams();
+    if (params.category) query.set('category', params.category);
+    if (params.page) query.set('page', params.page);
+    if (params.page_size) query.set('page_size', params.page_size);
+    if (params.has_submission !== undefined && params.has_submission !== null) query.set('has_submission', params.has_submission);
+    if (params.needs_review) query.set('needs_review', params.needs_review);
+    if (params.search) query.set('search', params.search);
+    if (params.sort_by) query.set('sort_by', params.sort_by);
+    if (params.sort_order) query.set('sort_order', params.sort_order);
+    const qs = query.toString();
+    return this.get(`/evaluation${qs ? '?' + qs : ''}`);
+},
 
     async getEvaluation(id) {
         return this.get(`/evaluation/${id}`);
@@ -180,6 +181,12 @@ async getEvaluations(params = {}) {
 
     async deleteEvaluation(id) {
         return this.del(`/evaluation/${id}`);
+    },
+
+    // Bulk-delete multiple evaluations at once. `ids` is an array of
+    // evaluation id strings. Returns { deleted_count, not_found }.
+    async bulkDeleteEvaluations(ids) {
+        return this.post('/evaluation/bulk-delete', { ids });
     },
 
     // ============================================================
@@ -244,16 +251,15 @@ async getEvaluations(params = {}) {
     // ML / ADMIN ENDPOINTS
     // ============================================================
 
-    async uploadDataset(file) {
-        return this.upload('/ml/dataset/upload', file);
-    },
-
-    async trainModels(data) {
-        return this.post('/ml/train', data);
-    },
-
-    async retrainModels(data) {
-        return this.post('/ml/retrain', data);
+    async importModelResults({ metrics, xgbModel, xgbVectorizer, debertaZip, robertaZip, setProduction }) {
+        const formData = new FormData();
+       formData.append('metrics_json', metrics);
+        if (xgbModel) formData.append('xgb_model', xgbModel);
+        if (xgbVectorizer) formData.append('xgb_vectorizer', xgbVectorizer);
+        if (debertaZip) formData.append('deberta_archive', debertaZip);
+       if (robertaZip) formData.append('roberta_archive', robertaZip);
+       if (setProduction) formData.append('set_production', setProduction);
+      return this.request('POST', '/ml/import-results', formData, true);
     },
 
     async getModels(algorithm = null) {
@@ -299,8 +305,14 @@ async getEvaluations(params = {}) {
     // BULK IMPORT ENDPOINTS
     // ============================================================
 
-    async importEvaluations(file) {
-        return this.upload('/imports/evaluations', file);
+        // ============================================================
+    // BULK IMPORT ENDPOINTS
+    // ============================================================
+
+    async importEvaluations(file, category) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('category', category);
+        return this.request('POST', '/imports/evaluations', formData, true);
     }
 };
-
