@@ -29,10 +29,6 @@ class Evaluation(Base):
     comment: Mapped[str] = mapped_column(Text, nullable=False)
     cleaned_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
-    # Name of the professor/staff evaluated (Faculty category). Kept on the
-    # model because the live form, evaluation list, and search all depend on
-    # it — the bulk-import service writes it here too.
-    evaluatee: Mapped[str | None] = mapped_column(String(250), nullable=True)
     # FIX: the evaluation form was consolidated down to a single
     # open-ended "Share your thoughts" field (was previously two
     # separate fields: strengths / areas_for_improvement). This column

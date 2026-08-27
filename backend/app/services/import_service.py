@@ -143,6 +143,64 @@ RATING_KEYWORDS_BY_CATEGORY: dict[str, dict[str, list[str]]] = {
 
 VALID_CATEGORIES = {c.value for c in EvaluationCategory}
 
+# ---------------------------------------------------------------------------
+# Combined multi-category import support (auto-detected)
+# ---------------------------------------------------------------------------
+# A "combined" dataset holds, in one row per respondent, rating + comment
+# columns for ALL four categories, each prefixed by its category:
+#   Respondent_ID, Course, [Year Level],
+#   Staff_Safety, Staff_Registrar, ..., Staff_Comments,
+#   Professor_TeachingQuality, ..., Professor_Comments,
+#   Facilities_Spaces, ..., Facilities_Comments,
+#   Payments_Accessibility, ..., Payments_Comments
+# detect_import_mode() spots this format (>= 2 category prefixes in the
+# header); _validate_combined() then splits each row into up to four
+# Evaluation records so the rest of the pipeline (prediction, mismatch
+# detection, DB insert) is identical to a normal per-category submission.
+COMBINED_CATEGORY_PREFIXES = {
+    "staff_": "Staff",
+    "professor_": "Faculty",      # "Professor_" prefix maps to the Faculty category
+    "facilities_": "Facilities",
+    "payments_": "Payment",       # "Payments_" prefix maps to the Payment category
+}
+
+# Canonical Likert aspect keys per category, taken verbatim from the live
+# student forms in js/student.js. A combined rating column is only kept if
+# its derived aspect key is in this set (else it's treated as a stray column).
+ASPECT_KEYS_BY_CATEGORY = {
+    "Faculty": [
+        "teaching_quality", "mastery", "clarity", "fairness",
+        "punctuality", "approachability", "feedback",
+        "classroom_mgmt", "teaching_style",
+    ],
+    "Staff": [
+        "safety", "registrar", "cashier", "canteen", "substitute",
+        "office_staff", "admin_comm", "maintenance",
+    ],
+    "Facilities": [
+        "spaces", "furniture", "cleanliness", "bathrooms", "cafeteria",
+        "monitors", "computers", "classrooms",
+    ],
+    "Payment": [
+        "accessibility", "processing", "queues", "courteous",
+        "accounting", "security", "info_clarity", "digital_trust",
+    ],
+}
+
+# Pre-computed lowercased / de-punctuated lookup so column headers match
+# the aspect keys regardless of case or CamelCase vs snake_case styling:
+#   'TeachingQuality' -> 'teachingquality' -> 'teaching_quality'
+#   'InfoClarity'    -> 'infoclarity'      -> 'info_clarity'
+_ASPECT_LOOKUP_BY_CATEGORY = {
+    category: {re.sub(r"[^a-z0-9]", "", k): k for k in keys}
+    for category, keys in ASPECT_KEYS_BY_CATEGORY.items()
+}
+
+
+def _compact(value: str) -> str:
+    """Lowercase and strip all non-alphanumeric chars for tolerant matching."""
+    return re.sub(r"[^a-z0-9]", "", _normalise_header(value))
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -233,8 +291,199 @@ def resolve_column_map(headers: list[str], category: str) -> dict[str, Any]:
         "course": _find_column(headers, COURSE_COL_KEYWORDS),
         "year_level": _find_column(headers, YEAR_LEVEL_COL_KEYWORDS),
         "timestamp": _find_column(headers, TIMESTAMP_COL_KEYWORDS),
-        "ratings": _find_rating_columns(headers, category),
+                "ratings": _find_rating_columns(headers, category),
     }
+
+
+# ---------------------------------------------------------------------------
+# Combined multi-category resolution helpers
+# ---------------------------------------------------------------------------
+
+
+def _detect_category_prefix(header: str) -> str | None:
+    """If *header* is a combined-format column (Staff_* / Professor_* /
+    Facilities_* / Payments_*), return the lowercase prefix, else None."""
+    norm = _normalise_header(header)
+    for prefix in COMBINED_CATEGORY_PREFIXES:
+        if norm.startswith(prefix):
+            return prefix
+    return None
+
+
+def detect_import_mode(headers: list[str]) -> str:
+    """Return 'combined' when the header row spans two or more category
+    prefixes (a multi-category dataset), otherwise 'single'."""
+    prefixes_found = {_detect_category_prefix(h) for h in headers}
+    prefixes_found.discard(None)
+    return "combined" if len(prefixes_found) >= 2 else "single"
+
+
+def _resolve_combined_columns(headers: list[str]) -> dict[str, Any]:
+    """Map a combined file's columns into a structured description.
+
+    Returns a dict with top-level identity columns (respondent_id, course,
+    year_level, timestamp) and a per-category breakdown of rating headers,
+    comment header, and (for Faculty) an optional evaluatee header.
+    """
+    col_map: dict[str, Any] = {
+        "respondent_id": None,
+        "course": None,
+        "year_level": None,
+        "timestamp": None,
+        "categories": {},
+    }
+    for h in headers:
+        prefix = _detect_category_prefix(h)
+        if prefix:
+            category = COMBINED_CATEGORY_PREFIXES[prefix]
+            # Preserve the original header's case for word-boundary recovery;
+            # derive the aspect key from the portion after the prefix.
+            remainder = h[len(prefix):]
+            compact_remainder = _compact(remainder)
+            cat_cols = col_map["categories"].setdefault(
+                category, {"ratings": {}, "comment": None, "evaluatee": None}
+            )
+            lookup = _ASPECT_LOOKUP_BY_CATEGORY.get(category, {})
+            if compact_remainder in ("comment", "comments"):
+                cat_cols["comment"] = h
+            elif compact_remainder in lookup:
+                cat_cols["ratings"][lookup[compact_remainder]] = h
+            elif category == "Faculty" and compact_remainder in (
+                "professor", "professorname", "name"
+            ):
+                cat_cols["evaluatee"] = h
+            # any other remainder is a stray/unknown column and is ignored
+        else:
+            # top-level identity columns (not prefixed by a category)
+            if _normalise_header(h) == "respondent_id":
+                col_map["respondent_id"] = h
+            elif _find_column([h], COURSE_COL_KEYWORDS) == h:
+                col_map["course"] = h
+            elif _find_column([h], STUDENT_ID_COL_KEYWORDS) == h:
+                col_map["respondent_id"] = h
+            elif _find_column([h], YEAR_LEVEL_COL_KEYWORDS) == h:
+                col_map["year_level"] = h
+            elif _find_column([h], TIMESTAMP_COL_KEYWORDS) == h:
+                col_map["timestamp"] = h
+    return col_map
+
+
+def _parse_combined_row(
+    row: dict[str, Any], col_map: dict[str, Any], row_idx: int
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Expand one combined spreadsheet row into per-category clean rows.
+
+    Each returned clean row has the same shape validate_imported_data
+    produces for single-category files, so process_imported_evaluations
+    can treat them identically. A category with neither ratings nor a
+    comment is skipped silently; a row that is empty across *every*
+    category is reported as an error.
+    """
+    clean_rows: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+
+    def _cell(col_key: str) -> str:
+        header = col_map[col_key]
+        return (row.get(header) or "") if header else ""
+
+    student_id = _cell("respondent_id").strip() or None
+    course = _cell("course").strip() or None
+    year_level = _cell("year_level").strip() or None
+    timestamp = _cell("timestamp").strip() or None
+
+    any_category_data = False
+    for category in ("Faculty", "Staff", "Facilities", "Payment"):
+        cat_cols = col_map["categories"].get(category)
+        if not cat_cols:
+            continue
+
+        ratings: dict[str, int] = {}
+        for aspect, header in (cat_cols.get("ratings") or {}).items():
+            parsed = _parse_rating_value(row.get(header, ""))
+            if parsed is not None:
+                ratings[aspect] = parsed
+
+        raw_comment = ""
+        if cat_cols.get("comment"):
+            raw_comment = (row.get(cat_cols["comment"]) or "").strip()
+
+        evaluatee = None
+        if cat_cols.get("evaluatee"):
+            evaluatee = (row.get(cat_cols["evaluatee"]) or "").strip() or None
+
+        if not raw_comment and not ratings:
+            continue  # no data for this category -> skip silently
+        any_category_data = True
+
+        if raw_comment and len(raw_comment) < 3:
+            errors.append({
+                "_row": row_idx,
+                "_errors": [f"{category} comment is too short (minimum 3 characters)."],
+                "_preview": raw_comment[:100],
+            })
+            continue
+        if len(raw_comment) > 5000:
+            errors.append({
+                "_row": row_idx,
+                "_errors": [
+                    f"{category} comment exceeds the maximum length of 5000 characters."
+                ],
+                "_preview": raw_comment[:100],
+            })
+            continue
+
+        clean_rows.append({
+            "category": category,
+            "share_your_thoughts": raw_comment or None,
+            "evaluatee": evaluatee if category == "Faculty" else None,
+            "ratings": ratings or None,
+            "student_id": student_id,
+            "course": course,
+            "year_level": year_level,
+            "timestamp": timestamp,
+        })
+
+    if not any_category_data:
+        errors.append({
+            "_row": row_idx,
+            "_errors": [
+                "Row has no feedback in any category "
+                "(Staff, Professor, Facilities, Payments)."
+            ],
+            "_preview": "",
+        })
+
+    return clean_rows, errors
+
+
+def _validate_combined(
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Validate a combined multi-category dataset.
+
+    Returns (clean_rows, error_rows). Each spreadsheet row expands into
+    up to four clean rows (one per non-empty category), each shaped for
+    process_imported_evaluations.
+    """
+    headers = list(rows[0].keys())
+    col_map = _resolve_combined_columns(headers)
+
+    if not col_map["categories"]:
+        raise ImportValidationError(
+            "A combined file was detected (multiple category prefixes in the "
+            "header) but no Staff_/Professor_/Facilities_/Payments_ rating or "
+            "comment columns were resolved."
+        )
+
+    clean: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+
+    for row_idx, row in enumerate(rows, start=2):  # +2: header row + 0-index
+        row_clean, row_errors = _parse_combined_row(row, col_map, row_idx)
+        clean.extend(row_clean)
+        errors.extend(row_errors)
+
+    return clean, errors
 
 
 # ---------------------------------------------------------------------------
@@ -328,23 +577,44 @@ def _parse_rating_value(raw: str) -> int | None:
 
 def validate_imported_data(
     rows: list[dict[str, Any]],
-    category: str,
+    category: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Validate parsed rows for the given (admin-selected) category.
+    """Validate parsed rows and return (clean_rows, error_rows).
 
-    Returns (clean_rows, error_rows). Each clean row is a dict ready
-    for process_imported_evaluations: category, share_your_thoughts,
-    evaluatee, ratings, student_id, course, year_level, timestamp.
+    Auto-detects the import mode from the header row:
+
+      * 'combined' — a single file carrying all four categories per row
+        (columns prefixed Staff_ / Professor_ / Facilities_ / Payments_*).
+        The ``category`` argument is ignored; each row expands to up to
+        four Evaluation records (one per category that has data).
+      * 'single'   — one category per file (e.g. a Google Form export).
+        The admin-selected ``category`` is required and used to resolve
+        the rating-question columns.
+
+    Each clean row is a dict ready for process_imported_evaluations:
+    category, share_your_thoughts, evaluatee, ratings, student_id,
+    course, year_level, timestamp.
     """
+    if not rows:
+        return [], []
+
+    headers = list(rows[0].keys())
+    if detect_import_mode(headers) == "combined":
+        logger.info("Auto-detected combined multi-category import file.")
+        return _validate_combined(rows)
+
+    # --- single-category mode (one category per file) ---
+    if category is None:
+        raise ImportValidationError(
+            "Could not detect a combined multi-category file and no category "
+            "was supplied. Resubmit with a category selected, or include "
+            "columns from at least two of Staff_/Professor_/Facilities_/Payments_."
+        )
     if category not in VALID_CATEGORIES:
         raise ImportValidationError(
             f"'{category}' is not a valid category. Must be one of: {sorted(VALID_CATEGORIES)}"
         )
 
-    if not rows:
-        return [], []
-
-    headers = list(rows[0].keys())
     col_map = resolve_column_map(headers, category)
 
     clean: list[dict[str, Any]] = []

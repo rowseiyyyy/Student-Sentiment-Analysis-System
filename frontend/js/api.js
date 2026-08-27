@@ -312,7 +312,12 @@ async getEvaluations(params = {}) {
     async importEvaluations(file, category) {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('category', category);
+        // category is optional: auto-detect from the headers when omitted.
+        // Pass '' / null for a combined (Staff_/Professor_/Facilities_/Payments_)
+        // multi-category file, OR to have the server figure it out.
+        if (category) {
+            formData.append('category', category);
+        }
         return this.request('POST', '/imports/evaluations', formData, true);
     }
 };

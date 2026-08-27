@@ -131,18 +131,11 @@ const FACULTY = {
                     <div class="stat-card">
                         <div class="stat-icon purple"><i class="fas fa-chart-bar"></i></div>
                         <div class="stat-info">
-                            <h3>${overall.average_confidence ? overall.average_confidence.toFixed(1) + '%' : 'N/A'}</h3>
+                            <h3>${overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A'}</h3>
                             <p>Avg Confidence</p>
                         </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon blue"><i class="fas fa-trophy"></i></div>
-                        <div class="stat-info">
-                            <h3 style="font-size:1.1rem;">${perf.best_model || 'N/A'}</h3>
-                            <p>Best Model</p>
-                        </div>
                     </div>
-                </div>
 
                 <div class="chart-grid">
                     <div class="chart-card">
@@ -163,26 +156,24 @@ const FACULTY = {
                         <table class="perf-table">
                             <thead>
                                 <tr>
-                                    <th>Algorithm</th>
+                                    <th>Model</th>
                                     <th>Accuracy</th>
                                     <th>Precision</th>
                                     <th>Recall</th>
-                                    <th>F1 Score</th>
-                                    <th>Status</th>
+                                    <th>F1-Score</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${perf.rows.map(r => `
+                                ${filterModelPerfRows(perf.rows).map(r => `
                                     <tr>
-                                        <td><strong>${r.algorithm}</strong> ${r.is_production_model ? '<span class="crown"><i class="fas fa-crown"></i></span>' : ''}</td>
+                                        <td><strong>${modelPerfDisplayName(r.algorithm)}</strong></td>
                                         <td>${formatNumber(r.accuracy)}</td>
                                         <td>${formatNumber(r.precision)}</td>
                                         <td>${formatNumber(r.recall)}</td>
                                         <td>${formatNumber(r.f1_score)}</td>
-                                        <td>${r.is_production_model ? '<span class="badge badge-positive">Production</span>' : '<span class="badge badge-neutral">Standby</span>'}</td>
                                     </tr>
                                 `).join('')}
-                                ${perf.rows.length === 0 ? '<tr><td colspan="6" class="text-center text-muted">No training data available.</td></tr>' : ''}
+                                ${filterModelPerfRows(perf.rows).length === 0 ? '<tr><td colspan="5" class="text-center text-muted">No training data available.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>

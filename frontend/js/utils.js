@@ -145,3 +145,25 @@ function selectField(name, label, options, placeholder = '') {
     return html;
 }
 
+// ============================================================
+// Model Performance Comparison helpers (frontend-only filter)
+// ============================================================
+// The backend /api/v1/ml/performance may still return other models/ensembles.
+// The comparison UI displays ONLY these four approved models. "DeBERTa +
+// RoBERTa" is the stored backend label for the same two-member ensemble that
+// is displayed to the user as "RoBERTa + DeBERTa".
+const MODEL_PERFORMANCE_ALLOWED = ['XGBoost', 'DeBERTa', 'RoBERTa', 'DeBERTa + RoBERTa'];
+
+function filterModelPerfRows(rows) {
+    if (!Array.isArray(rows)) return [];
+    return rows.filter(function (r) {
+        return r && r.algorithm && MODEL_PERFORMANCE_ALLOWED.indexOf(r.algorithm) !== -1;
+    });
+}
+
+function modelPerfDisplayName(algorithm) {
+    if (algorithm === 'DeBERTa + RoBERTa' || algorithm === 'RoBERTa + DeBERTa') {
+        return 'RoBERTa + DeBERTa';
+    }
+    return algorithm;
+}

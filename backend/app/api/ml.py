@@ -31,24 +31,25 @@ from app.schemas.ml import (
 from app.services.training import (
     DatasetValidationError,
     load_and_validate_dataset,
+    normalize_metrics_payload,
     run_full_training,
     sync_deployment_metadata,
 )
 
 router = APIRouter(prefix="/ml", tags=["Machine Learning"])
 
-# Approved active approaches (individual models + the four approved
-# ensembles). Legacy SVM / Random Forest / Naive Bayes / BERT rows remain in
-# training_history as historical records but are excluded from the active
-# comparison, rollback, and download endpoints.
+# Approved active approaches (3 individual models + 1 approved ensemble).
+# This is the strict, system-wide whitelist: the platform may ONLY use
+# XGBoost, DeBERTa, RoBERTa, and the "DeBERTa + RoBERTa" ensemble. Legacy
+# models (SVM / Random Forest / Naive Bayes / BERT) and the other ensemble
+# combinations are retained only as historical training_history rows and are
+# excluded from performance, rollback, confusion-matrix, and download
+# endpoints.
 APPROVED_ALGORITHMS = (
     TrainingAlgorithm.XGBOOST,
     TrainingAlgorithm.DEBERTA,
     TrainingAlgorithm.ROBERTA,
-    TrainingAlgorithm.ENSEMBLE_XGB_DEBERTA,
     TrainingAlgorithm.ENSEMBLE_DEBERTA_ROBERTA,
-    TrainingAlgorithm.ENSEMBLE_ROBERTA_XGB,
-    TrainingAlgorithm.ENSEMBLE_XGB_DEBERTA_ROBERTA,
 )
 
 
@@ -68,11 +69,14 @@ async def import_results(
     training run, in place of local /ml/train."""
     try:
         raw = await metrics_json.read()
-        metrics_by_algorithm = json.loads(raw)
+        payload = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid metrics JSON: {exc}")
 
     try:
+        metrics_by_algorithm, recommended = normalize_metrics_payload(payload)
+        if not set_production and recommended:
+            set_production = recommended
         outcome = import_training_results(
             db,
             metrics_by_algorithm=metrics_by_algorithm,
@@ -219,7 +223,7 @@ def rollback_production_model(
 def download_trained_model(algorithm: TrainingAlgorithm, current_user: User = Depends(require_admin)):
     """Expose the approved trained artifacts for download.
 
-    XGBoost serializes to a single ``.pkl`` file. DeBERTa / RoBERTa are
+    XGBoost serializes to a single ``.pkl`` or ``.joblib`` file. DeBERTa / RoBERTa are
     HuggingFace model directories. Ensembles are reconstructed at runtime
     from their member models and persisted weights, so they are described
     via the deployment metadata rather than a single file.

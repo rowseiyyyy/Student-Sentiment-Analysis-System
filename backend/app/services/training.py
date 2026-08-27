@@ -82,10 +82,15 @@ def import_training_results(
     optionally training_time_seconds / inference_time_ms / hyperparameters.
     """
     imported: list[str] = []
+    unknown_keys: list[str] = []
     for approach_name, metrics in metrics_by_algorithm.items():
         algorithm = APPROACH_TO_ALGORITHM.get(approach_name)
         if algorithm is None:
-            raise DatasetValidationError(f"Unknown approach '{approach_name}' in metrics JSON.")
+            # The Colab export can include top-level metadata keys
+            # (e.g. "generated_at", dataset info) that are not approaches.
+            # Skip them silently instead of failing the whole import.
+            unknown_keys.append(approach_name)
+            continue
 
         history = TrainingHistory(
             algorithm=algorithm,
@@ -98,6 +103,11 @@ def import_training_results(
         db.refresh(history)
         _persist_history(db, history, metrics, TrainingStatus.COMPLETED)
         imported.append(approach_name)
+
+    if unknown_keys:
+        logger.info(
+            f"Ignored non-model keys in metrics JSON: {', '.join(unknown_keys)}"
+        )
 
     if not imported:
         raise DatasetValidationError("Metrics JSON did not contain any recognized approaches.")
@@ -301,12 +311,113 @@ APPROACH_TO_ALGORITHM = {
     "XGBoost + DeBERTa + RoBERTa": TrainingAlgorithm.ENSEMBLE_XGB_DEBERTA_ROBERTA,
 }
 
+# Key names used by the Colab dashboard export's ``models`` object, mapped to
+# the canonical approved approach names that APPROACH_TO_ALGORITHM and the
+# rest of the app recognise.
+COLAB_KEY_TO_APPROACH = {
+    "xgboost": "XGBoost",
+    "deberta": "DeBERTa",
+    "roberta": "RoBERTa",
+}
+
 
 def _coerce_model_output(model_name: str, predictions: Any) -> tuple[str, float, list[float]]:
     if isinstance(predictions, tuple) and len(predictions) >= 3:
         label, confidence, probs = predictions
         return str(label), float(confidence), [float(p) for p in probs]
     raise TypeError(f"Unexpected output format from {model_name}: {predictions!r}")
+
+
+def normalize_metrics_payload(payload: Any) -> tuple[dict[str, dict], str | None]:
+    """Accept two metrics-JSON shapes and return ``(flat_metrics, recommended_production)``.
+
+    * **Legacy flat** format: a top-level ``{approach_name: metrics_dict}``
+      (e.g. ``{"XGBoost": {...}}``). Passed through unchanged.
+    * **Colab dashboard export** (matches ``dashboard_export.json`` from the
+      Colab notebook): approaches are nested under a top-level ``"models"``
+      object with lowercase keys (``xgboost`` / ``deberta`` / ``roberta``),
+      surrounded by metadata keys (``generated_at``, ``label_map``,
+      ``recommended_production_model``). Metric names differ too
+      (``precision_weighted`` / ``recall_weighted`` / ``per_class`` /
+      ``weighted_f1`` vs the legacy ``precision`` / ``recall`` /
+      ``classification_report``). This is normalised into the flat shape
+      ``import_training_results`` and ``_persist_history`` already consume.
+
+    Identifies the Colab export by the presence of a top-level ``"models"``
+    dict; anything else is treated as the legacy flat format.
+    """
+    if not isinstance(payload, dict):
+        raise DatasetValidationError("Metrics JSON must be an object.")
+    if not isinstance(payload.get("models"), dict):
+        return payload, None
+
+    label_map = payload.get("label_map") or {}
+    # Handle both dict (index->name mapping) and list (direct label names) formats
+    if isinstance(label_map, dict):
+        labels = [str(name) for name in label_map.keys()] if label_map else list(CLASS_ORDER)
+    elif isinstance(label_map, list):
+        labels = [str(name) for name in label_map] if label_map else list(CLASS_ORDER)
+    else:
+        labels = list(CLASS_ORDER)
+
+    flat: dict[str, dict] = {}
+    for key, model in payload["models"].items():
+        approach = COLAB_KEY_TO_APPROACH.get(key)
+        if approach is None or not isinstance(model, dict):
+            continue
+        flat[approach] = _normalize_colab_model(model, labels)
+
+    recommended_raw = payload.get("recommended_production_model")
+    recommended = COLAB_KEY_TO_APPROACH.get(recommended_raw) if recommended_raw else None
+    return flat, recommended
+
+
+def _normalize_colab_model(model: dict, label_map: dict | list) -> dict:
+    """Map one Colab dashboard model dict onto the metric keys the service
+    persists (``_persist_history`` reads accuracy/precision/recall/f1_score/
+    macro_f1/weighted_f1/labels/confusion_matrix/classification_report)."""
+    # label_map may be a dict (index->name mapping) or an already-resolved list of labels
+    if isinstance(label_map, dict):
+        labels = [str(n) for n in label_map.keys()] or list(CLASS_ORDER)
+    elif isinstance(label_map, list):
+        labels = [str(n) for n in label_map] or list(CLASS_ORDER)
+    else:
+        labels = list(CLASS_ORDER)
+    per_class = model.get("per_class") or {}
+
+    report: dict[str, Any] = {"accuracy": model.get("accuracy")}
+    macro_vals = []
+    for label in labels:
+        pc = per_class.get(label) or {}
+        report[label] = {
+            "precision": pc.get("precision"),
+            "recall": pc.get("recall"),
+            "f1-score": pc.get("f1"),
+            "support": pc.get("support"),
+        }
+        if pc.get("f1") not in (None, ""):
+            macro_vals.append(float(pc["f1"]))
+    if macro_vals:
+        report["macro avg"] = {"f1-score": sum(macro_vals) / len(macro_vals)}
+
+    return {
+        "accuracy": model.get("accuracy"),
+        "precision": model.get("precision_weighted") or model.get("precision"),
+        "recall": model.get("recall_weighted") or model.get("recall"),
+        "f1_score": model.get("weighted_f1") or model.get("f1_score"),
+        "macro_f1": model.get("macro_f1"),
+        "weighted_f1": model.get("weighted_f1"),
+        "labels": labels,
+        # Colab exports do not carry a raw confusion-matrix; Persist what the
+        # export included, if any (else the caller's _persist_history writes a
+        # placeholder).
+        "confusion_matrix": model.get("confusion_matrix"),
+        "classification_report": report,
+        "training_time_seconds": model.get("training_time_seconds"),
+        "inference_time_ms": model.get("inference_time_ms"),
+        "memory_usage_mb": model.get("memory_usage_mb"),
+        "hyperparameters": model.get("hyperparameters"),
+    }
 
 
 def _persist_history(db: Session, history: TrainingHistory, metrics: dict, status: TrainingStatus) -> None:

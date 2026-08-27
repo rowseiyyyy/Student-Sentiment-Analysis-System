@@ -32,20 +32,33 @@ router = APIRouter(prefix="/imports", tags=["Data Import"])
 @router.post("/evaluations", response_model=ImportResultResponse, status_code=status.HTTP_201_CREATED)
 async def import_evaluations(
     file: UploadFile = File(...),
-    category: EvaluationCategory = Form(
-        ...,
-        description="The evaluation form this file came from — Faculty, Staff, Facilities, or Payment. "
-                    "Applied to every row in the file.",
+    category: EvaluationCategory | None = Form(
+        default=None,
+        description="The evaluation form this file came from — Faculty, Staff, "
+                    "Facilities, or Payment. Required only for single-category "
+                    "files; ignored when a combined multi-category file "
+                    "(Staff_/Professor_/Facilities_/Payments_ columns) is "
+                    "auto-detected from the headers.",
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Upload a compiled student evaluation file (.xlsx, .xls, .csv) — one
-    file per category (Faculty / Staff / Facilities / Payment), matching
-    how the source Google Forms are structured — and bulk-import every
-    valid row as a full Evaluation record: Student ID/Course/Year Level
-    (if present, looked up or created as a User, same as a live
-    submission), Evaluatee, Likert ratings, and the open-ended comment.
+    """Upload a compiled student evaluation file (.xlsx, .xls, .csv) and
+    bulk-import every valid row as a full Evaluation record: Student ID /
+    Course / Year Level (if present, looked up or created as a User, same
+    as a live submission), Evaluatee, Likert ratings, and the open-ended
+    comment.
+
+    Two file layouts are supported and auto-detected from the header row:
+
+      * **Single-category** (one file per category) — the classic Google
+        Form export. Pass ``category`` to tell the server which form this
+        file matches so it can resolve the rating-question columns.
+      * **Combined** — a single spreadsheet row carries ratings + comments
+        for *all four* categories, using category prefixes
+        (Staff_ / Professor_ / Facilities_ / Payments_*). One row expands
+        to up to four Evaluation records, all attributed to the same
+        Respondent_ID. No ``category`` is needed — it is inferred per column.
 
     Do NOT include a Sentiment column — sentiment is always computed
     fresh here via the live XGBoost + DeBERTa + RoBERTa pipeline, the
@@ -84,7 +97,9 @@ async def import_evaluations(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
     try:
-        clean_rows, error_rows = validate_imported_data(rows, category=category.value)
+        clean_rows, error_rows = validate_imported_data(
+            rows, category=category.value if category else None
+        )
     except ImportValidationError as exc:
         tmp_path.unlink(missing_ok=True)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))

@@ -123,6 +123,7 @@ var ADMIN = {
         try {
             var overall = await API.getOverallAnalytics();
             var perf = await API.getModelPerformance();
+            var perfRows = filterModelPerfRows(perf.rows);
 
             // "By Department" = total evaluation COUNT per category, from
             // GET /analytics/category?category=X (the .breakdown.total field).
@@ -164,8 +165,7 @@ var ADMIN = {
                     '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-meh"></i></div><div class="stat-info"><h3>' + (overall.breakdown.neutral || 0) + '</h3><p>Neutral Feedbacks</p><small>' + (overall.breakdown.neutral_pct ? overall.breakdown.neutral_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time, all submissions</small></div></div>' +
                     '<div class="stat-card"><div class="stat-icon red"><i class="fas fa-frown"></i></div><div class="stat-info"><h3>' + (overall.breakdown.negative || 0) + '</h3><p>Negative Feedbacks</p><small>' + (overall.breakdown.negative_pct ? overall.breakdown.negative_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time, all submissions</small></div></div>' +
                     '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3>' + (overall.evaluation_volume || 0) + '</h3><p>Total Evaluations</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time count of submitted evaluation forms</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon purple"><i class="fas fa-chart-bar"></i></div><div class="stat-info"><h3>' + (overall.average_confidence ? overall.average_confidence.toFixed(1) + '%' : 'N/A') + '</h3><p>Avg Confidence</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-trophy"></i></div><div class="stat-info"><h3 style="font-size:1.1rem;">' + (perf.best_model || 'N/A') + '</h3><p>Best Model</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">From latest training run, not submission data — see Training Results below</small></div></div>' +
+                    '<div class="stat-card"><div class="stat-icon purple"><i class="fas fa-chart-bar"></i></div><div class="stat-info"><h3>' + (overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A') + '</h3><p>Avg Confidence</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
                 '</div>' +
                 '<div class="two-col">' +
                     '<div>' +
@@ -188,12 +188,12 @@ var ADMIN = {
                         '</div>' +
                         '<div class="card">' +
                             '<div class="card-header"><h3><i class="fas fa-table"></i> Model Performance</h3></div>' +
-                            '<p class="source-note" style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> One row per algorithm, showing metrics from that algorithm\'s most recent training run only (not combined across datasets or runs). The star (\u2605) marks the model currently used to score new evaluation-form submissions.</p>' +
-                            '<div class="table-container"><table class="perf-table"><thead><tr><th>Algorithm</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>Status</th></tr></thead><tbody>' +
-                                perf.rows.map(function(r) {
-                                    return '<tr><td><strong>' + r.algorithm + '</strong> ' + (r.is_production_model ? '<span class="crown">\u2605</span>' : '') + '</td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td><td>' + (r.is_production_model ? '<span class="badge badge-positive">Production</span>' : '<span class="badge badge-neutral">Standby</span>') + '</td></tr>';
+                            '<p class="source-note" style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> One row per model showing metrics from that model\'s most recent training run only (not combined across datasets or runs).</p>' +
+                            '<div class="table-container"><table class="perf-table"><thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead><tbody>' +
+                                perfRows.map(function(r) {
+                                    return '<tr><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong></td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td></tr>';
                                 }).join('') +
-                                (perf.rows.length === 0 ? '<tr><td colspan="6" class="text-center text-muted">No training data available.</td></tr>' : '') +
+                                (perfRows.length === 0 ? '<tr><td colspan="5" class="text-center text-muted">No training data available.</td></tr>' : '') +
                             '</tbody></table></div>' +
                         '</div>' +
                     '</div>' +
@@ -207,7 +207,7 @@ var ADMIN = {
             // condition that made the bar chart randomly vanish.
             this.destroyCharts();
             this.renderSentimentChart(overall.breakdown);
-            this.renderModelPerfChart(perf.rows);
+            this.renderModelPerfChart(perfRows);
         } catch (error) {
             container.innerHTML = '<div class="page-header"><h1>Dashboard Overview</h1></div><div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-database"></i></div><h3>No Data Available</h3><p>' + error.message + '</p></div></div>';
         }
@@ -231,7 +231,7 @@ var ADMIN = {
             if (!ctx) return;
             ADMIN.charts.modelPerf = new Chart(ctx, {
                 type: 'bar',
-                data: { labels: rows.map(function(r) { return r.algorithm; }), datasets: [{ label: 'Accuracy', data: rows.map(function(r) { return r.accuracy || 0; }), backgroundColor: '#2b3a67' }, { label: 'F1 Score', data: rows.map(function(r) { return r.f1_score || 0; }), backgroundColor: '#b7791f' }] },
+                data: { labels: rows.map(function(r) { return modelPerfDisplayName(r.algorithm); }), datasets: [{ label: 'Accuracy', data: rows.map(function(r) { return r.accuracy || 0; }), backgroundColor: '#2b3a67' }, { label: 'F1 Score', data: rows.map(function(r) { return r.f1_score || 0; }), backgroundColor: '#b7791f' }] },
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1 } }, plugins: { legend: { position: 'bottom' } } }
             });
         }, 100);
@@ -504,6 +504,7 @@ var ADMIN = {
             '<div class="form-group">' +
                 '<label for="import-category-select"><i class="fas fa-list"></i> Which form is this file from?</label>' +
                 '<select class="form-control" id="import-category-select">' +
+                    '<option value="">Auto-detect (combined files accepted too)</option>' +
                     '<option value="Faculty">Professor / Faculty Evaluation</option>' +
                     '<option value="Staff">Staff Evaluation</option>' +
                     '<option value="Facilities">Facilities Evaluation</option>' +
@@ -518,7 +519,7 @@ var ADMIN = {
                     '<li><strong>Faculty only:</strong> a column naming the professor evaluated.</li>' +
                     '<li><strong>Rating questions</strong> (the 1–5 scale questions) — keep Google Forms\' original question text as the column header; they\'re matched automatically.</li>' +
                     '<li style="color:var(--neg);"><strong>Leave Sentiment out entirely.</strong> The system always calculates Positive / Neutral / Negative itself — a Sentiment column in your file is ignored, never read.</li>' +
-                    '<li>Accepted files: <strong>.csv, .xlsx, .xls</strong>. One file = one category (matches your separate Google Forms).</li>' +
+                    '<li>Accepted files: <strong>.csv, .xlsx, .xls</strong>. Use <strong>Auto-detect</strong>: a single-category export (one Google Form) is detected and imported into that category, while a combined multi-category file (columns prefixed Staff_ / Professor_ / Facilities_ / Payments_*) expands each spreadsheet row into up to four evaluations. Picking a specific category is only needed for single-category files.</li>' +
                 '</ul>' +
             '</div>' +
             '<div class="upload-area" onclick="document.getElementById(\'import-resp-file-inp\').click()">' +
@@ -533,9 +534,11 @@ var ADMIN = {
 
     async handleResponsesImport(file) {
         if (!file) return;
-        var category = document.getElementById('import-category-select').value;
+        var catSelect = document.getElementById('import-category-select');
+        var category = catSelect ? catSelect.value : '';
         var resultDiv = document.getElementById('import-resp-result');
-        showLoading('Importing ' + category + ' responses — this can take a moment while each one is scored...');
+        var categoryLabel = category ? category + ' ' : '';
+        showLoading('Importing ' + categoryLabel + 'responses — this can take a moment while each one is scored...');
         try {
             var result = await API.importEvaluations(file, category);
             var errorsHtml = '';
@@ -784,7 +787,7 @@ predictionHtml +
 
             document.getElementById('ana-pos-pct').textContent = (overall.breakdown.positive_pct || 0).toFixed(1) + '%';
             document.getElementById('ana-total').textContent = overall.evaluation_volume || 0;
-            document.getElementById('ana-confidence').textContent = overall.average_confidence ? overall.average_confidence.toFixed(1) + '%' : 'N/A';
+            document.getElementById('ana-confidence').textContent = overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A';
 
             var categories = ['Faculty', 'Staff', 'Facilities', 'Payment'];
             var catData = await Promise.all(categories.map(function(c) { return API.getCategoryAnalytics(c).catch(function() { return null; }); }));
@@ -886,7 +889,7 @@ predictionHtml +
         }
     },
 
-    renderMLImport: function(container) {
+    renderMLImport: async function(container) {
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
@@ -895,8 +898,8 @@ predictionHtml +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
                 '</div>' +
-                '<div class="form-group"><label>XGBoost model (.pkl)</label><input type="file" class="form-control" id="import-xgb-model" accept=".pkl" /></div>' +
-                '<div class="form-group"><label>XGBoost TF-IDF vectorizer (.pkl)</label><input type="file" class="form-control" id="import-xgb-vectorizer" accept=".pkl" /></div>' +
+                '<div class="form-group"><label>XGBoost model (.pkl / .joblib)</label><input type="file" class="form-control" id="import-xgb-model" accept=".pkl,.joblib" /></div>' +
+                '<div class="form-group"><label>XGBoost TF-IDF vectorizer (.pkl / .joblib)</label><input type="file" class="form-control" id="import-xgb-vectorizer" accept=".pkl,.joblib" /></div>' +
                 '<div class="form-group"><label>DeBERTa model folder (.zip)</label><input type="file" class="form-control" id="import-deberta-zip" accept=".zip" /></div>' +
                 '<div class="form-group"><label>RoBERTa model folder (.zip)</label><input type="file" class="form-control" id="import-roberta-zip" accept=".zip" /></div>' +
                 '<div class="form-group"><label>Set as production model (optional)</label>' +
@@ -905,15 +908,42 @@ predictionHtml +
                         '<option value="XGBoost">XGBoost</option>' +
                         '<option value="DeBERTa">DeBERTa</option>' +
                         '<option value="RoBERTa">RoBERTa</option>' +
-                        '<option value="XGBoost + DeBERTa">XGBoost + DeBERTa</option>' +
                         '<option value="DeBERTa + RoBERTa">DeBERTa + RoBERTa</option>' +
-                        '<option value="RoBERTa + XGBoost">RoBERTa + XGBoost</option>' +
-                        '<option value="XGBoost + DeBERTa + RoBERTa">XGBoost + DeBERTa + RoBERTa</option>' +
                     '</select>' +
                 '</div>' +
                 '<button class="btn btn-primary btn-lg" onclick="ADMIN.submitImportResults()"><i class="fas fa-upload"></i> Import Results</button>' +
                 '<div id="import-ml-result" class="mt-2"></div>' +
             '</div>';
+
+        // Pre-select & highlight the currently active production model so the
+        // dropdown reflects reality instead of always resetting to "Auto".
+        try {
+            var perf = await API.getModelPerformance();
+            var select = container.querySelector('#import-set-production');
+            if (select && perf && perf.best_model) {
+                var active = modelPerfDisplayName(perf.best_model);
+                var match = null;
+                Array.prototype.forEach.call(select.options, function(opt) {
+                    // canonicalise: backend may return "RoBERTa + DeBERTa" for
+                    // the "DeBERTa + RoBERTa" ensemble.
+                    if (modelPerfDisplayName(opt.value) === active) { match = opt; }
+                });
+                if (match) {
+                    match.selected = true;
+                    // visually flag the current production model
+                    var box = select.closest('.form-group');
+                    var existing = container.querySelector('.import-prod-current-note');
+                    if (existing) existing.remove();
+                    var note = document.createElement('div');
+                    note.className = 'import-prod-current-note';
+                    note.style.cssText = 'margin-top:.35rem;font-size:.72rem;font-family:var(--font-mono);color:var(--ink-faint);';
+                    note.textContent = 'Currently active: ' + active + ' (Auto will keep it unless you pick another).';
+                    if (box) box.appendChild(note);
+                }
+            }
+        } catch (e) {
+            // Non-blocking: fall back to the default "Auto" selection.
+        }
     },
 
     async submitImportResults() {
@@ -944,15 +974,15 @@ predictionHtml +
         container.innerHTML = '<div class="text-center mt-3"><div class="spinner"></div><p>Loading performance...</p></div>';
         try {
             var perf = await API.getModelPerformance();
-            var rowsHtml = perf.rows.map(function(r) {
-                return '<tr><td><strong>' + r.algorithm + '</strong> ' + (r.is_production_model ? '<span class="crown"><i class="fas fa-crown"></i></span>' : '') + '</td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td><td>' + (r.training_time_seconds ? r.training_time_seconds.toFixed(1) + 's' : 'N/A') + '</td><td>' + (r.inference_time_ms ? r.inference_time_ms.toFixed(2) : 'N/A') + '</td><td>' + (r.is_production_model ? '<span class="badge badge-positive">Production</span>' : '<span class="badge badge-neutral">Standby</span>') + '</td><td><button class="btn btn-sm btn-primary" onclick="ADMIN.viewConfusionMatrix(\'' + r.algorithm + '\')" title="Confusion Matrix"><i class="fas fa-th"></i></button> <button class="btn btn-sm btn-outline" onclick="ADMIN.downloadModel(\'' + r.algorithm + '\')" title="Download"><i class="fas fa-download"></i></button></td></tr>';
+            var rowsHtml = filterModelPerfRows(perf.rows).map(function(r) {
+                return '<tr><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong></td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td><td><button class="btn btn-sm btn-primary" onclick="ADMIN.viewConfusionMatrix(\'' + r.algorithm + '\')" title="Confusion Matrix"><i class="fas fa-th"></i></button> <button class="btn btn-sm btn-outline" onclick="ADMIN.downloadModel(\'' + r.algorithm + '\')" title="Download"><i class="fas fa-download"></i></button></td></tr>';
             }).join('');
 
             container.innerHTML = '' +
                 '<div class="card">' +
-                    '<div class="card-header"><h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3>' + (perf.best_model ? '<span class="badge badge-positive"><i class="fas fa-crown"></i> Best: ' + perf.best_model + '</span>' : '') + '</div>' +
-                    '<p class="source-note" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:0 .75rem .5rem;">One row per algorithm, its most recent training run only — measured on that run\'s own held-out test split, not on live submissions.</p>' +
-                    '<div class="table-container"><table class="perf-table"><thead><tr><th>Algorithm</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>Train Time</th><th>Inference</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="9" class="text-center text-muted">No training data available.</td></tr>') + '</tbody></table></div>' +
+                    '<div class="card-header"><h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3></div>' +
+                    '<p class="source-note" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:0 .75rem .5rem;">One row per model, its most recent training run only — measured on that run\'s own held-out test split, not on live submissions.</p>' +
+                    '<div class="table-container"><table class="perf-table"><thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th><th>Actions</th></tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="6" class="text-center text-muted">No training data available.</td></tr>') + '</tbody></table></div>' +
                 '</div>';
         } catch (error) {
             container.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div><h3>Error</h3><p>' + error.message + '</p></div>';
@@ -987,8 +1017,8 @@ predictionHtml +
         container.innerHTML = '<div class="text-center mt-3"><div class="spinner"></div><p>Loading available models...</p></div>';
         try {
             var perf = await API.getModelPerformance();
-            var optionsHtml = perf.rows.map(function(r) {
-                return '<option value="' + r.algorithm + '">' + r.algorithm + (r.is_production_model ? ' (Production)' : '') + '</option>';
+            var optionsHtml = filterModelPerfRows(perf.rows).map(function(r) {
+                return '<option value="' + r.algorithm + '">' + modelPerfDisplayName(r.algorithm) + '</option>';
             }).join('');
 
             if (!optionsHtml) {
