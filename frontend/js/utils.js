@@ -99,7 +99,12 @@ function debounce(fn, delay = 300) {
 }
 
 // Get API base URL
+// Detects environment and returns appropriate backend URL
 function getApiBase() {
+    const hostname = window.location.hostname;
+    if (hostname.includes('vercel.app')) {
+        return 'https://student-sentiment-analysis-system.onrender.com/api/v1';
+    }
     return 'http://localhost:8000/api/v1';
 }
 
