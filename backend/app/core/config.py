@@ -79,7 +79,11 @@ class Settings(BaseSettings):
     # Default is wide-open for local development. In production, set
     # CORS_ORIGINS to your frontend origin(s) only, e.g.
     #   CORS_ORIGINS=["https://feedback.asiatech.edu.ph"]
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://student-sentiment-snalysis-system.vercel.app",
+    ]
 
     # Minimum number of Likert questions that must be answered when a
     # submission includes ratings. Prevents API-level abuse where a
@@ -128,10 +132,6 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
-    # ------------------------------------------------------------------
-    # CORS
-    # ------------------------------------------------------------------
-    CORS_ORIGINS: List[str] = ["*"]  # Allow all origins for development; restrict in production
 
     # ------------------------------------------------------------------
     # Rate limiting
