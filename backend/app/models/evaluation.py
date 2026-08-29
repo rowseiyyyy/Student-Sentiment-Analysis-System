@@ -24,7 +24,6 @@ class Evaluation(Base):
     user_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    evaluatee: Mapped[str | None] = mapped_column(String(200), nullable=True)
     category: Mapped[EvaluationCategory] = mapped_column(Enum(EvaluationCategory), nullable=False)
     comment: Mapped[str] = mapped_column(Text, nullable=False)
     cleaned_comment: Mapped[str | None] = mapped_column(Text, nullable=True)

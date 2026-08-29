@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     # enforcement. Should match (or exceed) the number of questions in
     # the evaluation form.
     LIKERT_MIN_QUESTIONS: int = 5
+
+    # Database connection - can be set directly via DATABASE_URL env var for production
+    # (e.g., mysql+pymysql://user:pass@host:3306/dbname or sqlite:///path/to/db.sqlite)
+    # If not set, falls back to individual component settings below (for local dev).
+    db_url_override: str | None = Field(default=None, validation_alias="DATABASE_URL")
+
     DB_HOST: str = "localhost"
     DB_PORT: int = 3306
     DB_USER: str = "root"
@@ -107,6 +113,11 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
+        # If DATABASE_URL is set via environment variable, use it directly
+        # (allows overriding for production deployments)
+        if self.db_url_override:
+            return self.db_url_override
+        
         if self.DB_DRIVER == "sqlite":
             sqlite_path = self.VALIDATION_SQLITE_PATH
             if sqlite_path is None and self.TEMP_VALIDATION_ROOT is not None:
