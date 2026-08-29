@@ -751,6 +751,16 @@ tbody tr:last-child td {
   border-bottom: 1px dashed var(--paper-line);
 }
 
+.recaptcha-widget {
+  margin: 1rem 0 0.5rem;
+  display: flex;
+  justify-content: center;
+  min-height: 78px;
+}
+.recaptcha-widget:empty {
+  display: none;
+}
+
 .form-section {
   margin-top: 1.5rem;
 }
@@ -1578,3 +1588,210 @@ tbody tr:last-child td {
   }
 }
 
+/* ============================================================
+   NEGATIVE SPIKE ALERTS (admin navbar bell)
+   ============================================================ */
+.page-kicker {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: .3rem;
+}
+
+.alert-bell-wrap {
+  position: relative;
+  display: none; /* shown via .visible once alerts init for a signed-in admin */
+  align-items: center;
+  margin-right: .75rem;
+}
+
+.alert-bell-wrap.visible {
+  display: inline-flex;
+}
+
+.alert-bell {
+  position: relative;
+  background: transparent;
+  border: 1px solid var(--paper-line);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  transition: border-color .15s var(--ease), color .15s var(--ease);
+}
+.alert-bell:hover {
+  color: var(--neg);
+  border-color: var(--neg);
+}
+
+.alert-bell-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--neg);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: .58rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.alert-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 340px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--paper-raised);
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+  padding: .8rem;
+  z-index: 1200;
+}
+
+.alert-panel-title {
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--neg);
+  margin-bottom: .6rem;
+}
+
+.alert-card {
+  border: 1px solid #E5E7EB;
+  border-left: 3px solid var(--neg);
+  border-radius: 8px;
+  background: var(--paper-alt, #f7f7f2);
+  padding: .6rem .7rem;
+  margin-bottom: .6rem;
+}
+
+.alert-message {
+  font-size: .82rem;
+  color: var(--ink);
+  margin-bottom: .3rem;
+}
+
+.alert-actions {
+  display: flex;
+  gap: .4rem;
+}
+
+.alert-empty {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  align-items: flex-start;
+  font-size: .82rem;
+  color: var(--ink-soft);
+}
+.alert-empty i {
+  color: var(--pos);
+}
+
+/* ============================================================
+   ACTION UPDATE STATUS BADGES + PUBLIC BULLETIN
+   ============================================================ */
+.badge-acknowledged,
+.badge-in-progress,
+.badge-resolved {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: .2rem .55rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.badge-acknowledged {
+  color: var(--neu);
+  background: var(--neu-bg);
+  border-color: var(--neu);
+}
+.badge-in-progress {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+.badge-resolved {
+  color: var(--pos);
+  background: var(--pos-bg);
+  border-color: var(--pos);
+}
+
+.bulletin-intro {
+  font-size: .78rem;
+  margin-bottom: 1.25rem;
+}
+
+.bulletin-group {
+  margin-bottom: 1.75rem;
+}
+
+.bulletin-group-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  margin-bottom: .2rem;
+}
+.bulletin-group-header h2 i {
+  color: var(--ink-faint);
+  font-size: .95rem;
+  margin-right: .35rem;
+}
+
+.bulletin-card {
+  padding: 1.1rem 1.25rem;
+}
+
+.bulletin-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .75rem;
+  margin-bottom: .45rem;
+}
+.bulletin-card-header h3 {
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+}
+
+.bulletin-summary {
+  font-size: .88rem;
+  color: var(--ink-soft);
+  margin-bottom: .55rem;
+}
+
+.bulletin-resolution {
+  display: flex;
+  gap: .45rem;
+  align-items: flex-start;
+  font-size: .84rem;
+  color: var(--pos);
+  background: var(--pos-bg);
+  border: 1px solid var(--pos);
+  border-radius: 8px;
+  padding: .5rem .7rem;
+  margin-bottom: .55rem;
+}
+
+.bulletin-date {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: .66rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}

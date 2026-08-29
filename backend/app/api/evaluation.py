@@ -1,10 +1,12 @@
 import secrets
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, get_current_user_optional, require_admin
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.security import hash_password
@@ -23,6 +25,7 @@ from app.services.likert import classify_likert
 from app.services.mismatch import MismatchType, detect_mismatch
 from app.services.preprocessing import clean_for_classical
 from app.services.prediction import run_prediction_pipeline
+from app.utils.logger import logger
 
 router = APIRouter(prefix="/evaluation", tags=["Evaluations"])
 
@@ -34,6 +37,16 @@ _SORTABLE_FIELDS = {
     "likert_average",
     "evaluatee",
 }
+
+
+@router.get("/public/config")
+def public_config():
+    """Public config — no auth required."""
+    return {}
+@router.get("/config")
+def get_public_config():
+    """Deprecated alias for /public/config. Kept for backward compat."""
+    return public_config()
 
 
 def _build_text_for_sentiment(payload: EvaluationCreate) -> str | None:
@@ -75,6 +88,20 @@ def submit_evaluation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Please provide your feedback (ratings or your thoughts).",
         )
+
+    # Server-side Likert enforcement: if ratings are submitted, they must
+    # cover at least the minimum number of questions configured for the
+    # form. This is a security boundary — the frontend's "answer all"
+    # check is good UX but a direct API call can bypass it otherwise.
+    if payload.ratings:
+        required = settings.LIKERT_MIN_QUESTIONS
+        provided = len(payload.ratings)
+        if provided < required:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Please answer all Likert questions ({provided}/{required} provided).",
+            )
+
 
     likert_label: str | None = None
     likert_average: float | None = None
@@ -282,6 +309,7 @@ def get_evaluation(
     return evaluation
 
 
+# Public configuration endpoint — no authentication required.
 @router.delete("/{evaluation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_evaluation(
     evaluation_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_admin)

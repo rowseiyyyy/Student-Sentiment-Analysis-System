@@ -198,6 +198,33 @@ async getEvaluations(params = {}) {
     },
 
     // ============================================================
+    // ============================================================
+    // ACTION UPDATES ENDPOINTS (admin CRUD + public bulletin)
+    // ============================================================
+
+    async getActionUpdates() {
+        return this.get('/action-updates');
+    },
+
+    async createActionUpdate(data) {
+        return this.post('/action-updates', data);
+    },
+
+    async updateActionUpdate(id, data) {
+        return this.request('PATCH', `/action-updates/${id}`, data);
+    },
+
+    async deleteActionUpdate(id) {
+        return this.del(`/action-updates/${id}`);
+    },
+
+    async getPublicBulletin() {
+        // No auth header required — the backend endpoint is unauthenticated.
+        const res = await fetch(`${this.baseUrl}/action-updates/public`);
+        if (!res.ok) throw new Error('Failed to load bulletin.');
+        return res.json();
+    },
+
     // ANALYTICS ENDPOINTS
     // ============================================================
 
@@ -328,5 +355,11 @@ async getEvaluations(params = {}) {
             formData.append('category', category);
         }
         return this.request('POST', '/imports/evaluations', formData, true);
-    }
+    },
+
+    // Public config — no auth required. Exposes only the config
+    // (public by design) so no auth required.
+    async getPublicConfig() {
+        return this.request('GET', '/evaluations/public/config');
+    },
 };

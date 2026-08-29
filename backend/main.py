@@ -30,8 +30,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api import analytics, auth, evaluation, imports, ml, prediction
-from app.core.config import settings
+from app.api import analytics, auth, evaluation, imports, ml, prediction, action_updates
+from app.core.config import settings, assert_production_readiness
 from app.core.database import Base, engine
 from app.core.limiter import limiter
 from app.utils.logger import logger
@@ -40,6 +40,10 @@ from app.utils.logger import logger
 # Alembic migrations under alembic/versions instead (see README).
 if settings.ENVIRONMENT == "development":
     Base.metadata.create_all(bind=engine)
+
+# Refuse to boot in production with unsafe defaults (DEBUG on, default
+# secret, wide-open CORS). Must run after settings are loaded.
+assert_production_readiness()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -89,6 +93,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def https_redirect(request: Request, call_next):
+    """Redirect HTTP → HTTPS in production.
+
+    Respects the X-Forwarded-Proto header set by reverse proxies
+    (nginx, Cloudflare, etc.) so the redirect works even when the
+    app itself runs on HTTP behind a TLS-terminating proxy.
+    """
+    if settings.ENVIRONMENT == "production":
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        if proto == "https":
+            response = await call_next(request)
+            # Tell browsers to always use HTTPS for the next 30 days
+            response.headers["Strict-Transport-Security"] = "max-age=2592000; includeSubDomains"
+            return response
+        if proto == "http":
+            https_url = request.url.replace(scheme="https")
+            return JSONResponse(
+                status_code=status.HTTP_301_MOVED_PERMANENTLY,
+                headers={"Location": str(https_url)},
+                content={"detail": "Redirecting to HTTPS."},
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -150,5 +179,6 @@ app.include_router(prediction.router, prefix=settings.API_V1_PREFIX)
 app.include_router(analytics.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ml.router, prefix=settings.API_V1_PREFIX)
 app.include_router(imports.router, prefix=settings.API_V1_PREFIX)
+app.include_router(action_updates.router, prefix=settings.API_V1_PREFIX)
 
 logger.info(f"{settings.PROJECT_NAME} v{settings.VERSION} started in {settings.ENVIRONMENT} mode.")

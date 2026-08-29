@@ -15,6 +15,12 @@ const APP = {
     },
 
     checkExistingSession() {
+        // Public bulletin deep-link (#bulletin) needs no session at all.
+        if (window.location.hash === '#bulletin') {
+            this.showPublicBulletin();
+            return;
+        }
+
         // Check if student is already logged in
         const studentNum = sessionStorage.getItem('asiatech_student_number');
         if (studentNum) {
@@ -168,6 +174,25 @@ showRegForm() {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         const page = document.getElementById(pageId);
         if (page) page.classList.add('active');
+    },
+
+    // Public "Action Taken" bulletin — no auth, no API.getUser().
+    // Reachable from the login page link or directly via #bulletin.
+    showPublicBulletin() {
+        this.goToPage('page-public-bulletin');
+        const container = document.getElementById('public-bulletin-content');
+        container.innerHTML = '<div class="text-center mt-4"><div class="spinner"></div><p>Loading bulletin...</p></div>';
+        API.getPublicBulletin()
+            .then(data => { BULLETIN.render(container, data); })
+            .catch(err => {
+                container.innerHTML = '<div class="page-header"><h1>Action Bulletin</h1></div>' +
+                    '<div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-bullhorn"></i></div>' +
+                    '<h3>Unable to load</h3><p>' + escapeHtml(err.message) + '</p></div></div>';
+            });
+    },
+
+    showLogin() {
+        this.goToPage('page-login');
     },
 
 setupNavListeners() {

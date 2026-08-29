@@ -15,16 +15,9 @@ class SentimentLabel(str, enum.Enum):
 
 
 class AlgorithmName(str, enum.Enum):
-    SVM = "SVM"
-    RANDOM_FOREST = "Random Forest"
-    NAIVE_BAYES = "Naive Bayes"
-    BERT = "BERT"
     XGBOOST = "XGBoost"
     DEBERTA = "DeBERTa"
-    ROBERTA = "RoBERTa"
-    # Legacy alias for historical rows; active runs use the explicit
-    # member-based ensemble names below.
-    ENSEMBLE = "Ensemble (soft vote)"
+    ROBERTA = "RoBERTA"
     ENSEMBLE_XGB_DEBERTA = "XGBoost + DeBERTa"
     ENSEMBLE_DEBERTA_ROBERTA = "DeBERTa + RoBERTa"
     ENSEMBLE_ROBERTA_XGB = "RoBERTa + XGBoost"

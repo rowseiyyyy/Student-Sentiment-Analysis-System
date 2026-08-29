@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
 </head>
 <body>
     <div class="toast-container" id="toast-container"></div>
@@ -128,6 +129,13 @@
                         Already have an account? <a href="#" onclick="APP.hideRegForm();return false;">Sign in</a>
                     </p>
                 </form>
+
+                <!-- Public "Action Taken" bulletin link — visible on the
+                     login page for every role (students, admins, faculty),
+                     no login required. -->
+                <p class="form-footer bulletin-link">
+                    <i class="fas fa-bullhorn"></i> <a href="#bulletin" onclick="APP.showPublicBulletin();return false;">See what actions we've taken on feedback</a>
+                </p>
             </div>
         </div>
     </div>
@@ -216,8 +224,16 @@
                 <li><button data-tab="responses"><i class="fas fa-table"></i> Responses</button></li>
                 <li><button data-tab="analytics"><i class="fas fa-chart-line"></i> Analytics</button></li>
                 <li><button data-tab="ml"><i class="fas fa-chart-bar"></i> Model Results</button></li>
+                <li><button data-tab="actions"><i class="fas fa-bullhorn"></i> Action Updates</button></li>
             </ul>
             <div class="nav-user">
+                <div class="alert-bell-wrap" id="alert-bell-wrap">
+                    <button class="alert-bell" id="alert-bell" onclick="ADMIN.toggleAlertPanel()" title="Negative feedback alerts">
+                        <i class="fas fa-bell"></i>
+                        <span class="alert-bell-count hidden" id="alert-bell-count"></span>
+                    </button>
+                    <div class="alert-panel hidden" id="alert-panel"></div>
+                </div>
                 <span class="user-badge" id="badge-admin"></span>
                 <button class="btn-logout" onclick="ADMIN.logout()"><i class="fas fa-sign-out-alt"></i> Close file</button>
             </div>
@@ -249,6 +265,23 @@
     </div>
 
     <!-- ============================================================ -->
+    <!-- PUBLIC "ACTION TAKEN" BULLETIN (no login required)             -->
+    <!-- ============================================================ -->
+    <div id="page-public-bulletin" class="page">
+        <nav class="navbar" id="nav-public">
+            <div class="nav-brand">
+                <i class="fas fa-smile"></i>
+                Asiatechian Feedback<small>Action Bulletin</small>
+            </div>
+            <ul class="nav-links"></ul>
+            <div class="nav-user">
+                <button class="btn btn-secondary btn-sm" onclick="APP.showLogin()"><i class="fas fa-sign-in-alt"></i> Sign in</button>
+            </div>
+        </nav>
+        <div class="page-layout" id="public-bulletin-content"></div>
+    </div>
+
+    <!-- ============================================================ -->
     <!-- EVALUATION DETAIL MODAL                                        -->
     <!-- ============================================================ -->
     <div class="modal-backdrop" id="modal-eval">
@@ -263,6 +296,7 @@
 
     <script src="js/utils.js"></script>
     <script src="js/api.js"></script>
+    <script src="js/bulletin.js"></script>
     <script src="js/student.js"></script>
     <script src="js/admin.js"></script>
     <script src="js/faculty.js"></script>

@@ -64,8 +64,29 @@ class Settings(BaseSettings):
         return value
 
     # ------------------------------------------------------------------
-    # Database
+    # Security
     # ------------------------------------------------------------------
+    # IMPORTANT: every value below MUST be overridden in production via
+    # environment variables. A startup guard further down refuses to boot
+    # in production with the default SECRET_KEY.
+    SECRET_KEY: str = Field(default="change-me-in-production-please-use-a-long-random-string")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080
+
+    # ------------------------------------------------------------------
+    # CORS
+    # ------------------------------------------------------------------
+    # Default is wide-open for local development. In production, set
+    # CORS_ORIGINS to your frontend origin(s) only, e.g.
+    #   CORS_ORIGINS=["https://feedback.asiatech.edu.ph"]
+    CORS_ORIGINS: List[str] = ["*"]
+
+    # Minimum number of Likert questions that must be answered when a
+    # submission includes ratings. Prevents API-level abuse where a
+    # partial/empty ratings payload bypasses the frontend's "answer all"
+    # enforcement. Should match (or exceed) the number of questions in
+    # the evaluation form.
+    LIKERT_MIN_QUESTIONS: int = 5
     DB_HOST: str = "localhost"
     DB_PORT: int = 3306
     DB_USER: str = "root"
@@ -168,6 +189,7 @@ class Settings(BaseSettings):
     DEBERTA_WARMUP_RATIO: float = 0.1
     DEBERTA_MAX_SEQ_LENGTH: int = 256
 
+
     # XGBoost defaults.
     XGB_N_ESTIMATORS: int = 300
     XGB_MAX_DEPTH: int = 6
@@ -220,3 +242,34 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def assert_production_readiness() -> None:
+    """Refuse to boot in production with unsafe defaults.
+
+    Called once at startup from main.py. Checks that DEBUG is off,
+    SECRET_KEY has been changed from the default, and CORS is not
+    wide-open. Any failure logs the specific issue and raises
+    RuntimeError so the process exits before serving traffic.
+    """
+    # Local import avoids a circular import at module load time
+    # (config ← logger ← config). By the time this runs at startup,
+    # both modules are fully initialized.
+    from app.utils.logger import logger
+
+    if settings.ENVIRONMENT != "production":
+        return
+
+    issues: list[str] = []
+    if settings.DEBUG:
+        issues.append("DEBUG must be False in production.")
+    if settings.SECRET_KEY.startswith("change-me-in-production"):
+        issues.append("SECRET_KEY is still the default value — generate a long random secret.")
+    if "*" in settings.CORS_ORIGINS:
+        issues.append("CORS_ORIGINS is wide-open (*) — restrict to your frontend origin(s).")
+    if issues:
+        for msg in issues:
+            logger.error("PRODUCTION GUARD: " + msg)
+        raise RuntimeError(
+            "Production startup guard failed — " + " ".join(issues)
+        )

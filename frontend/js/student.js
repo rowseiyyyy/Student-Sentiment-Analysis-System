@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Asiatech Sentiment Analysis - Student Module
  * Updated for "Asiatech Feedback Casefile" paper theme design.
  * Anonymous evaluation flow — no student login/ID required.
@@ -256,6 +256,28 @@ const STUDENT = {
             return;
         }
 
+        // Enforce every Likert question is answered. Each rating-group
+        // holds one radio set; a group is "answered" if any radio in it
+        // is checked. Count groups and find the first unanswered one so
+        // we can focus it for the user.
+        const ratingGroups = form.querySelectorAll('.rating-group');
+        var unanswered = null;
+        for (var i = 0; i < ratingGroups.length; i++) {
+            if (!ratingGroups[i].querySelector('input[type="radio"]:checked')) {
+                unanswered = ratingGroups[i];
+                break;
+            }
+        }
+        if (ratingGroups.length > 0 && unanswered) {
+            showToast('Please answer every rating question before submitting (' +
+                (Array.prototype.indexOf.call(ratingGroups, unanswered) + 1) +
+                ' of ' + ratingGroups.length + ' still unanswered).', 'warning');
+            unanswered.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            var firstRadio = unanswered.querySelector('input[type="radio"]');
+            if (firstRadio) firstRadio.focus();
+            return;
+        }
+
         if (course) {
             this.currentCourse = course;
             sessionStorage.setItem('asiatech_student_course', course);
@@ -277,7 +299,6 @@ const STUDENT = {
             ratings: Object.keys(ratings).length > 0 ? ratings : null,
             student_id: null,
             course: course || null,
-            year_level: yearLevel || null
         };
 
         const submitBtn = form.querySelector('button[type="submit"]');
@@ -303,13 +324,13 @@ const STUDENT = {
                 result = await response.json();
             }
 
-            showToast('Evaluation submitted successfully! Thank you for your feedback.', 'success');
             if (typeof APP !== 'undefined' && APP.openModal) {
                 APP.openModal(
                     '<div style="text-align:center;padding:1rem;">' +
                         '<i class="fas fa-check-circle" style="font-size:2.5rem;color:var(--pos);"></i>' +
                         '<h3 style="margin-top:.75rem;">Evaluation Submitted Successfully!</h3>' +
-                        '<p>Thank you for your feedback. Your evaluation has been recorded successfully.</p>' +
+                        '<p>Thank you for your feedback. Your evaluation has been recorded.</p>' +
+                        '<button class="btn btn-primary mt-2" onclick="APP.closeModal()"><i class="fas fa-plus"></i> Submit Another Evaluation</button>' +
                     '</div>'
                 );
             }

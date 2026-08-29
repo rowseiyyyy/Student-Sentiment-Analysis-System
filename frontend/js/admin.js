@@ -54,6 +54,34 @@ var ADMIN = {
     // the Model Performance table is training-run data and is unaffected.
     overviewFilters: { days: '', category: '' },
 
+    // ---- Negative spike alerts (Feature 1) ----
+    // Alerts recomputed by ADMIN.checkAlerts(); dismissal keys survive
+    // reloads via localStorage so an acknowledged spike stays cleared
+    // until the NEXT period's data changes.
+    alerts: [],
+    alertPollTimer: null,
+    ALERT_POLL_MS: 15 * 60 * 1000, // 15 minutes
+    // Spike fires when: negative up >=50% vs last month AND +3 or more
+    // in absolute count, OR this month's negative rate >40% of the
+    // category's submissions (with >=5 total, to avoid tiny-sample noise).
+    ALERT_PCT_THRESHOLD: 50,
+    ALERT_ABS_THRESHOLD: 3,
+    ALERT_RATE_CEILING: 40,
+    ALERT_RATE_MIN_TOTAL: 5,
+
+    getDismissedAlerts: function() {
+        try { return JSON.parse(localStorage.getItem('asiatech_dismissed_alerts') || '[]'); }
+        catch (e) { return []; }
+    },
+
+    dismissAlertKey: function(key) {
+        var dismissed = this.getDismissedAlerts();
+        if (dismissed.indexOf(key) === -1) {
+            dismissed.push(key);
+            localStorage.setItem('asiatech_dismissed_alerts', JSON.stringify(dismissed));
+        }
+    },
+
     init: function() {
         var user = API.getUser();
         if (user && user.role === 'administrator') {
@@ -87,6 +115,8 @@ var ADMIN = {
         API.clearAuth();
         this.currentUser = null;
         this.destroyCharts();
+        this.stopAlertPolling();
+        this.hideAlertPanel();
         APP.goToPage('page-login');
         document.getElementById('nav-admin').style.display = 'none';
     },
@@ -101,6 +131,9 @@ var ADMIN = {
         document.getElementById('nav-admin').style.display = 'flex';
         document.getElementById('badge-admin').textContent = '\u{1F6E1} ' + (this.currentUser ? this.currentUser.full_name : 'Administrator');
         this.renderTab('overview');
+        // Negative spike alerting: run once on load, then poll.
+        this.checkAlerts();
+        this.startAlertPolling();
     },
 
     renderTab: function(tab) {
@@ -115,6 +148,7 @@ var ADMIN = {
             case 'responses': this.renderResponses(tabContent); break;
             case 'analytics': this.renderAnalytics(tabContent); break;
             case 'ml': this.renderMLPanel(tabContent); break;
+            case 'actions': this.renderActionUpdates(tabContent); break;
             
         }
     },
@@ -564,6 +598,153 @@ var ADMIN = {
         this.selectedIds = new Set();
         document.querySelectorAll('.row-select-checkbox').forEach(function(cb) { cb.checked = false; });
         this.updateBulkBar();
+    },
+
+    // ============================================================
+    // NEGATIVE SPIKE ALERTING (Feature 1)
+    // Per-category month-over-month comparison using the existing
+    // monthly trend endpoint. Alert objects are plain data
+    // ({key, category, type, message, cur, prev, period}) so an
+    // email/push hook can consume them later without refactoring.
+    // ============================================================
+    checkAlerts: async function() {
+        try {
+            var categories = ['Faculty', 'Staff', 'Payment', 'Facilities'];
+            var periodKey = new Date().toISOString().slice(0, 7); // e.g. 2026-08
+            var dismissed = this.getDismissedAlerts();
+            var cfg = this;
+
+            var trends = await Promise.all(categories.map(function(c) {
+                return API.getMonthlyTrend('category=' + encodeURIComponent(c))
+                    .catch(function() { return { points: [] }; });
+            }));
+
+            var alerts = [];
+            categories.forEach(function(category, i) {
+                var points = (trends[i] && trends[i].points) || [];
+                if (points.length === 0) return;
+                var cur = points[points.length - 1];
+                var prev = points.length >= 2 ? points[points.length - 2] : null;
+                var negCur = cur.negative || 0;
+                var negPrev = prev ? (prev.negative || 0) : 0;
+                var totalCur = cur.total || 0;
+
+                // Rule 1: >=50% increase AND +3 absolute (kills "1 -> 2" noise).
+                if (prev && negCur > negPrev &&
+                    ((negCur - negPrev) / negPrev) * 100 >= cfg.ALERT_PCT_THRESHOLD &&
+                    (negCur - negPrev) >= cfg.ALERT_ABS_THRESHOLD) {
+                    var pct = Math.round(((negCur - negPrev) / negPrev) * 100);
+                    alerts.push({
+                        key: category + '|' + periodKey + '|spike',
+                        category: category, type: 'spike', period: periodKey,
+                        cur: negCur, prev: negPrev,
+                        message: category + ': negative feedback up ' + pct + '% this month (' + negPrev + ' \u2192 ' + negCur + ').'
+                    });
+                }
+                // Rule 2: absolute ceiling — negative rate >40% of this
+                // period's submissions (>=5 total), even without a
+                // prior-period comparison.
+                if (totalCur >= cfg.ALERT_RATE_MIN_TOTAL && (negCur / totalCur) * 100 > cfg.ALERT_RATE_CEILING) {
+                    var rate = Math.round((negCur / totalCur) * 100);
+                    alerts.push({
+                        key: category + '|' + periodKey + '|ceiling',
+                        category: category, type: 'ceiling', period: periodKey,
+                        cur: negCur, prev: negPrev,
+                        message: category + ': ' + rate + '% of this month\u2019s submissions are negative (' + negCur + ' of ' + totalCur + ').'
+                    });
+                }
+            });
+
+            this.alerts = alerts.filter(function(a) { return dismissed.indexOf(a.key) === -1; });
+            this.updateAlertBell();
+        } catch (error) {
+            // Alerting must never break the dashboard.
+            console.warn('Alert check failed:', error);
+        }
+    },
+
+    startAlertPolling: function() {
+        if (this.alertPollTimer) clearInterval(this.alertPollTimer);
+        this.alertPollTimer = setInterval(function() { ADMIN.checkAlerts(); }, this.ALERT_POLL_MS);
+    },
+
+    stopAlertPolling: function() {
+        if (this.alertPollTimer) {
+            clearInterval(this.alertPollTimer);
+            this.alertPollTimer = null;
+        }
+    },
+
+    updateAlertBell: function() {
+        var wrap = document.getElementById('alert-bell-wrap');
+        var count = document.getElementById('alert-bell-count');
+        if (!wrap || !count) return;
+        wrap.classList.toggle('visible', !!this.currentUser);
+        if (this.alerts.length > 0) {
+            count.textContent = this.alerts.length;
+            count.classList.remove('hidden');
+        } else {
+            count.classList.add('hidden');
+        }
+    },
+
+    toggleAlertPanel: function() {
+        var panel = document.getElementById('alert-panel');
+        if (!panel) return;
+        if (panel.classList.contains('hidden')) {
+            this.renderAlertPanel();
+            panel.classList.remove('hidden');
+        } else {
+            panel.classList.add('hidden');
+        }
+    },
+
+    hideAlertPanel: function() {
+        var panel = document.getElementById('alert-panel');
+        if (panel) panel.classList.add('hidden');
+    },
+
+    renderAlertPanel: function() {
+        var panel = document.getElementById('alert-panel');
+        if (!panel) return;
+        if (this.alerts.length === 0) {
+            panel.innerHTML = '<div class="alert-empty"><i class="fas fa-check-circle"></i> No negative feedback spikes detected.' +
+                '<span class="source-note" style="margin:0;">Checked monthly, per department \u00b7 last run ' + new Date().toLocaleTimeString() + '</span></div>';
+            return;
+        }
+        panel.innerHTML = '<div class="alert-panel-title"><i class="fas fa-triangle-exclamation"></i> Negative Feedback Alerts</div>' +
+            this.alerts.map(function(a) {
+                return '<div class="alert-card">' +
+                    '<p class="alert-message">' + escapeHtml(a.message) + '</p>' +
+                    '<span class="source-note" style="margin:0 0 .45rem;">Period ' + escapeHtml(a.period) + ' \u00b7 source: monthly submissions with a prediction on record</span>' +
+                    '<div class="alert-actions">' +
+                        '<button class="btn btn-sm btn-outline" onclick="ADMIN.viewAlertResponses(\'' + escapeHtml(a.category) + '\')"><i class="fas fa-table"></i> View responses</button>' +
+                        '<button class="btn btn-sm btn-outline" onclick="ADMIN.dismissAlert(\'' + escapeHtml(a.key) + '\')"><i class="fas fa-times"></i> Dismiss</button>' +
+                    '</div></div>';
+            }).join('');
+    },
+
+    dismissAlert: function(key) {
+        this.dismissAlertKey(key);
+        this.alerts = this.alerts.filter(function(a) { return a.key !== key; });
+        this.updateAlertBell();
+        this.renderAlertPanel();
+        showToast('Alert dismissed \u2014 it stays cleared unless the spike persists into the next review.', 'info');
+    },
+
+    viewAlertResponses: function(category) {
+        this.hideAlertPanel();
+        this.renderTab('responses');
+        // Pre-apply the category filter after the tab markup exists, then
+        // load through the normal filter pipeline. (Sentiment-based spikes
+        // are not the same as Likert mismatches, so needs-review stays off.)
+        var catSel = document.getElementById('filter-category');
+        if (catSel) {
+            var match = Array.prototype.find.call(catSel.options, function(o) { return o.value === category; });
+            catSel.value = match ? category : '';
+        }
+        ADMIN.currentPage = 1;
+        this.loadResponses();
     },
 
     async bulkDeleteSelected() {
@@ -1312,5 +1493,136 @@ predictionHtml +
         } finally {
             hideLoading();
         }
+    },
+
+    // ============================================================
+    // ACTION UPDATES TAB (Feature 2, admin side)
+    // Admin CRUD for the public "Action Taken" bulletin. The
+    // internal_reference field is for admin tracking only and is
+    // never rendered on the public page (see bulletin.js).
+    // ============================================================
+    actionStatusBadge: function(status) {
+        var map = {
+            acknowledged: ['badge-acknowledged', 'Acknowledged'],
+            in_progress: ['badge-in-progress', 'In Progress'],
+            resolved: ['badge-resolved', 'Resolved']
+        };
+        var cfg = map[status] || map.acknowledged;
+        return '<span class="' + cfg[0] + '">' + cfg[1] + '</span>';
+    },
+
+    renderActionUpdates: async function(container) {
+        container.innerHTML = '<div class="text-center mt-4"><div class="spinner"></div><p>Loading action updates...</p></div>';
+        try {
+            var posts = await API.getActionUpdates();
+            container.innerHTML =
+                '<div class="page-header"><div>' +
+                    '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Feedback Loop \u2014 Action Taken</span>' +
+                    '<h1>Action Updates</h1>' +
+                '</div>' +
+                '<button class="btn btn-primary" onclick="ADMIN.showActionForm()"><i class="fas fa-plus"></i> New Update</button></div>' +
+                '<p class="source-note">Posts published to the public Action Bulletin (login page \u2192 \u201cWhat we\u2019ve done with your feedback\u201d). Show aggregate outcomes only \u2014 never student names, IDs, or raw comment text. The internal reference is never published.</p>' +
+                '<div id="action-form-wrap" class="hidden"></div>' +
+                '<div id="action-updates-list"></div>';
+            this.renderActionList(posts);
+        } catch (error) {
+            container.innerHTML = '<div class="page-header"><h1>Action Updates</h1></div><div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-bullhorn"></i></div><h3>Could not load updates</h3><p>' + escapeHtml(error.message) + '</p></div></div>';
+        }
+    },
+
+    renderActionList: function(posts) {
+        var list = document.getElementById('action-updates-list');
+        if (!list) return;
+        if (!posts || posts.length === 0) {
+            list.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-bullhorn"></i></div><h3>No Updates Posted</h3><p>Use \u201cNew Update\u201d to publish the first action taken on student feedback.</p></div></div>';
+            return;
+        }
+        list.innerHTML = posts.map(function(p) {
+            return '<div class="card action-post">' +
+                '<div class="card-header" style="margin-bottom:.6rem;">' +
+                    '<h3>' + escapeHtml(p.title) + ' <span class="cat-badge ' + ADMIN.getCategoryBadgeClass(p.category) + '">' + escapeHtml(p.category) + '</span></h3>' +
+                    '<div>' + ADMIN.actionStatusBadge(p.status) + '</div>' +
+                '</div>' +
+                '<p class="action-summary">' + escapeHtml(p.summary) + '</p>' +
+                (p.resolution_note ? '<p class="action-resolution"><strong>Resolution:</strong> ' + escapeHtml(p.resolution_note) + '</p>' : '') +
+                (p.internal_reference ? '<p class="source-note" style="margin:.4rem 0 0;"><i class="fas fa-lock"></i> Internal ref (never published): ' + escapeHtml(p.internal_reference) + '</p>' : '') +
+                '<div class="action-post-footer">' +
+                    '<span class="source-note" style="margin:0;">Posted ' + formatDate(p.date_posted) + (p.date_updated && p.date_updated !== p.date_posted ? ' \u00b7 edited ' + formatDate(p.date_updated) : '') + '</span>' +
+                    '<div>' +
+                        '<button class="btn btn-sm btn-outline" onclick="ADMIN.showActionForm(\'' + p.id + '\')"><i class="fas fa-edit"></i> Edit</button> ' +
+                        '<button class="btn btn-sm btn-outline" onclick="ADMIN.deleteActionUpdate(\'' + p.id + '\')"><i class="fas fa-trash"></i> Delete</button>' +
+                    '</div>' +
+                '</div></div>';
+        }).join('');
+    },
+
+    showActionForm: function(editId) {
+        var wrap = document.getElementById('action-form-wrap');
+        if (!wrap) return;
+        var existing = editId ? (this._editingPost || null) : null;
+        wrap.classList.remove('hidden');
+        wrap.innerHTML = '<div class="card">' +
+            '<div class="card-header"><h3>' + (editId ? 'Edit Update' : 'New Action Update') + '</h3>' +
+            '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'action-form-wrap\').classList.add(\'hidden\')"><i class="fas fa-times"></i></button></div>' +
+            '<div class="form-group"><label><i class="fas fa-tag"></i> Category</label>' +
+            '<select class="form-control" id="action-category">' +
+            '<option value="Faculty">Faculty</option><option value="Staff">Staff</option>' +
+            '<option value="Payment">Payment</option><option value="Facilities">Facilities</option>' +
+            '</select></div>' +
+            '<div class="form-group"><label><i class="fas fa-heading"></i> Title</label>' +
+            '<input class="form-control" id="action-title" placeholder="e.g. Long cashier lines" maxlength="200"></div>' +
+            '<div class="form-group"><label><i class="fas fa-align-left"></i> Summary</label>' +
+            '<textarea class="form-control" id="action-summary" rows="3" placeholder="Aggregate outcome — never paste raw comments."></textarea></div>' +
+            '<div class="form-group"><label><i class="fas fa-tasks"></i> Status</label>' +
+            '<select class="form-control" id="action-status">' +
+            '<option value="acknowledged">Acknowledged</option><option value="in_progress">In Progress</option><option value="resolved">Resolved</option>' +
+            '</select></div>' +
+            '<div class="form-group"><label><i class="fas fa-check-circle"></i> Resolution note (required when Resolved)</label>' +
+            '<textarea class="form-control" id="action-resolution" rows="2" placeholder="e.g. Added a second cashier window."></textarea></div>' +
+            '<div class="form-group"><label><i class="fas fa-lock"></i> Internal reference (never published)</label>' +
+            '<input class="form-control" id="action-internal" placeholder="e.g. feedback spike, Jul 2026" maxlength="200"></div>' +
+            '<div class="form-group" style="display:flex;gap:.5rem;justify-content:flex-end;">' +
+            '<button class="btn btn-primary" onclick="ADMIN.saveActionUpdate(\'' + (editId || '') + '\')"><i class="fas fa-save"></i> ' + (editId ? 'Save changes' : 'Publish update') + '</button></div>' +
+            '<p class="source-note" style="margin:.2rem 0 0;">Publishes to the public Action Bulletin immediately. Internal references stay admin-only.</p>' +
+            '</div>';
+        if (existing) {
+            document.getElementById('action-category').value = existing.category || 'Faculty';
+            document.getElementById('action-title').value = existing.title || '';
+            document.getElementById('action-summary').value = existing.summary || '';
+            document.getElementById('action-status').value = existing.status || 'acknowledged';
+            document.getElementById('action-resolution').value = existing.resolution_note || '';
+            document.getElementById('action-internal').value = existing.internal_reference || '';
+        }
+        wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    },
+
+    saveActionUpdate: function(editId) {
+        var payload = {
+            category: document.getElementById('action-category').value,
+            title: document.getElementById('action-title').value.trim(),
+            summary: document.getElementById('action-summary').value.trim(),
+            status: document.getElementById('action-status').value,
+            resolution_note: document.getElementById('action-resolution').value.trim() || null,
+            internal_reference: document.getElementById('action-internal').value.trim() || null
+        };
+        if (payload.title.length < 3) { showToast('Title must be at least 3 characters.', 'warning'); return; }
+        if (payload.summary.length < 10) { showToast('Summary must be at least 10 characters.', 'warning'); return; }
+        showLoading(editId ? 'Saving...' : 'Publishing...');
+        var req = editId ? API.updateActionUpdate(editId, payload) : API.createActionUpdate(payload);
+        req.then(function() {
+            showToast(editId ? 'Update saved.' : 'Update published to the public bulletin.', 'success');
+            var list = document.getElementById('action-form-wrap');
+            if (list) list.classList.add('hidden');
+            API.getActionUpdates().then(function(posts) { ADMIN.renderActionList(posts); });
+        }).catch(function(err) { showToast(escapeHtml(err.message), 'error'); }).finally(function() { hideLoading(); });
+    },
+
+    deleteActionUpdate: function(id) {
+        if (!confirm('Delete this action update? It will no longer appear on the public bulletin.')) return;
+        showLoading('Deleting...');
+        API.deleteActionUpdate(id).then(function() {
+            showToast('Update deleted.', 'success');
+            API.getActionUpdates().then(function(posts) { ADMIN.renderActionList(posts); });
+        }).catch(function(err) { showToast(escapeHtml(err.message), 'error'); }).finally(function() { hideLoading(); });
     }
 };
