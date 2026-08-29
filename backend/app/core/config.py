@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Asiatech Sentiment Analysis API"
     PROJECT_DESCRIPTION: str = (
         "Sentiment Analysis of Student Feedback from Asiatech College of "
-        "Sta. Rosa, Laguna using SVM, Random Forest and BERT."
+        "Sta. Rosa, Laguna using XGBoost, DeBERTa and RoBERTa."
     )
     VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
@@ -125,15 +125,7 @@ class Settings(BaseSettings):
     ML_DIR: Path = BASE_DIR / "app" / "ml"
     DATASETS_DIR: Path = BASE_DIR / "app" / "datasets"
 
-    # Legacy paths (kept for backward compat; the new pipeline no longer
-    # loads/produces these).
-    SVM_MODEL_PATH: Path = ML_DIR / "svm_model.pkl"
-    RANDOM_FOREST_MODEL_PATH: Path = ML_DIR / "random_forest.pkl"
-    NAIVE_BAYES_MODEL_PATH: Path = ML_DIR / "naive_bayes.pkl"
-    TFIDF_VECTORIZER_PATH: Path = ML_DIR / "tfidf_vectorizer.pkl"
-    LABEL_ENCODER_PATH: Path = ML_DIR / "label_encoder.pkl"
-
-    # New paths.
+    # Active paths.
     XGB_MODEL_PATH: Path = ML_DIR / "xgb_model.pkl"
     XGB_TFIDF_VECTORIZER_PATH: Path = ML_DIR / "tfidf_vectorizer_xgb.pkl"
     XGB_LABEL_ENCODER_PATH: Path = ML_DIR / "label_encoder_xgb.pkl"
@@ -143,16 +135,11 @@ class Settings(BaseSettings):
     MODEL_METADATA_PATH: Path = ML_DIR / "model_metadata.json"
     COMPARISON_RESULTS_PATH: Path = ML_DIR / "comparison_results.json"
 
-    # `BERT_MODEL_NAME` is kept as a deprecated alias for backward
-    # compatibility with existing `.env` files; the new code reads
-    # `ROBERTA_MODEL_NAME` instead.
-    BERT_MODEL_NAME: str = "cardiffnlp/twitter-roberta-base-sentiment"
     # General RoBERTa is fine-tuned on the actual student-feedback labels;
     # avoid treating a Twitter-domain sentiment checkpoint as a final model.
     ROBERTA_MODEL_NAME: str = "roberta-base"
     DEBERTA_MODEL_NAME: str = "microsoft/deberta-v3-base"
 
-    BERT_DEVICE: str = "cpu"  # "cuda" if a GPU is available
     TRANSFORMER_DEVICE: str = "cpu"
 
     RANDOM_STATE: int = 42
@@ -209,11 +196,6 @@ def get_settings() -> Settings:
         settings.TEMP_VALIDATION_ROOT = validation_root
         settings.ML_DIR = validation_root / "ml"
         settings.DATASETS_DIR = validation_root / "datasets"
-        settings.SVM_MODEL_PATH = settings.ML_DIR / "svm_model.pkl"
-        settings.RANDOM_FOREST_MODEL_PATH = settings.ML_DIR / "random_forest.pkl"
-        settings.NAIVE_BAYES_MODEL_PATH = settings.ML_DIR / "naive_bayes.pkl"
-        settings.TFIDF_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer.pkl"
-        settings.LABEL_ENCODER_PATH = settings.ML_DIR / "label_encoder.pkl"
         settings.XGB_MODEL_PATH = settings.ML_DIR / "xgb_model.pkl"
         settings.XGB_TFIDF_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_xgb.pkl"
         settings.XGB_LABEL_ENCODER_PATH = settings.ML_DIR / "label_encoder_xgb.pkl"

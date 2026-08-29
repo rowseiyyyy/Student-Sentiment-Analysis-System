@@ -23,12 +23,8 @@ from app.services.training import run_full_training  # noqa: E402
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train SVM/Naive Bayes/Random Forest and evaluate BERT.")
+    parser = argparse.ArgumentParser(description="Train XGBoost and fine-tune DeBERTa/RoBERTa.")
     parser.add_argument("--dataset", required=True, help="Path to a labeled CSV (id, category, comment, sentiment).")
-    parser.add_argument("--n-estimators", type=int, default=300, help="Random Forest tree count.")
-    parser.add_argument("--max-depth", type=int, default=None, help="Random Forest max tree depth.")
-    parser.add_argument("--min-samples-split", type=int, default=2, help="Random Forest min samples to split a node.")
-    parser.add_argument("--skip-bert", action="store_true", help="Skip BERT evaluation (faster, classical models only).")
     args = parser.parse_args()
 
     csv_path = Path(args.dataset)
@@ -41,14 +37,7 @@ def main() -> None:
 
     try:
         print(f"Training on dataset: {csv_path}")
-        summary = run_full_training(
-            db,
-            csv_path,
-            n_estimators=args.n_estimators,
-            max_depth=args.max_depth,
-            min_samples_split=args.min_samples_split,
-            evaluate_bert=not args.skip_bert,
-        )
+        summary = run_full_training(db, csv_path)
 
         print("\n=== Model Comparison ===")
         print(f"{'Algorithm':<15}{'Accuracy':<10}{'Weighted F1':<14}{'Train (s)':<12}{'Infer (ms)':<12}")

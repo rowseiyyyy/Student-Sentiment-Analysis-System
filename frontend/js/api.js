@@ -201,20 +201,29 @@ async getEvaluations(params = {}) {
     // ANALYTICS ENDPOINTS
     // ============================================================
 
-    async getOverallAnalytics() {
-        return this.get('/analytics/overall');
+    // Turn an optional query-string (e.g. "days=30&category=Faculty")
+    // into a "?..." segment (or "sep..." with a custom separator), or ''
+    // when empty/absent.
+    _buildQuery(params, sep = '?') {
+        if (!params) return '';
+        var qs = String(params).replace(/^\?/, '');
+        return qs ? (sep + qs) : '';
     },
 
-    async getCategoryAnalytics(category) {
-        return this.get(`/analytics/category?category=${encodeURIComponent(category)}`);
+    async getOverallAnalytics(params) {
+        return this.get('/analytics/overall' + this._buildQuery(params));
     },
 
-    async getMonthlyTrend() {
-        return this.get('/analytics/monthly');
+    async getCategoryAnalytics(category, params) {
+        return this.get(`/analytics/category?category=${encodeURIComponent(category)}${this._buildQuery(params, '&')}`);
     },
 
-    async getDailyTrend() {
-        return this.get('/analytics/daily');
+    async getMonthlyTrend(params) {
+        return this.get('/analytics/monthly' + this._buildQuery(params));
+    },
+
+    async getDailyTrend(params) {
+        return this.get('/analytics/daily' + this._buildQuery(params));
     },
 
     async getWordFrequency(sentiment, topN = 30) {

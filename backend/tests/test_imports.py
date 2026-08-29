@@ -1,16 +1,14 @@
 from unittest.mock import patch
 
 PREDICTION_RESULT = {
-    "svm_prediction": "Positive",
-    "svm_confidence": 0.91,
-    "random_forest_prediction": "Positive",
-    "random_forest_confidence": 0.88,
-    "naive_bayes_prediction": "Neutral",
-    "naive_bayes_confidence": 0.70,
-    "bert_prediction": "Positive",
-    "bert_confidence": 0.95,
+    "xgb_prediction": "Positive",
+    "xgb_confidence": 0.91,
+    "deberta_prediction": "Positive",
+    "deberta_confidence": 0.90,
+    "roberta_prediction": "Positive",
+    "roberta_confidence": 0.90,
     "official_prediction": "Positive",
-    "algorithm_used": "SVM",
+    "algorithm_used": "XGBoost",
     "confidence_score": 0.91,
     "processing_time_ms": 12.5,
 }

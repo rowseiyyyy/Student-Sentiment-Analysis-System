@@ -276,7 +276,9 @@ a:hover {
    ============================================================ */
 .card {
   background: var(--paper-raised);
-  border: 1px solid var(--paper-line);
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   padding: 1.5rem;
   margin-bottom: 1rem;
 }
@@ -309,36 +311,28 @@ a:hover {
 
 .stat-card {
   background: var(--paper-raised);
-  border: 1px solid var(--paper-line);
-  border-top: none;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   padding: 1.15rem 1.1rem 1rem;
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: stretch;   /* equal-height content column in every card */
+  min-height: 124px;      /* uniform card height across the KPI grid */
   gap: 1rem;
 }
 
-.stat-card::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  left: 0;
-  right: 0;
-  height: 8px;
-  background-image: radial-gradient(
-    circle at 6px 4px,
-    transparent 3px,
-    var(--paper-raised) 3.3px
-  );
-  background-size: 12px 8px;
-  background-repeat: repeat-x;
-  border-top: 1px dashed var(--paper-line);
+.stat-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* pins number/title to top, caption & badge to bottom */
 }
 
 .stat-icon {
   width: 44px;
   height: 44px;
-  border: 1px solid var(--paper-line);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -638,11 +632,6 @@ tbody tr:last-child td {
   color: #fff;
 }
 
-.ledger-fill.vol {
-    background: var(--ink-faint);
-}
-
-/* Course / Year selector card */
 .course-year-card{
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
@@ -856,26 +845,11 @@ tbody tr:last-child td {
 
 .chart-card {
   background: var(--paper-raised);
-  border: 1px solid var(--paper-line);
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   padding: 1.35rem;
   position: relative;
-}
-
-.chart-card::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  left: 0;
-  right: 0;
-  height: 8px;
-  background-image: radial-gradient(
-    circle at 6px 4px,
-    transparent 3px,
-    var(--paper-raised) 3.3px
-  );
-  background-size: 12px 8px;
-  background-repeat: repeat-x;
-  border-top: 1px dashed var(--paper-line);
 }
 
 .chart-card h3 {
@@ -891,6 +865,159 @@ tbody tr:last-child td {
   width: 100%;
 }
 
+/* ============================================================
+   TREND BADGES & SPARKLINES (KPI cards)
+   ============================================================ */
+.trend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: .14rem .45rem;
+  border-radius: 999px;
+  margin-top: .3rem;
+  margin-right: .4rem;
+  border: 1px solid transparent;
+  vertical-align: middle;
+  cursor: default;
+}
+.trend-badge.good {
+  color: var(--pos);
+  background: rgba(47, 111, 78, .1);
+  border-color: rgba(47, 111, 78, .35);
+}
+.trend-badge.bad {
+  color: var(--neg);
+  background: rgba(179, 58, 58, .1);
+  border-color: rgba(179, 58, 58, .35);
+}
+.trend-badge.flat {
+  color: var(--ink-faint);
+  background: rgba(0, 0, 0, .04);
+  border-color: var(--paper-line, #ddd);
+}
+.sparkline {
+  display: block;
+  width: 80px;
+  height: 24px;
+  margin: .35rem 0 .1rem;
+  opacity: .85;
+}
+
+/* ============================================================
+   GLOBAL FILTER BAR (Overview tab)
+   ============================================================ */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+  justify-content: flex-end;
+  background: var(--paper-alt, #f7f6f1);
+  border: 1px solid var(--paper-line, #ddd);
+  border-radius: 6px;
+  padding: .5rem .75rem;
+  margin: 0 0 .9rem;
+}
+.filter-bar .filter-label {
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.filter-bar select {
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  padding: .28rem .5rem;
+  border: 1px solid var(--paper-line, #ccc);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink, #222);
+  cursor: pointer;
+}
+.filter-bar .filter-scope {
+  flex-basis: 100%;
+  font-family: var(--font-mono);
+  font-size: .6rem;
+  color: var(--ink-faint);
+  text-align: right;
+}
+
+/* ============================================================
+   WINNING MODEL HIGHLIGHT (performance tables)
+   ============================================================ */
+.perf-table tr.winner-row td {
+  background: rgba(47, 111, 78, .07);
+  border-top: 1px solid rgba(47, 111, 78, .3);
+  border-bottom: 1px solid rgba(47, 111, 78, .3);
+}
+.perf-table tr.winner-row td:first-child {
+  border-left: 3px solid rgba(47, 111, 78, .55);
+}
+.winner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  font-family: var(--font-mono);
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--pos);
+  background: rgba(47, 111, 78, .12);
+  border: 1px solid rgba(47, 111, 78, .4);
+  border-radius: 999px;
+  padding: .1rem .45rem;
+  margin-left: .35rem;
+  vertical-align: middle;
+}
+
+/* ============================================================
+   SOURCE NOTES & INFO BADGES
+   Long grey monospace explanations render as a subtle restyled
+   caption (small, no wide letter-spacing); long ones collapse
+   into a hover tooltip via an (i) badge added by
+   ADMIN.compressNotes().
+   ============================================================ */
+.source-note {
+  display: block;
+  font-family: var(--font);
+  font-size: .66rem;
+  line-height: 1.45;
+  letter-spacing: normal;
+  color: var(--ink-faint);
+  margin: .1rem 0 .6rem;
+}
+.source-note strong {
+  color: var(--ink-soft);
+}
+.note-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: .58rem;
+  color: var(--ink-faint);
+  background: rgba(0, 0, 0, .05);
+  border: 1px solid #E5E7EB;
+  cursor: help;
+  vertical-align: middle;
+  margin: 0 .35rem .35rem 0;
+}
+.note-badge:hover {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+
+/* ============================================================
+   LEDGER BARS (Visual bar charts)
+   ============================================================ */
 /* ============================================================
    LEDGER BARS (Visual bar charts)
    ============================================================ */
@@ -914,13 +1041,16 @@ tbody tr:last-child td {
 }
 
 .ledger-track {
-  height: 10px;
+  height: 14px;
   background: var(--paper);
   border: 1px solid var(--paper-line);
+  display: flex;
+  overflow: hidden;
 }
 
 .ledger-fill {
   height: 100%;
+  flex: 0 0 auto;
 }
 
 .ledger-fill.pos {

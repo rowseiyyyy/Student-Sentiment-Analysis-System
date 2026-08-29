@@ -13,14 +13,7 @@ def _register_and_login(client, email="student@example.com", role="student"):
 @patch("app.api.evaluation.run_prediction_pipeline")
 def test_submit_evaluation(mock_pipeline, client):
     mock_pipeline.return_value = {
-        "svm_prediction": "Positive",
-        "svm_confidence": 0.91,
-        "random_forest_prediction": "Positive",
-        "random_forest_confidence": 0.88,
-        "naive_bayes_prediction": "Positive",
-        "naive_bayes_confidence": 0.85,
-        "bert_prediction": "Positive",
-        "bert_confidence": 0.95,
+
         "xgb_prediction": "Positive",
         "xgb_confidence": 0.91,
         "deberta_prediction": "Positive",
@@ -30,7 +23,7 @@ def test_submit_evaluation(mock_pipeline, client):
         "ensemble_prediction": "Positive",
         "ensemble_confidence": 0.90,
         "official_prediction": "Positive",
-        "algorithm_used": "SVM",
+        "algorithm_used": "XGBoost",
         "confidence_score": 0.91,
         "processing_time_ms": 12.5,
     }
@@ -85,14 +78,7 @@ def test_faculty_can_list_all_evaluations_but_not_delete(mock_pipeline, client):
     faculty_token = _register_and_login(client, email="faculty@example.com", role="faculty")
 
     mock_pipeline.return_value = {
-        "svm_prediction": "Positive",
-        "svm_confidence": 0.91,
-        "random_forest_prediction": "Positive",
-        "random_forest_confidence": 0.88,
-        "naive_bayes_prediction": "Positive",
-        "naive_bayes_confidence": 0.85,
-        "bert_prediction": "Positive",
-        "bert_confidence": 0.95,
+
         "xgb_prediction": "Positive",
         "xgb_confidence": 0.91,
         "deberta_prediction": "Positive",
@@ -102,7 +88,7 @@ def test_faculty_can_list_all_evaluations_but_not_delete(mock_pipeline, client):
         "ensemble_prediction": "Positive",
         "ensemble_confidence": 0.90,
         "official_prediction": "Positive",
-        "algorithm_used": "SVM",
+        "algorithm_used": "XGBoost",
         "confidence_score": 0.91,
         "processing_time_ms": 12.5,
     }
@@ -140,14 +126,7 @@ def test_faculty_can_list_all_evaluations_but_not_delete(mock_pipeline, client):
 @patch("app.api.evaluation.run_prediction_pipeline")
 def test_student_can_only_see_own_submissions(mock_pipeline, client):
     mock_pipeline.return_value = {
-        "svm_prediction": "Positive",
-        "svm_confidence": 0.91,
-        "random_forest_prediction": "Positive",
-        "random_forest_confidence": 0.88,
-        "naive_bayes_prediction": "Positive",
-        "naive_bayes_confidence": 0.85,
-        "bert_prediction": "Positive",
-        "bert_confidence": 0.95,
+
         "xgb_prediction": "Positive",
         "xgb_confidence": 0.91,
         "deberta_prediction": "Positive",
@@ -157,7 +136,7 @@ def test_student_can_only_see_own_submissions(mock_pipeline, client):
         "ensemble_prediction": "Positive",
         "ensemble_confidence": 0.90,
         "official_prediction": "Positive",
-        "algorithm_used": "SVM",
+        "algorithm_used": "XGBoost",
         "confidence_score": 0.91,
         "processing_time_ms": 12.5,
     }

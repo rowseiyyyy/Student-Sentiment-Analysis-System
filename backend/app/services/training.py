@@ -16,9 +16,6 @@ selected on an untouched validation split and the resulting metrics are
 computed on the untouched final test set. The best-performing individual
 model *or* ensemble is then selected, its metadata and selected weights are
 persisted, and the same selection is used at runtime inference.
-
-Legacy SVM / Naive Bayes / Random Forest / BERT are retained as historical
-compatibility records, but no longer participate in the active pipeline.
 """
 from __future__ import annotations
 
@@ -536,7 +533,6 @@ def run_full_training(
     n_estimators: int = 300,
     max_depth: int | None = None,
     min_samples_split: int = 2,
-    evaluate_bert: bool = True,
 ) -> dict:
     """Train and evaluate the approved XGBoost/DeBERTa/RoBERTa active pipeline.
 

@@ -5,7 +5,7 @@
  * All data fetching, export, CRUD logic preserved.
  *
  * FIXES APPLIED (this version):
- * 1. Chart race condition — destroyCharts() was being called inside
+ * 1. Chart race condition â€” destroyCharts() was being called inside
  *    renderSentimentChart's setTimeout, which could wipe out the
  *    Model Performance chart if its timeout fired first. Charts are
  *    now destroyed exactly once, before either chart is (re)drawn.
@@ -18,7 +18,7 @@
  * 3. Added small "source" captions under Overview cards so it's clear
  *    where each number/chart comes from (which API endpoint / what
  *    it's counting), since that was the root of the "confusing" complaint.
- * 4. DATA-LINEAGE LABELING — the dashboard silently mixed two unrelated
+ * 4. DATA-LINEAGE LABELING â€” the dashboard silently mixed two unrelated
  *    data sources on one screen: (a) live evaluation-form submissions,
  *    all-time, from the evaluations/predictions tables, and (b) ML
  *    training-run metrics, per-algorithm latest run, from the model
@@ -29,7 +29,7 @@
  *    have explicit section banners ("Live Submission Data" vs "Latest
  *    Model Training Results") plus precise per-widget captions stating
  *    exactly what's counted and over what time range.
- * 5. BULK DELETE — the Responses tab only supported deleting one
+ * 5. BULK DELETE â€” the Responses tab only supported deleting one
  *    evaluation at a time. Each row now has a selection checkbox, plus
  *    a "select all on this page" header checkbox, and a bulk-action
  *    toolbar that appears once at least one row is selected, letting
@@ -49,6 +49,10 @@ var ADMIN = {
     // on page 1, flip to page 2, and still bulk-delete both batches
     // together. Cleared on tab entry and after a successful delete.
     selectedIds: new Set(),
+    // Global dashboard filters (Overview tab). '' means All-time / All
+    // departments. Applied to every submission-data widget on the tab;
+    // the Model Performance table is training-run data and is unaffected.
+    overviewFilters: { days: '', category: '' },
 
     init: function() {
         var user = API.getUser();
@@ -116,82 +120,213 @@ var ADMIN = {
     },
 
     // ============================================================
-    // OVERVIEW TAB — Paper theme design
+    // OVERVIEW TAB â€” Paper theme design
     // ============================================================
     renderOverview: async function(container) {
         container.innerHTML = '<div class="text-center mt-4"><div class="spinner"></div><p>Loading overview...</p></div>';
         try {
-            var overall = await API.getOverallAnalytics();
+            var f = this.overviewFilters;
+            var filterParams = [];
+            if (f.days) filterParams.push('days=' + encodeURIComponent(f.days));
+            if (f.category) filterParams.push('category=' + encodeURIComponent(f.category));
+            var filterQs = filterParams.join('&');
+
+            var overall = await API.getOverallAnalytics(filterQs || null);
             var perf = await API.getModelPerformance();
             var perfRows = filterModelPerfRows(perf.rows);
+            // Best-performing row: the model with the highest metrics
+            // (max F1-score, accuracy as tie-break) â€” independent of the
+            // backend's production/best_model declaration, which may
+            // point at a different row than the metric leader.
+            var winnerAlgo = null;
+            if (perfRows.length) {
+                var bestRow = perfRows.reduce(function(a, b) {
+                    var fa = [(a.f1_score || 0), (a.accuracy || 0)];
+                    var fb = [(b.f1_score || 0), (b.accuracy || 0)];
+                    return (fb[0] > fa[0] || (fb[0] === fa[0] && fb[1] > fa[1])) ? b : a;
+                });
+                winnerAlgo = bestRow.algorithm;
+            }
 
-            // "By Department" = total evaluation COUNT per category, from
-            // GET /analytics/category?category=X (the .breakdown.total field).
-            // This is a volume chart, not a sentiment chart — see fix #2 note above.
+            // "By Department" = sentiment distribution per category, from
+            // GET /analytics/category?category=X (the .breakdown
+            // positive/neutral/negative counts). Each row is a stacked
+            // horizontal bar: green = Positive, yellow = Neutral,
+            // red = Negative; segment widths are proportional to the
+            // largest department total so rows remain comparable.
             var categories = ['Faculty', 'Staff', 'Facilities', 'Payment'];
             var catData = await Promise.all(categories.map(function(c) {
-                return API.getCategoryAnalytics(c).catch(function() { return null; });
+                return API.getCategoryAnalytics(c, filterQs || null).catch(function() { return null; });
             }));
             var maxCatTotal = 1;
-            var ledgerRowsHtml = categories.map(function(c, i) {
+            var ledgerRows = categories.map(function(c, i) {
                 var d = catData[i];
-                var total = d && d.breakdown ? (d.breakdown.total || 0) : 0;
+                var b = (d && d.breakdown) || {};
+                var counts = {
+                    pos: b.positive || 0,
+                    neu: b.neutral || 0,
+                    neg: b.negative || 0
+                };
+                var total = b.total || (counts.pos + counts.neu + counts.neg);
                 if (total > maxCatTotal) maxCatTotal = total;
-                return { label: c, total: total };
-            }).map(function(r) {
-                var pct = maxCatTotal > 0 ? Math.round((r.total / maxCatTotal) * 100) : 0;
-                // FIX: color no longer depends on category name (was always
-                // green for Faculty, yellow for Staff, red for Facilities/
-                // Payment regardless of real sentiment). Single neutral fill
-                // since this bar represents COUNT, not sentiment.
-                var fillClass = r.total === 0 ? '' : 'vol';
+                return { label: c, total: total, counts: counts };
+            });
+            var ledgerRowsHtml = ledgerRows.map(function(r) {
+                var seg = function(count, cls, name) {
+                    if (count <= 0) return '';
+                    var w = (count / maxCatTotal) * 100;
+                    return '<div class="ledger-fill ' + cls + '" style="width:' + w + '%" title="' + name + ': ' + count + '"></div>';
+                };
                 var displayLabel = r.label === 'Payment' ? 'Payments' : r.label;
-                return '<div class="ledger-row"><span class="label">' + displayLabel + '</span><div class="ledger-track"><div class="ledger-fill ' + fillClass + '" style="width:' + pct + '%"></div></div><span class="pct">' + r.total + '</span></div>';
+                var countLabel = r.total > 0
+                    ? r.counts.pos + ' pos Â· ' + r.counts.neu + ' neu Â· ' + r.counts.neg + ' neg'
+                    : 'No submissions';
+                return '<div class="ledger-row"><span class="label">' + displayLabel + '</span><div class="ledger-track">' +
+                    seg(r.counts.pos, 'pos', 'Positive') + seg(r.counts.neu, 'neu', 'Neutral') + seg(r.counts.neg, 'neg', 'Negative') +
+                    '</div><span class="pct" title="' + countLabel + '">' + r.total + '</span></div>';
             }).join('');
+
+            // ---- Trend & change indicators (KPI badges + sparklines) ----
+            // Uses GET /analytics/monthly: compares the current calendar
+            // month against the previous one and renders a mini sparkline
+            // of the last 6 months for each KPI card.
+            var monthly = await API.getMonthlyTrend(filterQs || null).catch(function() { return { points: [] }; });
+            var mPoints = (monthly && monthly.points) || [];
+
+            function trendBadge(cur, prev, opts) {
+                opts = opts || {};
+                // invert: for metrics where "up" is bad (e.g. negative
+                // feedback), a rising value is shown in red instead of green.
+                var invert = !!opts.invert;
+                var upCls = invert ? 'bad' : 'good';
+                var downCls = invert ? 'good' : 'bad';
+                if (prev === 0 && cur === 0) {
+                    return '<span class="trend-badge flat"><i class="fas fa-minus"></i> 0% vs last month</span>';
+                }
+                if (prev === 0) {
+                    return '<span class="trend-badge ' + upCls + '"><i class="fas fa-arrow-up"></i> new this month</span>';
+                }
+                var pct = ((cur - prev) / prev) * 100;
+                if (Math.abs(pct) < 0.05) {
+                    return '<span class="trend-badge flat"><i class="fas fa-minus"></i> 0% vs last month</span>';
+                }
+                var cls = pct > 0 ? upCls : downCls;
+                var arrow = pct > 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+                var tooltip = (pct > 0 ? '+' : '') + pct.toFixed(1) + '% vs last month (' + prev + ' â†’ ' + cur + ')';
+                return '<span class="trend-badge ' + cls + '" title="' + tooltip + '"><i class="fas ' + arrow + '"></i> ' +
+                    (pct > 0 ? '+' : '') + Math.round(pct) + '%</span>';
+            }
+
+            function sparkline(series, color) {
+                // Inline SVG polyline of the last 6 monthly values.
+                var data = series.slice(-6);
+                if (data.length < 2 || data.every(function(v) { return v === 0; })) {
+                    return '<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none"><line x1="0" y1="22" x2="80" y2="22" stroke="' + color + '" stroke-dasharray="2,2" stroke-width="1" opacity=".45"/></svg>';
+                }
+                var max = Math.max.apply(null, data);
+                var step = 80 / (data.length - 1);
+                var pts = data.map(function(v, i) {
+                    var x = i * step;
+                    var y = max === 0 ? 22 : 22 - (v / max) * 20;
+                    return x.toFixed(1) + ',' + y.toFixed(1);
+                }).join(' ');
+                return '<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none"><polyline points="' + pts +
+                    '" fill="none" stroke="' + color + '" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+            }
+
+            var byPeriod = {};
+            mPoints.forEach(function(p) { byPeriod[p.period] = p; });
+            var nowKey = new Date().toISOString().slice(0, 7);
+            var prevDate = new Date();
+            prevDate.setMonth(prevDate.getMonth() - 1);
+            var prevKey = prevDate.toISOString().slice(0, 7);
+            var curMonth = byPeriod[nowKey] || { positive: 0, neutral: 0, negative: 0, total: 0 };
+            var prevMonth = byPeriod[prevKey] || { positive: 0, neutral: 0, negative: 0, total: 0 };
+            // Fallback: if the current calendar month has no submissions yet
+            // (e.g. early in the month), compare against the latest two
+            // recorded months so the badge still reflects recent movement.
+            if (!byPeriod[nowKey] && mPoints.length >= 2) {
+                curMonth = mPoints[mPoints.length - 1];
+                prevMonth = mPoints[mPoints.length - 2];
+            }
+            var sparkSeries = function(key) {
+                return mPoints.slice(-6).map(function(p) { return p[key] || 0; });
+            };
+
+            var trendPos = trendBadge(curMonth.positive, prevMonth.positive);
+            var trendNeu = trendBadge(curMonth.neutral, prevMonth.neutral);
+            var trendNeg = trendBadge(curMonth.negative, prevMonth.negative, { invert: true });
+            var trendTot = trendBadge(curMonth.total, prevMonth.total);
+            var sparkPos = sparkline(sparkSeries('positive'), '#2f6f4e');
+            var sparkNeu = sparkline(sparkSeries('neutral'), '#b7791f');
+            var sparkNeg = sparkline(sparkSeries('negative'), '#b33a3a');
+            var sparkTot = sparkline(sparkSeries('total'), '#2b3a67');
+            var trendPeriod = (byPeriod[nowKey] ? nowKey : (mPoints.length ? mPoints[mPoints.length - 1].period : '')) || 'â€”';
 
             container.innerHTML = '' +
                 '<div class="page-header">' +
                     '<div>' +
-                        '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Casefile Overview — All Departments</span>' +
+                        '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Casefile Overview â€” All Departments</span>' +
                         '<h1>Dashboard Overview</h1>' +
                     '</div>' +
                     '<div class="date-note">Compiled ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '</div>' +
                 '</div>' +
-                '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px dashed var(--paper-line);padding:.4rem .6rem;margin-bottom:.75rem;">' +
-                    '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">— every card and chart below, up to and including the "Model Performance" table row for status, reflects ALL evaluation-form submissions ever received (not filtered by dataset or date), except where noted.</span>' +
+                '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
+                    '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">â€” every card and chart below, up to and including the "Model Performance" table row for status, reflects ALL evaluation-form submissions ever received (not filtered by dataset or date), except where noted.</span>' +
+                '</div>' +
+                '<div class="filter-bar">' +
+                    '<span class="filter-label"><i class="fas fa-filter"></i> Filter:</span>' +
+                    '<select id="ov-filter-days" onchange="ADMIN.setOverviewFilter(\'days\', this.value)" title="Date range">' +
+                        '<option value=""' + (f.days === '' ? ' selected' : '') + '>All-time</option>' +
+                        '<option value="7"' + (f.days === '7' ? ' selected' : '') + '>Last 7 days</option>' +
+                        '<option value="30"' + (f.days === '30' ? ' selected' : '') + '>Last 30 days</option>' +
+                        '<option value="90"' + (f.days === '90' ? ' selected' : '') + '>Last 90 days</option>' +
+                    '</select>' +
+                    '<select id="ov-filter-category" onchange="ADMIN.setOverviewFilter(\'category\', this.value)" title="Department">' +
+                        '<option value=""' + (f.category === '' ? ' selected' : '') + '>All Departments</option>' +
+                        categories.map(function(c) {
+                            var label = c === 'Payment' ? 'Payments' : c;
+                            return '<option value="' + c + '"' + (f.category === c ? ' selected' : '') + '>' + label + '</option>';
+                        }).join('') +
+                    '</select>' +
+                    (filterQs ? '<button class="btn btn-sm btn-outline" onclick="ADMIN.clearOverviewFilters()"><i class="fas fa-times"></i> Reset</button>' : '') +
+                    '<span class="filter-scope">Applies to all submission charts below. Model Performance reflects training runs and is unaffected.</span>' +
                 '</div>' +
                 '<div class="stats-grid">' +
-                    '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-smile"></i></div><div class="stat-info"><h3>' + (overall.breakdown.positive || 0) + '</h3><p>Positive Feedbacks</p><small>' + (overall.breakdown.positive_pct ? overall.breakdown.positive_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time, all submissions</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-meh"></i></div><div class="stat-info"><h3>' + (overall.breakdown.neutral || 0) + '</h3><p>Neutral Feedbacks</p><small>' + (overall.breakdown.neutral_pct ? overall.breakdown.neutral_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time, all submissions</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon red"><i class="fas fa-frown"></i></div><div class="stat-info"><h3>' + (overall.breakdown.negative || 0) + '</h3><p>Negative Feedbacks</p><small>' + (overall.breakdown.negative_pct ? overall.breakdown.negative_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time, all submissions</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3>' + (overall.evaluation_volume || 0) + '</h3><p>Total Evaluations</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time count of submitted evaluation forms</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon purple"><i class="fas fa-chart-bar"></i></div><div class="stat-info"><h3>' + (overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A') + '</h3><p>Avg Confidence</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
+                    '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-smile"></i></div><div class="stat-info"><h3>' + (overall.breakdown.positive || 0) + '</h3><p>Positive Feedbacks</p>' + sparkPos + trendPos + '<small>' + (overall.breakdown.positive_pct ? overall.breakdown.positive_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time, all submissions</small></div></div>' +
+                    '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-meh"></i></div><div class="stat-info"><h3>' + (overall.breakdown.neutral || 0) + '</h3><p>Neutral Feedbacks</p>' + sparkNeu + trendNeu + '<small>' + (overall.breakdown.neutral_pct ? overall.breakdown.neutral_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time, all submissions</small></div></div>' +
+                    '<div class="stat-card"><div class="stat-icon red"><i class="fas fa-frown"></i></div><div class="stat-info"><h3>' + (overall.breakdown.negative || 0) + '</h3><p>Negative Feedbacks</p>' + sparkNeg + trendNeg + '<small>' + (overall.breakdown.negative_pct ? overall.breakdown.negative_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time, all submissions Â· badge compares ' + trendPeriod + ' vs prior month</small></div></div>' +
+                    '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3>' + (overall.evaluation_volume || 0) + '</h3><p>Total Evaluations</p>' + sparkTot + trendTot + '<small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time count of submitted evaluation forms</small></div></div>' +
+                    '<div class="stat-card"><div class="stat-icon purple"><i class="fas fa-chart-bar"></i></div><div class="stat-info"><h3>' + (overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A') + '</h3><p>Avg Confidence</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
                 '</div>' +
                 '<div class="two-col">' +
                     '<div>' +
                         '<div class="chart-card" style="margin-bottom:1.1rem;">' +
                             '<h3><i class="fas fa-chart-pie"></i> Sentiment Distribution</h3>' +
-                            '<p class="source-note" style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-faint);margin:.15rem 0 .6rem;">All evaluation-form submissions ever received, classified positive / neutral / negative at the time each was submitted.' +
+                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">All evaluation-form submissions ever received, classified positive / neutral / negative at the time each was submitted.' +
                             '<div class="chart-container"><canvas id="chart-sentiment-overview"></canvas></div>' +
                         '</div>' +
                         '<div class="chart-card">' +
                             '<h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3>' +
-                            '<p class="source-note" style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> Accuracy &amp; F1 score measured on the held-out test split from each algorithm\'s most recent training run — one bar pair per algorithm\'s latest run, independent of how many students have submitted evaluations since.' +
+                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> Accuracy &amp; F1 score measured on the held-out test split from each algorithm\'s most recent training run â€” one bar pair per algorithm\'s latest run, independent of how many students have submitted evaluations since.' +
                             '<div class="chart-container"><canvas id="chart-model-perf"></canvas></div>' +
                         '</div>' +
                     '</div>' +
                     '<div>' +
                         '<div class="card" style="margin-bottom:1.1rem;">' +
                             '<div class="card-header"><h3><i class="fas fa-chart-bar"></i> By Department</h3></div>' +
-                            '<p class="source-note" style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-faint);margin:.15rem 0 .6rem;">Number of evaluation forms received per department, all-time (volume only — not a sentiment score)' +
+                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, all-time, stacked by predicted sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative; hover the count for the exact split)' +
                             '<div class="ledger-bars">' + ledgerRowsHtml + '</div>' +
                         '</div>' +
                         '<div class="card">' +
                             '<div class="card-header"><h3><i class="fas fa-table"></i> Model Performance</h3></div>' +
-                            '<p class="source-note" style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> One row per model showing metrics from that model\'s most recent training run only (not combined across datasets or runs).</p>' +
+                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> One row per model showing metrics from that model\'s most recent training run only (not combined across datasets or runs).</p>' +
                             '<div class="table-container"><table class="perf-table"><thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead><tbody>' +
                                 perfRows.map(function(r) {
-                                    return '<tr><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong></td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td></tr>';
+                                    var isWinner = winnerAlgo && r.algorithm === winnerAlgo;
+                                    return '<tr' + (isWinner ? ' class="winner-row"' : '') + '><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong>' +
+                                        (isWinner ? ' <span class="winner-badge" title="Highest F1-score of the trained models"><i class="fas fa-trophy"></i> Best</span>' : '') +
+                                        '</td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td></tr>';
                                 }).join('') +
                                 (perfRows.length === 0 ? '<tr><td colspan="5" class="text-center text-muted">No training data available.</td></tr>' : '') +
                             '</tbody></table></div>' +
@@ -203,8 +338,9 @@ var ADMIN = {
             // (re)drawing either chart. Previously destroyCharts() lived
             // inside renderSentimentChart's own setTimeout, so whichever
             // chart's 100ms timer fired second could wipe out the chart
-            // that had just been drawn by the other timer — a race
+            // that had just been drawn by the other timer â€” a race
             // condition that made the bar chart randomly vanish.
+            this.compressNotes(container);
             this.destroyCharts();
             this.renderSentimentChart(overall.breakdown);
             this.renderModelPerfChart(perfRows);
@@ -213,14 +349,75 @@ var ADMIN = {
         }
     },
 
+    clearOverviewFilters: function() {
+        this.overviewFilters = { days: '', category: '' };
+        var content = document.getElementById('admin-tab-content');
+        if (content) this.renderOverview(content); else this.renderTab('overview');
+    },
+
+    // Replace long grey monospace explanation paragraphs (class
+    // .source-note) with a compact "(i)" hover tooltip. Text under
+    // 90 chars is kept visible as a subtle caption; longer text
+    // collapses into the badge's native title tooltip.
+    compressNotes: function(root) {
+        (root || document).querySelectorAll('.source-note').forEach(function(note) {
+            if (note.dataset.compressed) return;
+            note.dataset.compressed = '1';
+            var text = note.textContent.trim();
+            if (!text) return;
+            if (text.length <= 90) return; // short caption: leave visible
+            var badge = document.createElement('span');
+            badge.className = 'note-badge';
+            badge.innerHTML = '<i class="fas fa-info"></i>';
+            badge.title = text.replace(/\s+/g, ' ');
+            note.innerHTML = '';
+            note.appendChild(badge);
+            note.style.display = 'inline-block';
+        });
+    },
+
+    setOverviewFilter: function(key, value) {
+        this.overviewFilters[key] = value;
+        var content = document.getElementById('admin-tab-content');
+        if (content) this.renderOverview(content); else this.renderTab('overview');
+    },
+
     renderSentimentChart: function(breakdown) {
         setTimeout(function() {
             var ctx = document.getElementById('chart-sentiment-overview');
             if (!ctx) return;
+            // Sleek donut: hollow centre shows the total feedback count
+            // (dominant sentiment % on hover is covered by tooltips).
+            var total = (breakdown.positive || 0) + (breakdown.neutral || 0) + (breakdown.negative || 0);
+            var centerText = {
+                id: 'centerText',
+                afterDraw: function(chart) {
+                    if (chart.config.type !== 'doughnut') return;
+                    var meta = chart.getDatasetMeta(0).data[0];
+                    if (!meta) return;
+                    var g = chart.ctx;
+                    g.save();
+                    g.textAlign = 'center';
+                    g.textBaseline = 'middle';
+                    g.font = '700 1.5rem "Public Sans", sans-serif';
+                    g.fillStyle = '#1c231f';
+                    g.fillText(String(total), meta.x, meta.y - 8);
+                    g.font = '500 .62rem "Public Sans", sans-serif';
+                    g.fillStyle = '#8b9389';
+                    g.fillText('TOTAL', meta.x, meta.y + 14);
+                    g.restore();
+                }
+            };
             ADMIN.charts.sentiment = new Chart(ctx, {
-                type: 'pie',
-                data: { labels: ['Positive', 'Neutral', 'Negative'], datasets: [{ data: [breakdown.positive || 0, breakdown.neutral || 0, breakdown.negative || 0], backgroundColor: ['#2f6f4e', '#b7791f', '#b33a3a'], borderWidth: 2, borderColor: '#f8f9f5' }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                type: 'doughnut',
+                data: { labels: ['Positive', 'Neutral', 'Negative'], datasets: [{ data: [breakdown.positive || 0, breakdown.neutral || 0, breakdown.negative || 0], backgroundColor: ['#2f6f4e', '#b7791f', '#b33a3a'], borderWidth: 2, borderColor: '#f8f9f5', hoverOffset: 6 }] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '68%',
+                    plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8 } } }
+                },
+                plugins: [centerText]
             });
         }, 100);
     },
@@ -232,13 +429,13 @@ var ADMIN = {
             ADMIN.charts.modelPerf = new Chart(ctx, {
                 type: 'bar',
                 data: { labels: rows.map(function(r) { return modelPerfDisplayName(r.algorithm); }), datasets: [{ label: 'Accuracy', data: rows.map(function(r) { return r.accuracy || 0; }), backgroundColor: '#2b3a67' }, { label: 'F1 Score', data: rows.map(function(r) { return r.f1_score || 0; }), backgroundColor: '#b7791f' }] },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1 } }, plugins: { legend: { position: 'bottom' } } }
+                options: { responsive: true, maintainAspectRatio: false, layout: { padding: { bottom: 6 } }, scales: { x: { ticks: { maxRotation: 0, autoSkip: false, padding: 8 } }, y: { beginAtZero: true, max: 1, ticks: { callback: function(value) { return Math.round(value * 100) + '%'; } } } }, plugins: { legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12 } }, tooltip: { callbacks: { label: function(item) { return item.dataset.label + ': ' + (item.parsed.y * 100).toFixed(1) + '%'; } } } } }
             });
         }, 100);
     },
 
     // ============================================================
-    // RESPONSES TAB — Paper theme design
+    // RESPONSES TAB â€” Paper theme design
     // ============================================================
         async renderResponses(container) {
         // Fresh entry into the tab starts with a clean selection.
@@ -256,6 +453,7 @@ var ADMIN = {
                     '<button class="btn btn-primary" onclick="ADMIN.exportXLSX()"><i class="fas fa-file-excel"></i> XLSX</button>' +
                 '</div>' +
             '</div>' +
+            '<div id="responses-summary"></div>' +
             '<div class="filter-bar">' +
                 '<select class="form-control" id="filter-category">' +
                     '<option value="">All Categories</option>' +
@@ -393,7 +591,37 @@ var ADMIN = {
         }
     },
 
-         async loadResponses() {
+         // Results summary strip at the top of the Responses tab: aggregated
+    // counts for the responses being browsed (optionally narrowed by the
+    // Category filter). Uses the existing analytics endpoints, so it
+    // always matches the Dashboard/Analytics figures.
+    renderResponsesSummary: function(category, summary, total, reviewCount) {
+        var el = document.getElementById('responses-summary');
+        if (!el) return;
+        var b = (summary && summary.breakdown) || {};
+        var pos = b.positive || 0, neu = b.neutral || 0, neg = b.negative || 0;
+        var scopeLabel = category ? this.getCategoryDisplayName(category) + ' responses' : 'all responses';
+        var card = function(icon, iconCls, value, label, sub) {
+            return '<div class="stat-card"><div class="stat-icon ' + iconCls + '"><i class="fas ' + icon + '"></i></div>' +
+                '<div class="stat-info"><h3>' + value + '</h3><p>' + label + '</p>' +
+                (sub ? '<small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">' + sub + '</small>' : '') +
+                '</div></div>';
+        };
+        var pct = function(n) { return b.total ? ((n / b.total) * 100).toFixed(1) + '%' : '0%'; };
+        var avgConf = summary && summary.average_confidence
+            ? (summary.average_confidence * 100).toFixed(1) + '%'
+            : 'N/A';
+        el.innerHTML = '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:1.1rem;">' +
+            card('fa-inbox', 'blue', (b.total || 0), 'Total Responses', scopeLabel) +
+            card('fa-smile', 'green', pos, 'Positive', pct(pos) + ' of all responses') +
+            card('fa-meh', 'yellow', neu, 'Neutral', pct(neu) + ' of all responses') +
+            card('fa-frown', 'red', neg, 'Negative', pct(neg) + ' of all responses') +
+            card('fa-bullseye', 'purple', avgConf, 'Avg Confidence', 'ML prediction confidence') +
+            card('fa-triangle-exclamation', 'yellow', (reviewCount || 0), 'Needs Review', 'Likert / sentiment mismatches') +
+        '</div>';
+    },
+
+    async loadResponses() {
         var needsReview = document.getElementById('filter-needs-review') ? document.getElementById('filter-needs-review').checked : false;
         var category = document.getElementById('filter-category') ? document.getElementById('filter-category').value : '';
         var search = document.getElementById('filter-search') ? document.getElementById('filter-search').value : '';
@@ -405,24 +633,21 @@ var ADMIN = {
         if (tableContainer) tableContainer.innerHTML = '';
 
         try {
-            var data = await API.getEvaluations({ category: this.getCategoryApiValue(category), page: this.currentPage, page_size: 20, has_submission: true, needs_review: needsReview });
+            var fetches = [
+                API.getEvaluations({ category: this.getCategoryApiValue(category), page: this.currentPage, page_size: 20, has_submission: true, needs_review: needsReview, search: search || undefined }),
+                category
+                    ? API.getCategoryAnalytics(category).catch(function() { return null; })
+                    : API.getOverallAnalytics().catch(function() { return null; }),
+                API.getEvaluations({ needs_review: true, page: 1, page_size: 1, category: this.getCategoryApiValue(category) || undefined }).catch(function() { return null; })
+            ];
+            var results = await Promise.all(fetches);
+            var data = results[0];
+            var summary = results[1];
+            var reviewData = results[2];
             var items = Array.isArray(data.items) ? data.items : [];
+
+            this.renderResponsesSummary(category, summary, data.total, reviewData && reviewData.total);
         
-            if (search) {
-                var q = search.toLowerCase();
-                items = items.filter(function(item) {
-                    var si = ADMIN.getStudentInfo(item);
-                                        var searchFields = [
-                        (si.student_id || ''),
-                        (si.course || ''),
-                        (si.year_level || ''),
-                        (item.share_your_thoughts || ''),
-                        (item.comment || ''),
-                        (item.category || '')
-                    ];
-                    return searchFields.some(function(f) { return String(f).toLowerCase().indexOf(q) !== -1; });
-                });
-            }
 
             if (items.length === 0) {
                 if (tableContainer) tableContainer.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-inbox"></i></div><h3>No Responses Found</h3><p>' + (search ? 'Try a different search term.' : 'No evaluations have been submitted yet.') + '</p></div>';
@@ -493,13 +718,13 @@ var ADMIN = {
     },
 
         // ------------------------------------------------------------
-    // RESPONSES TAB — Import Dataset (Google Form export)
+    // RESPONSES TAB â€” Import Dataset (Google Form export)
     // ------------------------------------------------------------
 
     openImportPanel: function() {
         var html = '' +
             '<div style="margin-bottom:1rem;">' +
-                '<p style="font-size:.88rem;color:var(--ink-soft);">Import a compiled spreadsheet of student responses — e.g. the Excel/CSV export of your Google Form — instead of typing them in one by one. This bulk-loads them exactly as if each student had submitted the live form.</p>' +
+                '<p style="font-size:.88rem;color:var(--ink-soft);">Import a compiled spreadsheet of student responses â€” e.g. the Excel/CSV export of your Google Form â€” instead of typing them in one by one. This bulk-loads them exactly as if each student had submitted the live form.</p>' +
             '</div>' +
             '<div class="form-group">' +
                 '<label for="import-category-select"><i class="fas fa-list"></i> Which form is this file from?</label>' +
@@ -511,14 +736,14 @@ var ADMIN = {
                     '<option value="Payment">Payments Evaluation</option>' +
                 '</select>' +
             '</div>' +
-            '<div style="background:var(--paper-alt,#f1f1ec);border:1px dashed var(--paper-line);padding:.75rem .9rem;margin-bottom:1rem;font-size:.82rem;line-height:1.65;">' +
+            '<div style="background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.75rem .9rem;margin-bottom:1rem;font-size:.82rem;line-height:1.65;">' +
                 '<strong style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.4rem;"><i class="fas fa-circle-info"></i> Column checklist for this file</strong>' +
                 '<ul style="margin-left:1.1rem;">' +
-                    '<li><strong>Required:</strong> a column with the student\'s open-ended answer — header should contain a word like "thoughts", "comment", or "feedback".</li>' +
-                    '<li><strong>Recommended:</strong> Student ID, Course, Year Level — if included, these show up on the response the same as a normal submission. Leave a row\'s Student ID blank to import it anonymously.</li>' +
+                    '<li><strong>Required:</strong> a column with the student\'s open-ended answer â€” header should contain a word like "thoughts", "comment", or "feedback".</li>' +
+                    '<li><strong>Recommended:</strong> Student ID, Course, Year Level â€” if included, these show up on the response the same as a normal submission. Leave a row\'s Student ID blank to import it anonymously.</li>' +
                     '<li><strong>Faculty only:</strong> a column naming the professor evaluated.</li>' +
-                    '<li><strong>Rating questions</strong> (the 1–5 scale questions) — keep Google Forms\' original question text as the column header; they\'re matched automatically.</li>' +
-                    '<li style="color:var(--neg);"><strong>Leave Sentiment out entirely.</strong> The system always calculates Positive / Neutral / Negative itself — a Sentiment column in your file is ignored, never read.</li>' +
+                    '<li><strong>Rating questions</strong> (the 1â€“5 scale questions) â€” keep Google Forms\' original question text as the column header; they\'re matched automatically.</li>' +
+                    '<li style="color:var(--neg);"><strong>Leave Sentiment out entirely.</strong> The system always calculates Positive / Neutral / Negative itself â€” a Sentiment column in your file is ignored, never read.</li>' +
                     '<li>Accepted files: <strong>.csv, .xlsx, .xls</strong>. Use <strong>Auto-detect</strong>: a single-category export (one Google Form) is detected and imported into that category, while a combined multi-category file (columns prefixed Staff_ / Professor_ / Facilities_ / Payments_*) expands each spreadsheet row into up to four evaluations. Picking a specific category is only needed for single-category files.</li>' +
                 '</ul>' +
             '</div>' +
@@ -538,7 +763,7 @@ var ADMIN = {
         var category = catSelect ? catSelect.value : '';
         var resultDiv = document.getElementById('import-resp-result');
         var categoryLabel = category ? category + ' ' : '';
-        showLoading('Importing ' + categoryLabel + 'responses — this can take a moment while each one is scored...');
+        showLoading('Importing ' + categoryLabel + 'responses â€” this can take a moment while each one is scored...');
         try {
             var result = await API.importEvaluations(file, category);
             var errorsHtml = '';
@@ -572,7 +797,7 @@ var ADMIN = {
     },
 
     // ============================================================
-    // VIEW EVALUATION (Modal) — Paper theme design
+    // VIEW EVALUATION (Modal) â€” Paper theme design
     // ============================================================
     async viewEval(id) {
         showLoading('Loading evaluation details...');
@@ -590,7 +815,7 @@ var ADMIN = {
             mismatchHtml = '<div class="form-section" style="margin-top:1rem;border-left:3px solid var(--neu, #b7791f);padding-left:.75rem;">' +
             '<h4 style="color:var(--neu, #b7791f);"><i class="fas fa-triangle-exclamation"></i> Likert / Sentiment Mismatch</h4>' +
             '<p style="font-size:.85rem;">Type: <strong>' + escapeHtml((item.mismatch_type || '').replace(/_/g, ' ')) + '</strong></p>' +
-        '<p style="font-size:.8rem;color:var(--ink-faint);">The numeric ratings and the written comment\'s sentiment point in different directions for this submission — worth a closer read.</p>' +
+        '<p style="font-size:.8rem;color:var(--ink-faint);">The numeric ratings and the written comment\'s sentiment point in different directions for this submission â€” worth a closer read.</p>' +
     '</div>';
 }
             var ratingsHtml = '';
@@ -632,7 +857,7 @@ var ADMIN = {
                 }).join('');
 
                 predictionHtml = '<div class="form-section" style="margin-top:1rem;">' +
-                    '<h4 style="margin-bottom:0.5rem;">Text Sentiment — Model Breakdown</h4>' +
+                    '<h4 style="margin-bottom:0.5rem;">Text Sentiment â€” Model Breakdown</h4>' +
                     '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody>' + modelRows + '</tbody></table></div>' +
                     (pred.algorithm_used === 'XGBoost + DeBERTa + RoBERTa' && pred.ensemble_prediction
                         ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result is the weighted ensemble of all three models above (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence).</p>'
@@ -750,29 +975,30 @@ predictionHtml +
     },
 
     // ============================================================
-    // ANALYTICS TAB — Paper theme design
+    // ANALYTICS TAB â€” Paper theme design
     // ============================================================
     async renderAnalytics(container) {
         container.innerHTML = '' +
             '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span><h1>Trends &amp; top signals</h1></div></div>' +
-            '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px dashed var(--paper-line);padding:.4rem .6rem;margin-bottom:.75rem;">' +
-                '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">— every section on this tab is drawn from evaluation-form submissions, all-time. Nothing here reflects ML training runs.</span>' +
+            '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
+                '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">â€” every section on this tab is drawn from evaluation-form submissions, all-time. Nothing here reflects ML training runs.</span>' +
             '</div>' +
             '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">' +
-                '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div class="stat-info"><h3 id="ana-pos-pct">-</h3><p>Positive Rate</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time, all submissions</small></div></div>' +
-                '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3 id="ana-total">-</h3><p>Total Entries</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">All-time count of submitted evaluation forms</small></div></div>' +
-                '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-bullseye"></i></div><div class="stat-info"><h3 id="ana-confidence">-</h3><p>Model Confidence</p><small class="source-note" style="display:block;font-family:var(--font-mono);font-size:.62rem;color:var(--ink-faint);margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div class="stat-info"><h3 id="ana-pos-pct">-</h3><p>Positive Rate</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time, all submissions</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3 id="ana-total">-</h3><p>Total Entries</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time count of submitted evaluation forms</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-bullseye"></i></div><div class="stat-info"><h3 id="ana-confidence">-</h3><p>Model Confidence</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
             '</div>' +
             '<div class="chart-grid">' +
-                '<div class="chart-card"><h3><i class="fas fa-chart-line"></i> Monthly Trend</h3><p class="source-note" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by the month they were submitted, all-time.</p><div class="chart-container"><canvas id="chart-monthly-trend"></canvas></div></div>' +
-                '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category, all-time.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-chart-line"></i> Monthly Trend</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by the month they were submitted, all-time.</p><div class="chart-container"><canvas id="chart-monthly-trend"></canvas></div></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category, all-time.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
             '</div>' +
             '<div class="two-col">' +
-                '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, all-time, drawn verbatim from submitted evaluations.</p><div id="top-complaints-list"></div></div>' +
-                '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations</h3></div><p class="source-note" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, all-time, drawn verbatim from submitted evaluations.</p><div id="top-appreciations-list"></div></div>' +
+                '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, all-time, drawn verbatim from submitted evaluations.</p><div id="top-complaints-list"></div></div>' +
+                '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, all-time, drawn verbatim from submitted evaluations.</p><div id="top-appreciations-list"></div></div>' +
             '</div>';
 
         showLoading('Loading analytics...');
+        this.compressNotes(container);
         try {
             var results = await Promise.all([
                 API.getOverallAnalytics(),
@@ -857,8 +1083,8 @@ predictionHtml +
     renderMLPanel: function(container) {
         container.innerHTML = '' +
             '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Model Results</span><h1>Model on duty</h1></div></div>' +
-            '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px dashed var(--paper-line);padding:.4rem .6rem;margin-bottom:.75rem;">' +
-                '<i class="fas fa-flask"></i>&nbsp; Latest Model Training Results <span style="opacity:.6;">— models are trained in Google Colab, then imported here. This panel never trains anything locally.</span>' +
+            '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
+                '<i class="fas fa-flask"></i>&nbsp; Latest Model Training Results <span style="opacity:.6;">â€” models are trained in Google Colab, then imported here. This panel never trains anything locally.</span>' +
             '</div>' +
             '<div class="tabs" id="ml-tabs">' +
                 '<button class="tab-btn active" data-mltab="import"><i class="fas fa-file-import"></i> Import from Colab</button>' +
@@ -960,7 +1186,7 @@ predictionHtml +
                 robertaZip: document.getElementById('import-roberta-zip').files[0],
                 setProduction: document.getElementById('import-set-production').value || null
             });
-            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '. If DeBERTa/RoBERTa weights changed, restart the API server so it loads the new weights.' : 'No model files were uploaded — only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';
+            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '. If DeBERTa/RoBERTa weights changed, restart the API server so it loads the new weights.' : 'No model files were uploaded â€” only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';
             showToast('Model results imported!', 'success');
         } catch (error) {
             resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--neg);"><h4 style="color:var(--neg);"><i class="fas fa-times-circle"></i> Import Failed</h4><p>' + error.message + '</p></div>';
@@ -974,14 +1200,28 @@ predictionHtml +
         container.innerHTML = '<div class="text-center mt-3"><div class="spinner"></div><p>Loading performance...</p></div>';
         try {
             var perf = await API.getModelPerformance();
-            var rowsHtml = filterModelPerfRows(perf.rows).map(function(r) {
-                return '<tr><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong></td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td><td><button class="btn btn-sm btn-primary" onclick="ADMIN.viewConfusionMatrix(\'' + r.algorithm + '\')" title="Confusion Matrix"><i class="fas fa-th"></i></button> <button class="btn btn-sm btn-outline" onclick="ADMIN.downloadModel(\'' + r.algorithm + '\')" title="Download"><i class="fas fa-download"></i></button></td></tr>';
+            var rows = filterModelPerfRows(perf.rows);
+            // Winner = the model with the highest metrics (max F1-score,
+            // accuracy as tie-break), matching the overview table logic.
+            var winnerAlgo = null;
+            if (rows.length) {
+                winnerAlgo = rows.reduce(function(a, b) {
+                    var fa = [(a.f1_score || 0), (a.accuracy || 0)];
+                    var fb = [(b.f1_score || 0), (b.accuracy || 0)];
+                    return (fb[0] > fa[0] || (fb[0] === fa[0] && fb[1] > fa[1])) ? b : a;
+                }).algorithm;
+            }
+            var rowsHtml = rows.map(function(r) {
+                var isWinner = winnerAlgo && r.algorithm === winnerAlgo;
+                return '<tr' + (isWinner ? ' class="winner-row"' : '') + '><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong>' +
+                    (isWinner ? ' <span class="winner-badge" title="Best-performing model (production choice)"><i class="fas fa-trophy"></i> Best</span>' : '') +
+                    '</td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td><td><button class="btn btn-sm btn-primary" onclick="ADMIN.viewConfusionMatrix(\'' + r.algorithm + '\')" title="Confusion Matrix"><i class="fas fa-th"></i></button> <button class="btn btn-sm btn-outline" onclick="ADMIN.downloadModel(\'' + r.algorithm + '\')" title="Download"><i class="fas fa-download"></i></button></td></tr>';
             }).join('');
 
             container.innerHTML = '' +
                 '<div class="card">' +
                     '<div class="card-header"><h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3></div>' +
-                    '<p class="source-note" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:0 .75rem .5rem;">One row per model, its most recent training run only — measured on that run\'s own held-out test split, not on live submissions.</p>' +
+                    '<p class="source-note" style="color:var(--ink-faint);margin:0 .75rem .5rem;">One row per model, its most recent training run only â€” measured on that run\'s own held-out test split, not on live submissions.</p>' +
                     '<div class="table-container"><table class="perf-table"><thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th><th>Actions</th></tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="6" class="text-center text-muted">No training data available.</td></tr>') + '</tbody></table></div>' +
                 '</div>';
         } catch (error) {
@@ -1052,7 +1292,7 @@ predictionHtml +
             container.innerHTML = '' +
                 '<div class="card">' +
                     '<div class="card-header"><h3><i class="fas fa-history"></i> Import History</h3></div>' +
-'<p class="source-note" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:0 .75rem .5rem;">Every model import from Colab, one row each, most recent first. "Dataset" is the filename recorded at export time in Colab.</p>' +
+'<p class="source-note" style="color:var(--ink-faint);margin:0 .75rem .5rem;">Every model import from Colab, one row each, most recent first. "Dataset" is the filename recorded at export time in Colab.</p>' +
                     '<div class="table-container"><table><thead><tr><th>ID</th><th>Algorithm</th><th>Status</th><th>Accuracy</th><th>F1</th><th>Dataset</th><th>Production</th><th>Date</th><th>Actions</th></tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="9" class="text-center text-muted">No training history available.</td></tr>') + '</tbody></table></div>' +
                 '</div>';
         } catch (error) {

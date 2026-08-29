@@ -39,26 +39,7 @@ class Prediction(Base):
         String(36), ForeignKey("evaluations.id", ondelete="CASCADE"), unique=True, nullable=False
     )
 
-    # ----- Legacy per-model predictions (kept for backward compat) -----
-    # New predictions stop populating these columns; existing rows remain
-    # readable.
-    svm_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
-    svm_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    random_forest_prediction: Mapped[SentimentLabel | None] = mapped_column(
-        Enum(SentimentLabel), nullable=True
-    )
-    random_forest_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    naive_bayes_prediction: Mapped[SentimentLabel | None] = mapped_column(
-        Enum(SentimentLabel), nullable=True
-    )
-    naive_bayes_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    bert_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
-    bert_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    # ----- New per-model predictions -----
+    # ----- Per-model predictions -----
     xgb_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
     xgb_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 

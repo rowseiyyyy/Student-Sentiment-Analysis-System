@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Asiatech Sentiment Analysis API",
-    "description": "Sentiment Analysis of Student Feedback from Asiatech College of Sta. Rosa, Laguna using SVM, Random Forest and BERT.",
+    "description": "Sentiment Analysis of Student Feedback from Asiatech College of Sta. Rosa, Laguna using XGBoost, DeBERTa and RoBERTa.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -291,9 +291,9 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
             "url": {
-              "raw": "{{base_url}}/ml/confusion-matrix?algorithm=SVM",
+              "raw": "{{base_url}}/ml/confusion-matrix?algorithm=DeBERTa",
               "host": ["{{base_url}}"], "path": ["ml", "confusion-matrix"],
-              "query": [{ "key": "algorithm", "value": "SVM" }]
+              "query": [{ "key": "algorithm", "value": "DeBERTa" }]
             }
           }
         },
@@ -303,9 +303,9 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
             "url": {
-              "raw": "{{base_url}}/ml/classification-report?algorithm=SVM",
+              "raw": "{{base_url}}/ml/classification-report?algorithm=RoBERTa",
               "host": ["{{base_url}}"], "path": ["ml", "classification-report"],
-              "query": [{ "key": "algorithm", "value": "SVM" }]
+              "query": [{ "key": "algorithm", "value": "RoBERTa" }]
             }
           }
         },
@@ -327,8 +327,8 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
             "url": {
-              "raw": "{{base_url}}/ml/models/SVM/download",
-              "host": ["{{base_url}}"], "path": ["ml", "models", "SVM", "download"]
+              "raw": "{{base_url}}/ml/models/XGBoost/download",
+              "host": ["{{base_url}}"], "path": ["ml", "models", "XGBoost", "download"]
             }
           }
         }

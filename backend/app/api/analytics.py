@@ -1,6 +1,8 @@
 import csv
 import io
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -22,28 +24,53 @@ from app.services import analytics as analytics_service
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
+def _days_param(days: Optional[int]) -> Optional[int]:
+    """Shared validation for the optional ``days`` date-range filter."""
+    if days is None:
+        return None
+    if not 1 <= days <= 3650:
+        raise ValueError("days must be between 1 and 3650")
+    return days
+
+
 @router.get("/overall", response_model=OverallAnalyticsResponse)
-def get_overall_analytics(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
-    return analytics_service.overall_analytics(db)
+def get_overall_analytics(
+    days: Optional[int] = Query(None, ge=1, le=3650, description="Only include submissions from the last N days."),
+    category: Optional[EvaluationCategory] = Query(None, description="Restrict to one department/category."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    return analytics_service.overall_analytics(db, category=category, days=_days_param(days))
 
 
 @router.get("/category", response_model=CategoryAnalyticsResponse)
 def get_category_analytics(
     category: EvaluationCategory,
+    days: Optional[int] = Query(None, ge=1, le=3650, description="Only include submissions from the last N days."),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.category_analytics(db, category)
+    return analytics_service.category_analytics(db, category, days=_days_param(days))
 
 
 @router.get("/monthly", response_model=TrendResponse)
-def get_monthly_trend(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
-    return analytics_service.trend_analytics(db, granularity="monthly")
+def get_monthly_trend(
+    days: Optional[int] = Query(None, ge=1, le=3650),
+    category: Optional[EvaluationCategory] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    return analytics_service.trend_analytics(db, granularity="monthly", days=_days_param(days), category=category)
 
 
 @router.get("/daily", response_model=TrendResponse)
-def get_daily_trend(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
-    return analytics_service.trend_analytics(db, granularity="daily")
+def get_daily_trend(
+    days: Optional[int] = Query(None, ge=1, le=3650),
+    category: Optional[EvaluationCategory] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    return analytics_service.trend_analytics(db, granularity="daily", days=_days_param(days), category=category)
 
 
 @router.get("/word-frequency", response_model=WordFrequencyResponse)

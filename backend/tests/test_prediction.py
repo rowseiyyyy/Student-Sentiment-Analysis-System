@@ -4,14 +4,6 @@ from app.models.training_history import TrainingHistory
 from app.services.prediction import run_prediction_pipeline
 
 PREDICTION_RESULT = {
-    "svm_prediction": "Positive",
-    "svm_confidence": 0.91,
-    "random_forest_prediction": "Positive",
-    "random_forest_confidence": 0.88,
-    "naive_bayes_prediction": "Neutral",
-    "naive_bayes_confidence": 0.70,
-    "bert_prediction": "Positive",
-    "bert_confidence": 0.95,
     "xgb_prediction": "Positive",
     "xgb_confidence": 0.91,
     "deberta_prediction": "Positive",
@@ -21,7 +13,7 @@ PREDICTION_RESULT = {
     "ensemble_prediction": "Positive",
     "ensemble_confidence": 0.90,
     "official_prediction": "Positive",
-    "algorithm_used": "SVM",
+    "algorithm_used": "XGBoost",
     "confidence_score": 0.91,
     "processing_time_ms": 12.5,
 }
@@ -65,11 +57,10 @@ def test_predict_sentiment(mock_pipeline, client):
     assert response.status_code == 200
     data = response.json()
     assert data["official_prediction"] == "Positive"
-    assert data["algorithm_used"] == "SVM"
-    assert data["svm"]["prediction"] == "Positive"
-    assert data["random_forest"]["prediction"] == "Positive"
-    assert data["naive_bayes"]["prediction"] == "Neutral"
-    assert data["bert"]["prediction"] == "Positive"
+    assert data["algorithm_used"] == "XGBoost"
+    assert data["xgb"]["prediction"] == "Positive"
+    assert data["deberta"]["prediction"] == "Positive"
+    assert data["roberta"]["prediction"] == "Positive"
     assert data["confidence_score"] == 0.91
 
 

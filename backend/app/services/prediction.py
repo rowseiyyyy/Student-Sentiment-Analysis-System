@@ -6,9 +6,8 @@ the four approved weighted soft-voting ensembles. Ensemble weights are the
 values selected during training and persisted in ``model_metadata.json`` —
 they are never silently replaced by configuration defaults.
 
-Legacy model fields are retained only as ``None`` for backward compatibility
-with historical rows / older consumers; they never influence the official
-result.
+Legacy model fields are no longer produced by the active pipeline; the
+official result follows the persisted production approach.
 """
 from __future__ import annotations
 
@@ -117,18 +116,6 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
     """
     start = time.perf_counter()
 
-    # Legacy per-model fields: always None in the active pipeline. They are
-    # preserved in the payload for backward compatibility with historical
-    # rows and older chart/API consumers.
-    svm_label: Optional[str] = None
-    svm_conf: Optional[float] = None
-    rf_label: Optional[str] = None
-    rf_conf: Optional[float] = None
-    nb_label: Optional[str] = None
-    nb_conf: Optional[float] = None
-    bert_label: Optional[str] = None
-    bert_conf: Optional[float] = None
-
     xgb_label: Optional[str] = None
     xgb_conf: Optional[float] = None
     xgb_probs: Optional[list[float]] = None
@@ -227,14 +214,6 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
     processing_time_ms = (time.perf_counter() - start) * 1000
 
     return {
-        "svm_prediction": svm_label,
-        "svm_confidence": svm_conf,
-        "random_forest_prediction": rf_label,
-        "random_forest_confidence": rf_conf,
-        "naive_bayes_prediction": nb_label,
-        "naive_bayes_confidence": nb_conf,
-        "bert_prediction": bert_label,
-        "bert_confidence": bert_conf,
         "xgb_prediction": xgb_label,
         "xgb_confidence": xgb_conf,
         "deberta_prediction": deberta_label,

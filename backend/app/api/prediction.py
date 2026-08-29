@@ -31,14 +31,6 @@ def predict_sentiment(
 
     return PredictionResponse(
         text=payload.text,
-        svm=SingleModelResult(prediction=result["svm_prediction"], confidence=result["svm_confidence"]),
-        random_forest=SingleModelResult(
-            prediction=result["random_forest_prediction"], confidence=result["random_forest_confidence"]
-        ),
-        naive_bayes=SingleModelResult(
-            prediction=result["naive_bayes_prediction"], confidence=result["naive_bayes_confidence"]
-        ),
-        bert=SingleModelResult(prediction=result["bert_prediction"], confidence=result["bert_confidence"]),
         xgb=SingleModelResult(prediction=result["xgb_prediction"], confidence=result["xgb_confidence"]),
         deberta=SingleModelResult(prediction=result["deberta_prediction"], confidence=result["deberta_confidence"]),
         roberta=SingleModelResult(prediction=result["roberta_prediction"], confidence=result["roberta_confidence"]),

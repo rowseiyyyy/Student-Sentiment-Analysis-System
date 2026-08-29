@@ -6,8 +6,8 @@ Laguna, Philippines Using Machine Learning Algorithms**
 A production-ready FastAPI backend that classifies open-ended student
 evaluation comments (Faculty, Staff, Payment, Facilities) into
 **Positive / Neutral / Negative** sentiment, comparing three algorithms —
-**SVM**, **Random Forest**, and **BERT** — and automatically promoting the
-best-performing model to production.
+**XGBoost**, **DeBERTa**, and **RoBERTa** — and automatically promoting the
+best-performing model (or ensemble) to production.
 
 ## Quick Start (Windows)
 
@@ -51,11 +51,11 @@ python run.pypuy
 
 ## Features
 
-- **Three-model sentiment pipeline**: SVM (TF-IDF + calibrated LinearSVC),
-  Random Forest (TF-IDF), and BERT (`cardiffnlp/twitter-roberta-base-sentiment`
-  via HuggingFace Transformers), trained/evaluated on identical splits.
-- **Research mode**: `/ml/train` trains SVM + Random Forest and evaluates
-  BERT on the same held-out data, records accuracy, precision, recall, F1,
+- **Three-model sentiment pipeline**: XGBoost (TF-IDF), DeBERTa
+  (`microsoft/deberta-v3-base`), and RoBERTa (`roberta-base`) via HuggingFace
+  Transformers, trained/evaluated on identical splits.
+- **Research mode**: `/ml/import-results` records training metrics from the
+  Colab notebook — accuracy, precision, recall, F1,
   macro F1, weighted F1, confusion matrices, classification reports,
   training time, inference time, and memory usage for every model.
 - **Production mode**: the highest-weighted-F1 model is automatically
@@ -219,7 +219,7 @@ sentiment classes) so you can exercise the full pipeline immediately.
      -d '{"dataset_filename":"<returned_filename>","n_estimators":300}'
    ```
 5. Inspect results: `GET /api/v1/ml/performance`,
-   `/ml/confusion-matrix?algorithm=SVM`, `/ml/classification-report?algorithm=BERT`, etc.
+   `/ml/confusion-matrix?algorithm=DeBERTa`, `/ml/classification-report?algorithm=RoBERTa`, etc.
 
 ### Option B — via the CLI script
 
@@ -227,9 +227,9 @@ sentiment classes) so you can exercise the full pipeline immediately.
 python scripts/train_models.py --dataset app/datasets/sample_feedback.csv
 ```
 
-Add `--skip-bert` to train only the classical models faster (BERT
-inference on a full held-out split is the slowest step, especially on
-CPU).
+The full pipeline trains XGBoost and fine-tunes the DeBERTa/RoBERTa
+transformers on the given dataset; the transformer fine-tuning is the
+slowest step, especially on CPU.
 
 After training, the best model (by weighted F1) is automatically flagged
 `is_production_model = true` in `training_history`, and
@@ -287,10 +287,10 @@ The backend follows a **service-layer architecture**:
 
 - `clean_for_classical(text)` — aggressive cleaning (lowercase, strip
   URLs/HTML/emojis/punctuation/numbers, expand contractions, tokenize,
-  remove stopwords, lemmatize) used by SVM & Random Forest before TF-IDF.
-- `clean_for_bert(text)` — light cleaning only (URLs/HTML/emojis removed);
-  case, stopwords and grammar are preserved so BERT's contextual
-  embeddings remain meaningful.
+  remove stopwords, lemmatize) used by XGBoost before TF-IDF.
+- `clean_for_transformer(text)` — light cleaning only (URLs/HTML/emojis
+  removed); case, stopwords and grammar are preserved so the transformer
+  contextual embeddings remain meaningful.
 
 ### Model comparison logic
 
@@ -320,7 +320,7 @@ Set the following in production (never commit real secrets):
 - `SECRET_KEY` — a long, random value (`openssl rand -hex 32`)
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 - `CORS_ORIGINS` — restrict to your actual frontend domain(s)
-- `BERT_DEVICE=cuda` if a GPU is available (falls back to `cpu` otherwise)
+- `TRANSFORMER_DEVICE=cuda` if a GPU is available (falls back to `cpu` otherwise)
 
 ### Recommended production checklist
 
@@ -333,9 +333,9 @@ Set the following in production (never commit real secrets):
    ```
 3. Put a reverse proxy (Nginx / Traefik) in front for TLS termination and
    static file caching.
-4. Pre-warm the BERT model at startup (first request will otherwise pay
-   the HuggingFace download/load cost) by calling
-   `bert_service._load_pipeline()` once during app startup if desired.
+4. Pre-warm the transformer models at startup (first request will otherwise
+   pay the HuggingFace download/load cost) by touching
+   `deberta_service` / `roberta_service` once during app startup if desired.
 5. Persist `app/ml/*.pkl` and `app/datasets/` on a volume that survives
    deployments/restarts (or move them to object storage and adjust
    `app/core/config.py` paths accordingly).
