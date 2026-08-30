@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:5173",
-        "https://student-sentiment-snalysis-system.vercel.app",
+        "https://student-sentiment-analysis-system.vercel.app",
     ]
 
     # Minimum number of Likert questions that must be answered when a
