@@ -43,6 +43,7 @@ if settings.ENVIRONMENT == "development":
 
 # Refuse to boot in production with unsafe defaults (DEBUG on, default
 # secret, wide-open CORS). Must run after settings are loaded.
+logger.info(f"STARTUP DEBUG CHECK: DEBUG={settings.DEBUG!r}, ENVIRONMENT={settings.ENVIRONMENT!r}")
 assert_production_readiness()
 
 app = FastAPI(
