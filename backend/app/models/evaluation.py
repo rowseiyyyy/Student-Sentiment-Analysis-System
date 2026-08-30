@@ -11,9 +11,9 @@ from app.services.mismatch import MismatchType
 
 
 class EvaluationCategory(str, enum.Enum):
-    FACULTY = "Faculty"
+    PROFESSOR = "Professors"
     STAFF = "Staff"
-    PAYMENT = "Payment"
+    PAYMENTS = "Payments"
     FACILITIES = "Facilities"
 
 
