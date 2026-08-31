@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env file for build
+        run: cp backend/.env.example backend/.env
+
+      - name: Build web image
+        run: docker compose build web
+
+      - name: Start containers
+        run: docker compose up -d
+
+      - name: Wait for MySQL to be healthy
+        run: |
+          for i in {1..30}; do
+            status=$(docker inspect --format='{{.State.Health.Status}}' student-sentiment-analysis-system-mysql-1 2>/dev/null || echo "starting")
+            if [ "$status" = "healthy" ]; then
+              echo "MySQL is healthy"
+              break
+            fi
+            echo "Waiting for MySQL... ($status)"
+            sleep 5
+          done
+
+      - name: Show running containers
+        run: docker compose ps
+
+      - name: Show web container logs
+        if: always()
+        run: docker compose logs web
+
+      - name: Tear down
+        if: always()
+        run: docker compose down
+</parameter>
