@@ -43,8 +43,8 @@ def upgrade() -> None:
             nullable=True,
         ),
     )
-    op.create_index("ix_action_updates_date_posted", ["date_posted"])
-    op.create_index("ix_action_updates_category", ["category"])
+    op.create_index("ix_action_updates_date_posted", "action_updates", ["date_posted"])
+    op.create_index("ix_action_updates_category", "action_updates", ["category"])
 
 
 def downgrade() -> None:
