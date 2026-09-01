@@ -256,6 +256,13 @@ const STUDENT = {
     async submitAllEvaluations() {
         if (!this.validateCurrentStep()) return;
 
+        // Capture the currently visible step's answers FIRST. saveStepData()
+        // used to run only after validateAllCategories(), which meant the step
+        // the student was looking at (e.g. Payments on the last step) was not
+        // yet in this.evaluations → "Payments: No evaluation data" even though
+        // every question had been answered.
+        this.saveStepData();
+
         // Validate ALL categories before submitting
         const validation = this.validateAllCategories();
         if (!validation.isComplete) {
@@ -307,7 +314,15 @@ const STUDENT = {
 
                 if (!response.ok) {
                     const err = await response.json();
-                    throw new Error(err.detail || "Submission failed");
+                    // FastAPI 422s return `detail` as an array of validation
+                    // errors; join them so the toast isn't "[object Object]".
+                    const detail = err.detail;
+                    const message = typeof detail === "string"
+                        ? detail
+                        : Array.isArray(detail)
+                            ? detail.map(d => d.msg || JSON.stringify(d)).join("; ")
+                            : (detail ? JSON.stringify(detail) : "Submission failed");
+                    throw new Error(message);
                 }
                 // This category was submitted successfully → clear ONLY its draft.
                 // Other categories' drafts stay intact until they are each submitted.
