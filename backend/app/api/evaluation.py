@@ -29,6 +29,28 @@ from app.utils.logger import logger
 
 router = APIRouter(prefix="/evaluation", tags=["Evaluations"])
 
+# Full set of required Likert questions per evaluation category. Mirrors the
+# student evaluation form (frontend/js/student.js). The frontend enforces these
+# for good UX; this server-side check is the security boundary that prevents a
+# direct API caller from submitting a partial evaluation.
+REQUIRED_LIKERT_QUESTIONS: dict[str, list[str]] = {
+    EvaluationCategory.PROFESSOR.value: [
+        "teaching_quality", "mastery", "clarity", "fairness", "punctuality",
+        "approachability", "feedback", "classroom_mgmt", "teaching_style",
+    ],
+    EvaluationCategory.STAFF.value: [
+        "safety", "registrar", "cashier", "canteen", "substitute",
+        "office_staff", "admin_comm", "maintenance",
+    ],
+    EvaluationCategory.FACILITIES.value: [
+        "spaces", "furniture", "cleanliness", "bathrooms", "cafeteria",
+        "monitors", "computers", "classrooms",
+    ],
+    EvaluationCategory.PAYMENTS.value: [
+        "accessibility", "processing", "queues", "courteous", "accounting",
+    ],
+}
+
 _SORTABLE_FIELDS = {
     "created_at",
     "category",
@@ -89,20 +111,82 @@ def submit_evaluation(
             detail="Please provide your feedback (ratings or your thoughts).",
         )
 
-    # Server-side Likert enforcement: if ratings are submitted, they must
-    # cover at least the minimum number of questions configured for the
-    # form. This is a security boundary — the frontend's "answer all"
-    # check is good UX but a direct API call can bypass it otherwise.
-    if payload.ratings:
-        required = settings.LIKERT_MIN_QUESTIONS
-        provided = len(payload.ratings)
-        if provided < required:
+    # Server-side required-fields enforcement for the student evaluation form.
+    # Every evaluation must include all Likert-scale ratings for its category and a
+    # non-empty open-ended "Share Your Thoughts" answer. Empty string, whitespace-only,
+    # null, and missing values are all rejected so a direct API call cannot bypass
+    # the frontend's required-question checks. This is the authoritative security boundary.
+    if payload.category.value in REQUIRED_LIKERT_QUESTIONS:
+        required_questions = REQUIRED_LIKERT_QUESTIONS[payload.category.value]
+        # 1) The open-ended "Share Your Thoughts" question is mandatory.
+        if not (payload.share_your_thoughts and payload.share_your_thoughts.strip()):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Please answer all Likert questions ({provided}/{required} provided).",
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please answer the \"Share Your Thoughts\" question before submitting.",
             )
 
+        # 2) Every Likert-scale question must be answered with a valid 1-5 score.
+        if not isinstance(payload.ratings, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="All required Likert questions must be answered before submitting.",
+            )
 
+        missing = [q for q in required_questions if (
+            q not in payload.ratings
+            or payload.ratings[q] is None
+            or (isinstance(payload.ratings[q], str) and not payload.ratings[q].strip()))
+        ]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Please answer all Likert questions before submitting. "
+                    f"Missing: {', '.join(missing)}."
+                ),
+            )
+
+        # Validate every provided rating is a valid Likert integer (1-5). Reject null,
+        # empty, whitespace-only, or out-of-range values for ALL supplied ratings.
+
+        for question, value in list(payload.ratings.items()):
+            if value is None or (isinstance(value, str)and not value.strip()):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Question \"{question}\" must be answered with a valid Likert score (1-5)."
+                    ),
+                )
+            try:
+                score = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Question \"{question}\" must be answered with a valid Likert score (1-5)."
+                    ),
+                )
+            if score < 1 or score >  5:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Question \"{question}\" must be answered with a valid Likert score (1-5)."
+                    ),
+                )
+            payload.ratings[question] = score
+    else:
+        # Non-form categories (e.g. legacy/import) keep the prior permissive
+        # fallback: require at least somerating or comment content.
+
+        if payload.ratings:
+            required = settings.LIKERT_MIN_QUESTIONS
+            provided = len(payload.ratings)
+            if provided < required:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Please answer all Likert questions ({provided}/{required} provided).",
+                )
+ 
     likert_label: str | None = None
     likert_average: float | None = None
     if payload.ratings:

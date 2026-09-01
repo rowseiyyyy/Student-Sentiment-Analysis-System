@@ -10,6 +10,45 @@ def _register_and_login(client, email="student@example.com", role="student"):
     return login.json()["access_token"]
 
 
+def _complete_professor_payload():
+    return {
+        "category": "Professors",
+        "share_your_thoughts": "The professor explains lessons very clearly.",
+        "course": "BSIT",
+        "year_level": "3rd Year",
+        "ratings": {
+            "teaching_quality": 5,
+            "mastery": 5,
+            "clarity": 5,
+            "fairness": 5,
+            "punctuality": 5,
+            "approachability": 5,
+            "feedback": 5,
+            "classroom_mgmt": 5,
+            "teaching_style": 5,
+        },
+    }
+
+
+def _complete_staff_payload():
+    return {
+        "category": "Staff",
+        "share_your_thoughts": "The staff were very helpful.",
+        "course": "BSBA",
+        "year_level": "2nd Year",
+        "ratings": {
+            "safety": 4,
+            "registrar": 4,
+            "cashier": 4,
+            "canteen": 4,
+            "substitute": 4,
+            "office_staff": 4,
+            "admin_comm": 4,
+            "maintenance": 4,
+        },
+    }
+
+
 @patch("app.api.evaluation.run_prediction_pipeline")
 def test_submit_evaluation(mock_pipeline, client):
     mock_pipeline.return_value = {
@@ -31,19 +70,12 @@ def test_submit_evaluation(mock_pipeline, client):
     token = _register_and_login(client)
     response = client.post(
         "/api/v1/evaluation",
-        json={
-            "category": "Faculty",
-            "comment": "The professor explains lessons very clearly.",
-            "course": "BSIT",
-            "year_level": "3rd Year",
-            "strengths": "Clear explanations",
-            "areas_for_improvement": "More examples",
-        },
+        json=_complete_professor_payload(),
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["category"] == "Faculty"
+    assert data["category"] == "Professors"
     assert data["prediction"]["official_prediction"] == "Positive"
     assert data["sentiment"] == "Positive"
 
@@ -52,14 +84,7 @@ def test_submit_evaluation_without_trained_model_fails_gracefully(client):
     token = _register_and_login(client, email="student2@example.com")
     response = client.post(
         "/api/v1/evaluation",
-        json={
-            "category": "Staff",
-            "comment": "The staff were very helpful.",
-            "course": "BSBA",
-            "year_level": "2nd Year",
-            "strengths": "Friendly staff",
-            "areas_for_improvement": "Faster service",
-        },
+        json=_complete_staff_payload(),
         headers={"Authorization": f"Bearer {token}"},
     )
     # No models trained in this isolated test DB -> pipeline should raise
@@ -95,14 +120,7 @@ def test_faculty_can_list_all_evaluations_but_not_delete(mock_pipeline, client):
 
     student_response = client.post(
         "/api/v1/evaluation",
-        json={
-            "category": "Faculty",
-            "comment": "The professor explains lessons very clearly.",
-            "course": "BSIT",
-            "year_level": "3rd Year",
-            "strengths": "Clear explanations",
-            "areas_for_improvement": "More examples",
-        },
+        json=_complete_professor_payload(),
         headers={"Authorization": f"Bearer {student_token}"},
     )
     assert student_response.status_code == 201
@@ -146,14 +164,7 @@ def test_student_can_only_see_own_submissions(mock_pipeline, client):
     # Student A submits
     a_resp = client.post(
         "/api/v1/evaluation",
-        json={
-            "category": "Faculty",
-            "comment": "Great class.",
-            "course": "BSIT",
-            "year_level": "1st Year",
-            "strengths": "Clear",
-            "areas_for_improvement": "None",
-        },
+        json=_complete_professor_payload(),
         headers={"Authorization": f"Bearer {student_a}"},
     )
     assert a_resp.status_code == 201
