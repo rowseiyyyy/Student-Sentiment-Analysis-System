@@ -109,14 +109,6 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 @app.middleware("http")
 async def https_redirect(request: Request, call_next):
@@ -150,6 +142,37 @@ async def add_process_time_header(request: Request, call_next):
     process_time_ms = (time.perf_counter() - start_time) * 1000
     response.headers["X-Process-Time-Ms"] = f"{process_time_ms:.2f}"
     return response
+
+
+# IMPORTANT: CORSMiddleware must be the OUTERMOST middleware (added last).
+# Middleware added later wraps everything added before it. If any inner
+# middleware or route raises an unhandled exception, the response leaves via
+# the outermost layer — so when CORS was registered before the custom
+# middlewares, error responses bypassed it entirely and reached the browser
+# WITHOUT Access-Control-Allow-Origin headers. The browser then reports the
+# failed request as a CORS/preflight error instead of the real server error.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catch-all so unexpected errors still return JSON *with* CORS headers.
+
+    Without this, unhandled exceptions propagate to Starlette's outermost
+    ServerErrorMiddleware, which produces a bare 500 that (being outside the
+    CORS layer) the browser blocks as a CORS failure — hiding the real error.
+    """
+    logger.exception(f"Unhandled error on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An internal server error occurred."},
+    )
 
 
 @app.exception_handler(RequestValidationError)

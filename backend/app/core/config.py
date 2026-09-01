@@ -8,7 +8,7 @@ runs out of the box, but every value should be overridden in production.
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import List
+from typing import Any, List, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -79,11 +79,29 @@ class Settings(BaseSettings):
     # Default is wide-open for local development. In production, set
     # CORS_ORIGINS to your frontend origin(s) only, e.g.
     #   CORS_ORIGINS=["https://feedback.asiatech.edu.ph"]
-    CORS_ORIGINS: List[str] = [
+    # Accepts either a JSON array or a Render-style comma-separated string
+    # (normalized to a list by the validator below).
+    CORS_ORIGINS: Union[str, List[str]] = [
         "http://localhost:3000",
         "http://localhost:5173",
         "https://student-sentiment-analysis-system.vercel.app",
     ]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, value: Any) -> Any:
+        """Normalize comma-separated CORS_ORIGINS strings into a list.
+
+        Render/heroku-style env vars are plain strings, e.g.
+        ``CORS_ORIGINS=https://a.vercel.app,https://b.vercel.app``. Declaring
+        the field as Union[str, List[str]] avoids pydantic-settings' strict
+        JSON decoding, and this validator guarantees the rest of the app
+        always sees a clean List[str] (a stale env var replacing the
+        allowlist is still honored — update the env var to fix it).
+        """
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
     # Minimum number of Likert questions that must be answered when a
     # submission includes ratings. Prevents API-level abuse where a
