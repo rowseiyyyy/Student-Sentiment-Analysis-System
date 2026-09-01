@@ -24,9 +24,19 @@ class XGBoostService:
         self._try_load()
 
     def _try_load(self) -> None:
-        if Path(settings.XGB_MODEL_PATH).exists() and Path(settings.XGB_TFIDF_VECTORIZER_PATH).exists():
+        if not (Path(settings.XGB_MODEL_JSON_PATH).exists() or Path(settings.XGB_MODEL_PATH).exists()):
+            return
+        if not Path(settings.XGB_TFIDF_VECTORIZER_PATH).exists():
+            return
+        self.vectorizer = joblib.load(settings.XGB_TFIDF_VECTORIZER_PATH)
+        # Prefer the native save_model() JSON — it loads identically under any
+        # xgboost version, unlike a pickled XGBClassifier which warns/fails
+        # when the pickle came from a different xgboost release.
+        if Path(settings.XGB_MODEL_JSON_PATH).exists():
+            self.model = XGBClassifier()
+            self.model.load_model(settings.XGB_MODEL_JSON_PATH)
+        else:
             self.model = joblib.load(settings.XGB_MODEL_PATH)
-            self.vectorizer = joblib.load(settings.XGB_TFIDF_VECTORIZER_PATH)
 
     def is_ready(self) -> bool:
         return self.model is not None and self.vectorizer is not None
@@ -35,6 +45,9 @@ class XGBoostService:
         settings.ML_DIR.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.model, settings.XGB_MODEL_PATH)
         joblib.dump(self.vectorizer, settings.XGB_TFIDF_VECTORIZER_PATH)
+        # Also persist the native save_model() format — this is the copy the
+        # loader prefers because it is version-safe across xgboost releases.
+        self.model.save_model(settings.XGB_MODEL_JSON_PATH)
         settings.XGB_LABEL_ENCODER_PATH.write_text(json.dumps({"classes": CLASS_ORDER}), encoding="utf-8")
 
     @staticmethod

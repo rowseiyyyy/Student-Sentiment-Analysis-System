@@ -158,6 +158,9 @@ class Settings(BaseSettings):
     DATASETS_DIR: Path = BASE_DIR / "app" / "datasets"
 
     # Active paths.
+    # Native XGBoost model (Booster.save_model format). Version-safe across
+    # xgboost releases — preferred over the pickled XGBClassifier in xgb_model.pkl.
+    XGB_MODEL_JSON_PATH: Path = ML_DIR / "xgb_model.json"
     XGB_MODEL_PATH: Path = ML_DIR / "xgb_model.pkl"
     XGB_TFIDF_VECTORIZER_PATH: Path = ML_DIR / "tfidf_vectorizer_xgb.pkl"
     XGB_LABEL_ENCODER_PATH: Path = ML_DIR / "label_encoder_xgb.pkl"
@@ -229,6 +232,7 @@ def get_settings() -> Settings:
         settings.TEMP_VALIDATION_ROOT = validation_root
         settings.ML_DIR = validation_root / "ml"
         settings.DATASETS_DIR = validation_root / "datasets"
+        settings.XGB_MODEL_JSON_PATH = settings.ML_DIR / "xgb_model.json"
         settings.XGB_MODEL_PATH = settings.ML_DIR / "xgb_model.pkl"
         settings.XGB_TFIDF_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_xgb.pkl"
         settings.XGB_LABEL_ENCODER_PATH = settings.ML_DIR / "label_encoder_xgb.pkl"

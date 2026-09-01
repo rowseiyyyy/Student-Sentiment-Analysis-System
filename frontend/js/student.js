@@ -137,7 +137,12 @@ const STUDENT = {
 
         if (data.ratings) {
             Object.entries(data.ratings).forEach(([name, val]) => {
-                const rb = form.querySelector("input[type=radio][name=" + name + "][value=" + val + "]");
+                // Attribute values in querySelector must be quoted or CSS
+                // identifiers — a bare number like [value=5] throws
+                // SyntaxError, so every value is quoted here.
+                const rb = form.querySelector(
+                    'input[type="radio"][name="' + name + '"][value="' + val + '"]'
+                );
                 if (rb) rb.checked = true;
             });
         }
