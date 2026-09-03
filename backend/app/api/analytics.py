@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_staff
 from app.core.database import get_db
-from app.models.evaluation import Evaluation, EvaluationCategory
+from app.models.evaluation import Evaluation
 from app.models.prediction import Prediction, SentimentLabel
 from app.models.user import User
 from app.schemas.analytics import (
@@ -19,6 +19,7 @@ from app.schemas.analytics import (
     TrendResponse,
     WordFrequencyResponse,
 )
+from app.schemas.evaluation import NormalizedCategory
 from app.services import analytics as analytics_service
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -36,7 +37,7 @@ def _days_param(days: Optional[int]) -> Optional[int]:
 @router.get("/overall", response_model=OverallAnalyticsResponse)
 def get_overall_analytics(
     days: Optional[int] = Query(None, ge=1, le=3650, description="Only include submissions from the last N days."),
-    category: Optional[EvaluationCategory] = Query(None, description="Restrict to one department/category."),
+    category: Optional[NormalizedCategory] = Query(None, description="Restrict to one department/category."),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
@@ -45,7 +46,7 @@ def get_overall_analytics(
 
 @router.get("/category", response_model=CategoryAnalyticsResponse)
 def get_category_analytics(
-    category: EvaluationCategory,
+    category: NormalizedCategory,
     days: Optional[int] = Query(None, ge=1, le=3650, description="Only include submissions from the last N days."),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
@@ -56,7 +57,7 @@ def get_category_analytics(
 @router.get("/monthly", response_model=TrendResponse)
 def get_monthly_trend(
     days: Optional[int] = Query(None, ge=1, le=3650),
-    category: Optional[EvaluationCategory] = Query(None),
+    category: Optional[NormalizedCategory] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
@@ -66,7 +67,7 @@ def get_monthly_trend(
 @router.get("/daily", response_model=TrendResponse)
 def get_daily_trend(
     days: Optional[int] = Query(None, ge=1, le=3650),
-    category: Optional[EvaluationCategory] = Query(None),
+    category: Optional[NormalizedCategory] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):

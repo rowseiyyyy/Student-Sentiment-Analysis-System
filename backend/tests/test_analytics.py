@@ -29,7 +29,8 @@ def test_category_analytics_requires_valid_category(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
-    assert response.json()["category"] == "Faculty"
+    # Legacy "Faculty" is normalized onto the canonical enum value.
+    assert response.json()["category"] == "Professors"
 
 
 def test_analytics_requires_auth(client):

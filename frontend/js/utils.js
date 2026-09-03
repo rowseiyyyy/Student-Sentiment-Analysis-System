@@ -113,7 +113,7 @@ const LIKERT_LABELS = ['', 'Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 
 
 // Generate likert scale HTML — updated for paper theme
 function likertScale(name, label) {
-    let html = `<div class="rating-group">
+    let html = `<div class="rating-group" data-name="${name}">
         <span class="rating-label">${escapeHtml(label)}</span>
         <div class="likert-scale">`;
     for (let i = 1; i <= 5; i++) {

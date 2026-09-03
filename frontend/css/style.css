@@ -788,6 +788,36 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
+/* Highlight unanswered required questions */
+.rating-group.error {
+  background: rgba(214, 40, 40, 0.06);
+  border-left: 3px solid var(--danger, #d62828);
+  padding-left:0.6rem;
+}
+
+.rating-group.error .likert-btn {
+  border-color:#d62828;
+  color:#d62828;
+}
+
+.rating-group.error .rating-label {
+  color:#d62828;
+}
+
+.form-group.error {
+  background:rgba(214, 40, 40, 0.06);
+  padding:0.4rem 0.6rem;
+  border-left:3px solid #d62828;
+}
+
+.form-group.error label {
+  color:#d62828;
+}
+
+.form-group.error .form-control {
+  border-color:#d62828;
+}
+
 .rating-label {
   font-size: 0.92rem;
   color: var(--ink);

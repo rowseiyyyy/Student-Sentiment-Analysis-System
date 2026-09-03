@@ -1,10 +1,37 @@
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
 from app.models.evaluation import EvaluationCategory
 from app.schemas.prediction import PredictionOut
+
+# Legacy/singular category names still sent by older clients and by the
+# admin/faculty dashboard chart filters ("Faculty", "Payment", and the
+# lowercase student-form keys). Map them onto the canonical enum values so
+# submissions and analytics queries don't fail with a 422
+# ("Input should be 'Professors', 'Staff', 'Payments' or 'Facilities'").
+_CATEGORY_ALIASES: dict[str, str] = {
+    "faculty": "Professors",
+    "professor": "Professors",
+    "professors": "Professors",
+    "staff": "Staff",
+    "facilities": "Facilities",
+    "payment": "Payments",
+    "payments": "Payments",
+}
+
+
+def normalize_category(value: Any) -> Any:
+    """Coerce legacy/loose category strings onto canonical enum values."""
+    if isinstance(value, str):
+        return _CATEGORY_ALIASES.get(value.strip().lower(), value.strip())
+    return value
+
+
+# Reusable annotated type: works both in request bodies (EvaluationCreate)
+# and as FastAPI query parameters (analytics endpoints).
+NormalizedCategory = Annotated[EvaluationCategory, BeforeValidator(normalize_category)]
 
 
 class StudentInfo(BaseModel):
@@ -15,7 +42,9 @@ class StudentInfo(BaseModel):
 
 
 class EvaluationCreate(BaseModel):
-    category: EvaluationCategory
+    # Accepts legacy/loose names ("Faculty", "Payment", lowercase keys) and
+    # normalizes them onto the canonical enum values — see normalize_category.
+    category: NormalizedCategory
     # Optional: a student may submit only Likert ratings, or only
     # share_your_thoughts, without free-text `comment`. The API layer
     # (app.api.evaluation.submit_evaluation) enforces that at least one

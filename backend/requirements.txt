@@ -28,10 +28,15 @@ slowapi==0.1.9
 # ==============================
 # Machine Learning / NLP
 # ==============================
-scikit-learn==1.5.2
-# XGBoost 3.4.x requires Python >=3.12; the official backend environment is
-# Python 3.11, so 3.2.0 is the newest compatible release (justified change).
-xgboost==3.2.0
+# The saved XGBoost model is persisted in native save_model() JSON format
+# (app/ml/xgb_model.json), which loads under any xgboost >= 3.0, so the
+# pin here only needs to satisfy the Python version of the environment.
+# 3.4.x requires Python >= 3.12; the official backend environment is
+# Python 3.11, so it falls back to 3.2.0 there.
+xgboost==3.2.0; python_version < "3.12"
+xgboost==3.4.1; python_version >= "3.12"
+# The TF-IDF vectorizer is pickled; models were (re)generated with 1.6.1.
+scikit-learn==1.6.1
 transformers==4.44.2
 datasets==5.0.1
 sentencepiece==0.2.2

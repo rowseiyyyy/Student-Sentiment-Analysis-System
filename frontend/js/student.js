@@ -8,8 +8,9 @@ const STUDENT = {
     currentYearLevel: null,
     currentStep: 0,
     categories: ["professor", "staff", "facilities", "payments"],
-    categoryNames: {"professor": "Professor", "staff": "Staff", "facilities": "Facilities", "payments": "Payments"},
+    categoryNames: {"professor": "Professors", "staff": "Staff", "facilities": "Facilities", "payments": "Payments"},
     evaluations: {},
+    _justSubmitted: false,
 
     init() {},
 
@@ -20,6 +21,9 @@ const STUDENT = {
     },
 
     logout() {
+        // Persist the visible step before leaving, unless the form was just
+        // submitted successfully (so submitted answers aren't restored next time).
+        if (!this._justSubmitted) this.persistCurrentStep();
         sessionStorage.removeItem("asiatech_student_course");
         sessionStorage.removeItem("asiatech_student_year_level");
         this.currentCourse = null;
@@ -33,6 +37,7 @@ const STUDENT = {
     startEvaluation() {
         this.currentStep = 0;
         this.evaluations = {};
+        this._justSubmitted = false;
         APP.goToPage("page-student-eval");
         document.getElementById("nav-student").style.display = "flex";
         document.getElementById("badge-student").textContent = "\u{1F393} Anonymous";
@@ -102,10 +107,13 @@ const STUDENT = {
         if (!form) return;
 
         const ratings = {};
-        form.querySelectorAll(".rating-group").forEach(g => {
-            const n = g.getAttribute("data-name");
-            const c = g.querySelector("input[type=radio]:checked");
-            if (c) ratings[n] = parseInt(c.value);
+        // Read each question's key directly from the radio input's own `name`
+        // attribute (the canonical source) rather than a parallel attribute on
+        // the wrapper. This guarantees every answered rating is stored under the
+        // correct question key so restoreStepData() can bring it back when the
+        // student navigates Back to re-edit before submitting.
+        form.querySelectorAll("input[type=radio]:checked").forEach(c => {
+            ratings[c.name] = parseInt(c.value);
         });
 
         const txt = form.querySelector("textarea[name=share_your_thoughts]");
@@ -113,10 +121,14 @@ const STUDENT = {
             ratings: Object.keys(ratings).length ? ratings : null,
             share_your_thoughts: txt ? txt.value : null
         };
+        this.saveDraft(cat);
     },
 
     restoreStepData() {
         const cat = this.categories[this.currentStep];
+        // Load this category's anonymous draft from localStorage if we have no
+        // in-memory copy yet (e.g. page refresh, returning to the form).
+        if (!this.evaluations[cat]) this.loadDraft(cat);
         const data = this.evaluations[cat];
         if (!data) return;
 
@@ -125,7 +137,12 @@ const STUDENT = {
 
         if (data.ratings) {
             Object.entries(data.ratings).forEach(([name, val]) => {
-                const rb = form.querySelector("input[type=radio][name=" + name + "][value=" + val + "]");
+                // Attribute values in querySelector must be quoted or CSS
+                // identifiers — a bare number like [value=5] throws
+                // SyntaxError, so every value is quoted here.
+                const rb = form.querySelector(
+                    'input[type="radio"][name="' + name + '"][value="' + val + '"]'
+                );
                 if (rb) rb.checked = true;
             });
         }
@@ -135,6 +152,72 @@ const STUDENT = {
         }
     },
 
+// ============================================================
+    // Anonymous local draft persistence (browser-localStorage only)
+    // ============================================================
+
+    // Map an evaluation category to its anonymous localStorage key. No
+    // student identity (ID, user ID, email, name, etc.) is used.
+    _draftKey(cat) {
+        const keyMap = {
+            professor: "evaluation_draft_faculty",
+            staff: "evaluation_draft_staff",
+            facilities: "evaluation_draft_facilities",
+            payments: "evaluation_draft_payment",
+        };
+        return keyMap[cat] || ("evaluation_draft_" + cat);
+    },
+
+    // Persist one category's draft to localStorage (best-effort).
+    saveDraft(cat) {
+        try {
+            localStorage.setItem(this._draftKey(cat), JSON.stringify(this.evaluations[cat]));
+        } catch (e) { /* storage unavailable/full → best-effort, never crash */ }
+    },
+
+    // Load one category's anonymous draft from localStorage into memory.
+    loadDraft(cat) {
+        try {
+            const raw = localStorage.getItem(this._draftKey(cat));
+            if (raw) {
+                const data = JSON.parse(raw);
+                if (data && typeof data === "object") {
+                    this.evaluations[cat] = data;
+                    return true;
+                }
+            }
+        } catch (e) { /* corrupted JSON → ignore */ }
+        return false;
+    },
+
+    // Remove ONE category's draft (called only after that category's submission
+    // succeeds, or by a future Clear/Reset control）。
+    clearDraft(cat) {
+        try {
+            localStorage.removeItem(this._draftKey(cat));
+        } catch (e) { /* best-effort */ }
+        if (this.evaluations) delete this.evaluations[cat];
+    },
+
+    // Save the currently-visible step's answers right before the page/browser
+    // leaves (refresh, browser-Back, closing tab, navigating away).
+    persistCurrentStep() {
+        const page = document.getElementById("page-student-eval");
+        const active = page ? page.classList.contains("active") : false;
+        if (!active) return;
+        if (this._justSubmitted) return;
+        const form = document.getElementById("step-form");
+        if (!form) return;
+        this.saveStepData();
+    },
+
+    beginDraftAutosave() {
+        window.addEventListener("beforeunload", () => this.persistCurrentStep());
+        window.addEventListener("pagehide", () => this.persistCurrentStep());
+        window.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden") this.persistCurrentStep();
+        });
+    },
     nextStep() {
         if (!this.validateCurrentStep()) return;
         this.saveStepData();
@@ -178,6 +261,33 @@ const STUDENT = {
     async submitAllEvaluations() {
         if (!this.validateCurrentStep()) return;
 
+        // Capture the currently visible step's answers FIRST. saveStepData()
+        // used to run only after validateAllCategories(), which meant the step
+        // the student was looking at (e.g. Payments on the last step) was not
+        // yet in this.evaluations → "Payments: No evaluation data" even though
+        // every question had been answered.
+        this.saveStepData();
+
+        // Validate ALL categories before submitting
+        const validation = this.validateAllCategories();
+        if (!validation.isComplete) {
+            const btn = document.querySelector("#step-form button.btn-success");
+            if (btn) btn.disabled = false;
+            showToast("Please complete all questions in: " + validation.incompleteCategories.join(", "), "error");
+
+            // Show detailed message
+            const detailedMsg = validation.unansweredDetails.slice(0, 3).join("; ");
+            if (validation.unansweredDetails.length > 3) {
+                showToast("Details: " + detailedMsg + "...", "warning");
+            } else {
+                showToast("Details: " + detailedMsg, "warning");
+            }
+
+            // Navigate to first incomplete category
+            this.navigateToFirstIncomplete();
+            return;
+        }
+
         const course = document.getElementById("sel-course")?.value;
         const yearLevel = document.getElementById("sel-year")?.value;
         if (!course) return;
@@ -192,7 +302,7 @@ const STUDENT = {
         try {
             for (const [cat, data] of Object.entries(this.evaluations)) {
                 const payload = {
-                    category: cat,
+                    category: this.categoryNames[cat] || cat,
                     comment: null,
                     evaluatee: null,
                     share_your_thoughts: data.share_your_thoughts || null,
@@ -209,10 +319,25 @@ const STUDENT = {
 
                 if (!response.ok) {
                     const err = await response.json();
-                    throw new Error(err.detail || "Submission failed");
+                    // FastAPI 422s return `detail` as an array of validation
+                    // errors; join them so the toast isn't "[object Object]".
+                    const detail = err.detail;
+                    const message = typeof detail === "string"
+                        ? detail
+                        : Array.isArray(detail)
+                            ? detail.map(d => d.msg || JSON.stringify(d)).join("; ")
+                            : (detail ? JSON.stringify(detail) : "Submission failed");
+                    throw new Error(message);
                 }
+                // This category was submitted successfully → clear ONLY its draft.
+                // Other categories' drafts stay intact until they are each submitted.
+
+                // On failure the throw above leaves every draft untouched so the
+                // student can retry without losing their answers。
+                this.clearDraft(cat);
             }
 
+            this._justSubmitted = true;
             this.currentCourse = course;
             sessionStorage.setItem("asiatech_student_course", course);
             if (yearLevel) {
@@ -301,6 +426,9 @@ const STUDENT = {
     },
 
     renderFormTab(tab) {
+        // Persist the current step's answers (and any others just entered) so the
+        // per-category drafts stay separated and up-to-date before switching categories.
+        this.saveStepData();
         const idx = this.categories.indexOf(tab);
         if (idx !== -1) {
             this.currentStep = idx;
@@ -331,9 +459,163 @@ const STUDENT = {
             this.currentStep = idx;
         }
         this.startEvaluation();
+    },
+
+    // ========================================
+    // Required Field Validation Helpers
+    // ========================================
+    
+    // Define all required questions for each category
+    requiredQuestions: {
+        professor: ["teaching_quality", "mastery", "clarity", "fairness", "punctuality", "approachability", "feedback", "classroom_mgmt", "teaching_style"],
+        staff: ["safety", "registrar", "cashier", "canteen", "substitute", "office_staff", "admin_comm", "maintenance"],
+        facilities: ["spaces", "furniture", "cleanliness", "bathrooms", "cafeteria", "monitors", "computers", "classrooms"],
+        payments: ["accessibility", "processing", "queues", "courteous", "accounting"]
+    },
+
+    // Get required questions for a category
+    getRequiredQuestionsForCategory(category) {
+        return this.requiredQuestions[category] || [];
+    },
+
+    // Get form content for a category (used for validation)
+    getCategoryFormContent(category) {
+        switch (category) {
+            case "professor": return this.professorFormContent();
+            case "staff": return this.staffFormContent();
+            case "facilities": return this.facilitiesFormContent();
+            case "payments": return this.paymentsFormContent();
+            default: return "";
+        }
+    },
+
+    // Highlight unanswered questions in the current step
+    highlightUnansweredQuestions() {
+        const form = document.getElementById("step-form");
+        if (!form) return;
+        
+        // Remove any existing error highlights
+        form.querySelectorAll(".rating-group.error, .form-group.error").forEach(el => {
+            el.classList.remove("error");
+        });
+        
+        const category = this.categories[this.currentStep];
+        const data = this.evaluations[category];
+        const requiredQuestions = this.getRequiredQuestionsForCategory(category);
+        
+        // Check each Likert question
+        const ratingGroups = form.querySelectorAll(".rating-group");
+        for (const group of ratingGroups) {
+            const radio = group.querySelector("input[type=radio]");
+            if (radio) {
+                const name = radio.name;
+                if (requiredQuestions.includes(name)) {
+                    if (!data?.ratings?.[name]) {
+                        group.classList.add("error");
+                    }
+                }
+            }
+        }
+        
+        // Check textarea
+        const thoughtsArea = form.querySelector("textarea[name=share_your_thoughts]");
+        if (thoughtsArea && requiredQuestions.length > 0) {
+            if (!data?.share_your_thoughts?.trim()) {
+                const parent = thoughtsArea.closest(".form-group");
+                if (parent) parent.classList.add("error");
+            }
+        }
+    },
+
+    // Validate all categories before final submission
+    validateAllCategories() {
+        const incompleteCategories = [];
+        const unansweredDetails = [];
+        
+        for (const cat of this.categories) {
+            const data = this.evaluations[cat];
+            const requiredQuestions = this.getRequiredQuestionsForCategory(cat);
+            const categoryName = this.categoryNames[cat] || cat;
+            
+            if (!data) {
+                incompleteCategories.push(categoryName);
+                unansweredDetails.push(categoryName + ": No evaluation data");
+                continue;
+            }
+            
+            if (!data.ratings) {
+                if (!incompleteCategories.includes(categoryName)) {
+                    incompleteCategories.push(categoryName);
+                }
+                unansweredDetails.push(categoryName + ": Missing ratings");
+                continue;
+            }
+            
+            const unansweredQuestions = [];
+            for (const question of requiredQuestions) {
+                if (!data.ratings[question]) {
+                    unansweredQuestions.push(question);
+                }
+            }
+            
+            if (unansweredQuestions.length > 0) {
+                if (!incompleteCategories.includes(categoryName)) {
+                    incompleteCategories.push(categoryName);
+                }
+                unansweredDetails.push(categoryName + ": " + unansweredQuestions.length + " unanswered rating(s)");
+            }
+            
+            if (!data.share_your_thoughts || !data.share_your_thoughts.trim()) {
+                if (!incompleteCategories.includes(categoryName)) {
+                    incompleteCategories.push(categoryName);
+                }
+                unansweredDetails.push(categoryName + ': Missing "Share Your Thoughts"');
+            }
+        }
+        
+        return {
+            isComplete: incompleteCategories.length === 0,
+            incompleteCategories,
+            unansweredDetails
+        };
+    },
+
+    // Navigate to first incomplete category
+    navigateToFirstIncomplete() {
+        for (const cat of this.categories) {
+            const data = this.evaluations[cat];
+            const requiredQuestions = this.getRequiredQuestionsForCategory(cat);
+            let hasUnanswered = false;
+            
+            if (!data?.ratings) {
+                hasUnanswered = true;
+            } else {
+                for (const question of requiredQuestions) {
+                    if (!data.ratings[question]) {
+                        hasUnanswered = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!data?.share_your_thoughts?.trim()) {
+                hasUnanswered = true;
+            }
+            
+            if (hasUnanswered) {
+                this.currentStep = this.categories.indexOf(cat);
+                this.renderCurrentStep();
+                this.highlightUnansweredQuestions();
+                return true;
+            }
+        }
+        return false;
     }
 };
 
 if (typeof window !== "undefined") {
     window.STUDENT = STUDENT;
+    // Wire automatic draft saving so answers survive refresh, browser-Back,
+    // tab-close, or navigating away — thened restored when the student returns.
+    STUDENT.beginDraftAutosave();
 }

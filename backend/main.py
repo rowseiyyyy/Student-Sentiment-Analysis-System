@@ -34,12 +34,34 @@ from app.api import analytics, auth, evaluation, imports, ml, prediction, action
 from app.core.config import settings, assert_production_readiness
 from app.core.database import Base, engine
 from app.core.limiter import limiter
+from app.models.evaluation import Evaluation
 from app.utils.logger import logger
 
 # Create tables automatically in development. In production, use the
 # Alembic migrations under alembic/versions instead (see README).
 if settings.ENVIRONMENT == "development":
     Base.metadata.create_all(bind=engine)
+else:
+    # Production: tables come from Alembic (`alembic upgrade head`). Verify the
+    # evaluations schema actually matches the ORM, otherwise submissions fail
+    # with an opaque 500 the first time a newer column (e.g.
+    # share_your_thoughts, is_mismatch) is written. Surface a loud, actionable
+    # message at startup instead.
+    from sqlalchemy import inspect as sa_inspect
+
+    try:
+        _db_columns = {c["name"] for c in sa_inspect(engine).get_columns("evaluations")}
+        _model_columns = {c.name for c in Evaluation.__table__.columns}  # noqa: F841
+        _missing = _model_columns - _db_columns
+        if _missing:
+            logger.error(
+                "DATABASE SCHEMA OUT OF DATE: the 'evaluations' table is missing "
+                f"column(s): {', '.join(sorted(_missing))}. Submissions will fail "
+                "with 500 errors until the database is migrated. Run "
+                "'alembic upgrade head' against the production database."
+            )
+    except Exception as _exc:  # table truly missing, DB unreachable, etc.
+        logger.error(f"Could not verify database schema at startup: {_exc}")
 
 # Refuse to boot in production with unsafe defaults (DEBUG on, default
 # secret, wide-open CORS). Must run after settings are loaded.
@@ -87,14 +109,6 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 @app.middleware("http")
 async def https_redirect(request: Request, call_next):
@@ -128,6 +142,37 @@ async def add_process_time_header(request: Request, call_next):
     process_time_ms = (time.perf_counter() - start_time) * 1000
     response.headers["X-Process-Time-Ms"] = f"{process_time_ms:.2f}"
     return response
+
+
+# IMPORTANT: CORSMiddleware must be the OUTERMOST middleware (added last).
+# Middleware added later wraps everything added before it. If any inner
+# middleware or route raises an unhandled exception, the response leaves via
+# the outermost layer — so when CORS was registered before the custom
+# middlewares, error responses bypassed it entirely and reached the browser
+# WITHOUT Access-Control-Allow-Origin headers. The browser then reports the
+# failed request as a CORS/preflight error instead of the real server error.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catch-all so unexpected errors still return JSON *with* CORS headers.
+
+    Without this, unhandled exceptions propagate to Starlette's outermost
+    ServerErrorMiddleware, which produces a bare 500 that (being outside the
+    CORS layer) the browser blocks as a CORS failure — hiding the real error.
+    """
+    logger.exception(f"Unhandled error on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An internal server error occurred."},
+    )
 
 
 @app.exception_handler(RequestValidationError)
