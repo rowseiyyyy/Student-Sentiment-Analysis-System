@@ -20,10 +20,14 @@ persisted, and the same selection is used at runtime inference.
 from __future__ import annotations
 
 import json
+import io
+import pickle
+import secrets
 import time
 
 import zipfile
 import shutil
+import joblib
 
 from pathlib import Path
 from typing import Any, Iterable
@@ -43,7 +47,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.training_history import TrainingAlgorithm, TrainingHistory, TrainingStatus
-from app.services.deberta_service import deberta_service
+from app.services.deberta_service import mdeberta_service
 from app.services.ensembles import (
     ENSEMBLES,
     ensemble_prediction,
@@ -52,7 +56,7 @@ from app.services.ensembles import (
     select_weights,
 )
 from app.services.preprocessing import clean_for_classical
-from app.services.roberta_service import roberta_service
+from app.services.roberta_service import xlm_roberta_service
 from app.services.xgboost_service import CLASS_ORDER, XGBoostService, xgboost_service
 from app.utils.logger import logger
 
@@ -96,13 +100,12 @@ def import_training_results(
             dataset_size=metrics.get("dataset_size"),
         )
         db.add(history)
-        db.commit()
-        db.refresh(history)
-        _persist_history(db, history, metrics, TrainingStatus.COMPLETED)
+        db.flush()
+        _persist_history(db, history, metrics, TrainingStatus.COMPLETED, commit=False)
         imported.append(approach_name)
 
     if unknown_keys:
-        logger.info(
+        logger.warning(
             f"Ignored non-model keys in metrics JSON: {', '.join(unknown_keys)}"
         )
 
@@ -121,21 +124,90 @@ def import_training_results(
             key=lambda name: float(metrics_by_algorithm[name].get("weighted_f1", -1.0)),
         )
 
-    _mark_production_model(db, APPROACH_TO_ALGORITHM[best_algorithm])
+    _mark_production_model(db, APPROACH_TO_ALGORITHM[best_algorithm], commit=False)
     serializable = {
         name: {k: v for k, v in metrics_by_algorithm[name].items() if k not in ("validation", "weights")}
         for name in imported
     }
     _write_comparison_artifacts(serializable, best_algorithm)
     sync_deployment_metadata(db, best_algorithm)
+    db.commit()
 
-    return {"imported_algorithms": imported, "production_model": best_algorithm}
+    return {
+        "imported_algorithms": imported,
+        "production_model": best_algorithm,
+        # Surfaced so the admin UI/log can show if part of the export (e.g.
+        # an unrecognized model key like "mdeberta") was skipped.
+        "ignored_keys": unknown_keys,
+    }
 
 
 def replace_xgboost_artifacts(model_bytes: bytes, vectorizer_bytes: bytes) -> None:
+    """Replace a Joblib XGBoost model and its TF-IDF vectorizer.
+
+    A zipped TF-DF SavedModel is still accepted for compatibility with older
+    exports; a Joblib classifier is the preferred interchange format.
+    """
     settings.ML_DIR.mkdir(parents=True, exist_ok=True)
-    Path(settings.XGB_MODEL_PATH).write_bytes(model_bytes)
+    model_path = Path(settings.XGB_MODEL_PATH)
+    model = None
+    native_model = None
+    load_errors: list[str] = []
+    for loader in (joblib.load, pickle.load):
+        try:
+            model = loader(io.BytesIO(model_bytes))
+            break
+        except Exception as exc:  # noqa: BLE001
+            load_errors.append(f"{type(exc).__name__}: {exc}")
+
+    if model is not None:
+        if not hasattr(model, "predict_proba"):
+            raise DatasetValidationError("XGBoost Joblib artifact must provide predict_proba().")
+        if model_path.is_dir():
+            shutil.rmtree(model_path)
+        joblib.dump(model, model_path)
+    else:
+        try:
+            import xgboost
+
+            native_model = xgboost.Booster()
+            native_model.load_model(bytearray(model_bytes))
+        except Exception as exc:  # noqa: BLE001
+            load_errors.append(f"{type(exc).__name__}: {exc}")
+
+        if native_model is not None:
+            if model_path.exists():
+                if model_path.is_dir():
+                    shutil.rmtree(model_path)
+                else:
+                    model_path.unlink()
+            model_path.write_bytes(model_bytes)
+        else:
+            tmp_model_path = settings.ML_DIR / f"_tmp_xgb_tfdf_{secrets.token_hex(8)}"
+            try:
+                tmp_model_path.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(io.BytesIO(model_bytes), "r") as archive:
+                    _safe_extract_zip(archive, tmp_model_path)
+            except zipfile.BadZipFile as exc:
+                shutil.rmtree(tmp_model_path, ignore_errors=True)
+                raise DatasetValidationError(
+                    "Invalid XGBoost artifact. Upload a .pkl/.joblib model, a native XGBoost model, "
+                    "or a TF-DF SavedModel .zip. The model must provide predict_proba() when using "
+                    "Joblib. "
+                    f"Deserialization failed: {'; '.join(load_errors)}"
+                ) from exc
+            except Exception:
+                shutil.rmtree(tmp_model_path, ignore_errors=True)
+                raise
+
+            if model_path.exists():
+                if model_path.is_dir():
+                    shutil.rmtree(model_path)
+                else:
+                    model_path.unlink()
+            tmp_model_path.rename(model_path)
     Path(settings.XGB_TFIDF_VECTORIZER_PATH).write_bytes(vectorizer_bytes)
+    xgboost_service.model = None
     xgboost_service._try_load()  # reload in-place so no restart needed
 
 
@@ -145,7 +217,7 @@ def replace_transformer_artifacts(zip_bytes: bytes, target_dir: Path) -> None:
     overwriting what's there. DeBERTa/RoBERTa services currently load
     once at import time, so a server restart is needed to pick this up
     unless their service classes are extended with a reload method."""
-    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
     tmp_extract = target_dir.parent / f"_tmp_extract_{target_dir.name}"
     if tmp_extract.exists():
         shutil.rmtree(tmp_extract)
@@ -154,21 +226,47 @@ def replace_transformer_artifacts(zip_bytes: bytes, target_dir: Path) -> None:
     tmp_zip_path = tmp_extract / "upload.zip"
     tmp_zip_path.write_bytes(zip_bytes)
     with zipfile.ZipFile(tmp_zip_path, "r") as zf:
-        zf.extractall(tmp_extract)
+        _safe_extract_zip(zf, tmp_extract)
     tmp_zip_path.unlink()
 
-    for item in target_dir.iterdir():
-        if item.is_file():
-            item.unlink()
-    for item in tmp_extract.iterdir():
-        dest = target_dir / item.name
-        if dest.exists():
-            if dest.is_dir():
-                shutil.rmtree(dest)
-            else:
-                dest.unlink()
-        shutil.move(str(item), str(dest))
-    shutil.rmtree(tmp_extract)
+    extracted_items = list(tmp_extract.iterdir())
+    if len(extracted_items) == 1 and extracted_items[0].is_dir():
+        nested_dir = extracted_items[0]
+        for item in nested_dir.iterdir():
+            shutil.move(str(item), str(tmp_extract / item.name))
+        nested_dir.rmdir()
+
+    extracted_files = {item.name for item in tmp_extract.iterdir()}
+    if "config.json" not in extracted_files or not (
+        "model.safetensors" in extracted_files or "pytorch_model.bin" in extracted_files
+    ):
+        shutil.rmtree(tmp_extract, ignore_errors=True)
+        raise DatasetValidationError(
+            "Transformer archive must contain config.json and model.safetensors or pytorch_model.bin."
+        )
+
+    backup_dir = target_dir.parent / f"_backup_{target_dir.name}"
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)
+    try:
+        if target_dir.exists():
+            target_dir.rename(backup_dir)
+        tmp_extract.rename(target_dir)
+    except Exception:
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        if backup_dir.exists():
+            backup_dir.rename(target_dir)
+        shutil.rmtree(tmp_extract, ignore_errors=True)
+        raise
+    finally:
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
+    target_resolved = target_dir.resolve()
+    if target_resolved == Path(settings.MDEBERTA_MODEL_PATH).resolve():
+        mdeberta_service.reload()
+    elif target_resolved == Path(settings.XLM_ROBERTA_MODEL_PATH).resolve():
+        xlm_roberta_service.reload()
 
 
 def _normalise_category(value: str) -> str:
@@ -189,6 +287,16 @@ def _normalise_category(value: str) -> str:
 
 class DatasetValidationError(Exception):
     pass
+
+
+def _safe_extract_zip(archive: zipfile.ZipFile, destination: Path) -> None:
+    """Extract an uploaded archive without allowing path traversal."""
+    destination = destination.resolve()
+    for member in archive.infolist():
+        target = (destination / member.filename).resolve()
+        if target != destination and destination not in target.parents:
+            raise DatasetValidationError("Archive contains an unsafe path.")
+    archive.extractall(destination)
 
 
 def _resolve_dataset_column(columns: list[str], explicit: str | None, aliases: tuple[str, ...], kind: str) -> str:
@@ -299,22 +407,64 @@ def _split_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Dat
 # Map an approved approach name (individual model or ensemble) to the
 # TrainingAlgorithm enum value used for persistence / rollback.
 APPROACH_TO_ALGORITHM = {
-    "XGBoost": TrainingAlgorithm.XGBOOST,
-    "DeBERTa": TrainingAlgorithm.DEBERTA,
-    "RoBERTa": TrainingAlgorithm.ROBERTA,
-    "XGBoost + DeBERTa": TrainingAlgorithm.ENSEMBLE_XGB_DEBERTA,
-    "DeBERTa + RoBERTa": TrainingAlgorithm.ENSEMBLE_DEBERTA_ROBERTA,
-    "RoBERTa + XGBoost": TrainingAlgorithm.ENSEMBLE_ROBERTA_XGB,
-    "XGBoost + DeBERTa + RoBERTa": TrainingAlgorithm.ENSEMBLE_XGB_DEBERTA_ROBERTA,
+    "XGBoost (TF-DF)": TrainingAlgorithm.XGBOOST_TFDF,
+    "mDeBERTa": TrainingAlgorithm.MDEBERTA,
+    "XLM-RoBERTa": TrainingAlgorithm.XLM_ROBERTA,
+    "XGBoost (TF-DF) + mDeBERTa": TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA,
+    "mDeBERTa + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
+    "XLM-RoBERTa + XGBoost (TF-DF)": TrainingAlgorithm.ENSEMBLE_XLM_TFDF,
+    "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA_XLM,
 }
 
 # Key names used by the Colab dashboard export's ``models`` object, mapped to
 # the canonical approved approach names that APPROACH_TO_ALGORITHM and the
 # rest of the app recognise.
+#
+# The Colab notebook has evolved: it now trains mDeBERTa-v3-base (exported
+# under keys like "mdeberta"/"mdeberta-v3-base") and XLM-RoBERTa ("xlm-roberta").
+# Resolution below is canonicalized (lowercased, non-alphanumerics stripped)
+# and prefix-matched so these variants all map onto the approved DeBERTa /
+# RoBERTa approaches instead of being silently dropped.
+
+
+def _canonicalize_key(key: Any) -> str:
+    """Lowercase and strip everything except a-z / 0-9 for tolerant matching."""
+    import re as _re
+
+    return _re.sub(r"[^a-z0-9]", "", str(key).lower())
+
+
+def colab_key_to_approach(key: Any) -> str | None:
+    """Resolve a Colab-export model key to a canonical approved approach name.
+
+    Returns None for keys that are not model approaches (top-level metadata
+    such as ``generated_at`` / ``label_map``) so callers can skip them.
+    """
+    canonical = _canonicalize_key(key)
+    if (
+        "mdeberta" in canonical
+        and ("xlmroberta" in canonical or canonical in ("mdebertaxlm", "mdebertaxlmr"))
+    ):
+        return "mDeBERTa + XLM-RoBERTa"
+    if "xlmroberta" in canonical and "mdeberta" in canonical:
+        return "mDeBERTa + XLM-RoBERTa"
+    if canonical in ("xgboost", "xgb"):
+        return "XGBoost (TF-DF)"
+    if canonical.startswith("mdeberta") or canonical in ("deberta", "debertabase"):
+        return "mDeBERTa"
+    if canonical.startswith("xlmroberta") or canonical in ("roberta", "robertabase"):
+        return "XLM-RoBERTa"
+    if canonical == "xlmr":
+        return "XLM-RoBERTa"
+    if canonical == "ensemble":
+        return "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa"
+    return None
+
+
 COLAB_KEY_TO_APPROACH = {
-    "xgboost": "XGBoost",
-    "deberta": "DeBERTa",
-    "roberta": "RoBERTa",
+    "xgboost": "XGBoost (TF-DF)",
+    "deberta": "mDeBERTa",
+    "roberta": "XLM-RoBERTa",
 }
 
 
@@ -358,14 +508,27 @@ def normalize_metrics_payload(payload: Any) -> tuple[dict[str, dict], str | None
         labels = list(CLASS_ORDER)
 
     flat: dict[str, dict] = {}
+    skipped: list[str] = []
     for key, model in payload["models"].items():
-        approach = COLAB_KEY_TO_APPROACH.get(key)
+        approach = colab_key_to_approach(key)
         if approach is None or not isinstance(model, dict):
+            # Not fatal (metadata keys may be nested here), but never silent:
+            # these are surfaced to the caller and logged so an unnoticed
+            # key-name change (e.g. "mdeberta" vs "deberta") can't shrink the
+            # import to a single model again.
+            skipped.append(str(key))
             continue
         flat[approach] = _normalize_colab_model(model, labels)
 
+    if skipped:
+        from app.utils.logger import logger as _logger
+
+        _logger.warning(
+            f"Metrics JSON contained unrecognized model keys that were skipped: {', '.join(skipped)}"
+        )
+
     recommended_raw = payload.get("recommended_production_model")
-    recommended = COLAB_KEY_TO_APPROACH.get(recommended_raw) if recommended_raw else None
+    recommended = colab_key_to_approach(recommended_raw) if recommended_raw else None
     return flat, recommended
 
 
@@ -417,7 +580,13 @@ def _normalize_colab_model(model: dict, label_map: dict | list) -> dict:
     }
 
 
-def _persist_history(db: Session, history: TrainingHistory, metrics: dict, status: TrainingStatus) -> None:
+def _persist_history(
+    db: Session,
+    history: TrainingHistory,
+    metrics: dict,
+    status: TrainingStatus,
+    commit: bool = True,
+) -> None:
     history.status = status
     history.accuracy = metrics.get("accuracy")
     history.precision = metrics.get("precision")
@@ -431,10 +600,13 @@ def _persist_history(db: Session, history: TrainingHistory, metrics: dict, statu
     history.confusion_matrix = {"labels": metrics.get("labels"), "matrix": metrics.get("confusion_matrix")}
     history.classification_report = metrics.get("classification_report")
     history.hyperparameters = metrics.get("hyperparameters")
-    db.commit()
+    if commit:
+        db.commit()
 
 
-def _mark_production_model(db: Session, algorithm: TrainingAlgorithm) -> None:
+def _mark_production_model(
+    db: Session, algorithm: TrainingAlgorithm, commit: bool = True
+) -> None:
     db.query(TrainingHistory).update({TrainingHistory.is_production_model: False})
     latest = (
         db.query(TrainingHistory)
@@ -444,7 +616,8 @@ def _mark_production_model(db: Session, algorithm: TrainingAlgorithm) -> None:
     )
     if latest:
         latest.is_production_model = True
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def _write_comparison_artifacts(results: dict, best_algorithm: str, selection_metric: str = "weighted_f1") -> None:
@@ -552,11 +725,11 @@ def run_full_training(
 
     run_id = str(time.time_ns())
     results: dict[str, dict] = {}
-    test_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost": [], "DeBERTa": [], "RoBERTa": []}
-    val_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost": [], "DeBERTa": [], "RoBERTa": []}
+    test_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-DF)": [], "mDeBERTa": [], "XLM-RoBERTa": []}
+    val_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-DF)": [], "mDeBERTa": [], "XLM-RoBERTa": []}
 
     xgb_history = TrainingHistory(
-        algorithm=TrainingAlgorithm.XGBOOST,
+        algorithm=TrainingAlgorithm.XGBOOST_TFDF,
         status=TrainingStatus.RUNNING,
         dataset_filename=csv_path.name,
         dataset_size=len(df),
@@ -571,45 +744,45 @@ def run_full_training(
         xgb_metrics["split_sizes"] = {"train": len(train_texts), "validation": len(val_texts), "test": len(test_texts)}
         xgb_metrics["hyperparameters"] = {"n_estimators": settings.XGB_N_ESTIMATORS, "max_depth": settings.XGB_MAX_DEPTH, "learning_rate": settings.XGB_LEARNING_RATE}
         _persist_history(db, xgb_history, xgb_metrics, TrainingStatus.COMPLETED)
-        results["XGBoost"] = xgb_metrics
+        results["XGBoost (TF-DF)"] = xgb_metrics
         for text in test_texts:
             _, _, probs = xgboost_service.predict(text)
-            test_model_probabilities["XGBoost"].append(np.asarray(probs, dtype=float))
+            test_model_probabilities["XGBoost (TF-DF)"].append(np.asarray(probs, dtype=float))
         for text in val_texts:
             _, _, probs = xgboost_service.predict(text)
-            val_model_probabilities["XGBoost"].append(np.asarray(probs, dtype=float))
+            val_model_probabilities["XGBoost (TF-DF)"].append(np.asarray(probs, dtype=float))
     except Exception as exc:  # noqa: BLE001
         logger.warning("XGBoost training failed: %s", exc)
         xgb_history.status = TrainingStatus.FAILED; xgb_history.notes = str(exc); db.commit()
 
     deberta_history = TrainingHistory(
-        algorithm=TrainingAlgorithm.DEBERTA,
+        algorithm=TrainingAlgorithm.MDEBERTA,
         status=TrainingStatus.RUNNING,
         dataset_filename=csv_path.name,
         dataset_size=len(df),
     )
     db.add(deberta_history); db.commit(); db.refresh(deberta_history)
     try:
-        metrics = deberta_service.fine_tune(
+        metrics = mdeberta_service.fine_tune(
             train_texts=train_texts,
             train_labels=train_labels,
             val_texts=val_texts,
             val_labels=val_labels,
-            output_dir=settings.DEBERTA_MODEL_PATH / f"run_{run_id}",
-            epochs=settings.DEBERTA_EPOCHS,
-            learning_rate=settings.DEBERTA_LEARNING_RATE,
-            batch_size=settings.DEBERTA_BATCH_SIZE,
-            max_length=settings.DEBERTA_MAX_SEQ_LENGTH,
+            output_dir=settings.MDEBERTA_MODEL_PATH / f"run_{run_id}",
+            epochs=settings.MDEBERTA_EPOCHS,
+            learning_rate=settings.MDEBERTA_LEARNING_RATE,
+            batch_size=settings.MDEBERTA_BATCH_SIZE,
+            max_length=settings.MDEBERTA_MAX_SEQ_LENGTH,
             seed=settings.RANDOM_STATE,
         )
         y_pred = []
         for text in test_texts:
-            label, _, probs = deberta_service.predict(text)
+            label, _, probs = mdeberta_service.predict(text)
             y_pred.append(label)
-            test_model_probabilities["DeBERTa"].append(np.asarray(probs, dtype=float))
+            test_model_probabilities["mDeBERTa"].append(np.asarray(probs, dtype=float))
         for text in val_texts:
-            _, _, probs = deberta_service.predict(text)
-            val_model_probabilities["DeBERTa"].append(np.asarray(probs, dtype=float))
+            _, _, probs = mdeberta_service.predict(text)
+            val_model_probabilities["mDeBERTa"].append(np.asarray(probs, dtype=float))
         debert_metrics = _metrics_for_labels(test_labels, y_pred)
         debert_metrics["training_time_seconds"] = float(metrics.get("training_time_seconds", 0.0))
         debert_metrics["inference_time_ms"] = float(metrics.get("inference_time_ms", 0.0))
@@ -617,63 +790,63 @@ def run_full_training(
         debert_metrics["dataset_size"] = len(df)
         debert_metrics["split_sizes"] = {"train": len(train_texts), "validation": len(val_texts), "test": len(test_texts)}
         debert_metrics["validation"] = _metrics_for_labels(val_labels, [deberta_service.predict(text)[0] for text in val_texts])
-        debert_metrics["hyperparameters"] = {"epochs": settings.DEBERTA_EPOCHS, "learning_rate": settings.DEBERTA_LEARNING_RATE, "batch_size": settings.DEBERTA_BATCH_SIZE, "max_seq_length": settings.DEBERTA_MAX_SEQ_LENGTH, "seed": settings.RANDOM_STATE, "checkpoint": settings.DEBERTA_MODEL_NAME}
+        debert_metrics["hyperparameters"] = {"epochs": settings.MDEBERTA_EPOCHS, "learning_rate": settings.MDEBERTA_LEARNING_RATE, "batch_size": settings.MDEBERTA_BATCH_SIZE, "max_seq_length": settings.MDEBERTA_MAX_SEQ_LENGTH, "seed": settings.RANDOM_STATE, "checkpoint": settings.MDEBERTA_MODEL_NAME}
         _persist_history(db, deberta_history, debert_metrics, TrainingStatus.COMPLETED)
-        results["DeBERTa"] = debert_metrics
+        results["mDeBERTa"] = debert_metrics
     except Exception as exc:  # noqa: BLE001
         logger.exception(f"DeBERTa training failed: {exc}")
         deberta_history.status = TrainingStatus.FAILED; deberta_history.notes = str(exc); db.commit()
 
     roberta_history = TrainingHistory(
-        algorithm=TrainingAlgorithm.ROBERTA,
+        algorithm=TrainingAlgorithm.XLM_ROBERTA,
         status=TrainingStatus.RUNNING,
         dataset_filename=csv_path.name,
         dataset_size=len(df),
     )
     db.add(roberta_history); db.commit(); db.refresh(roberta_history)
     try:
-        metrics = roberta_service.fine_tune(
+        metrics = xlm_roberta_service.fine_tune(
             train_texts=train_texts,
             train_labels=train_labels,
             val_texts=val_texts,
             val_labels=val_labels,
-            output_dir=settings.ROBERTA_MODEL_PATH / f"run_{run_id}",
-            epochs=settings.DEBERTA_EPOCHS,
-            learning_rate=settings.DEBERTA_LEARNING_RATE,
-            batch_size=settings.DEBERTA_BATCH_SIZE,
-            max_length=settings.DEBERTA_MAX_SEQ_LENGTH,
+            output_dir=settings.XLM_ROBERTA_MODEL_PATH / f"run_{run_id}",
+            epochs=settings.MDEBERTA_EPOCHS,
+            learning_rate=settings.MDEBERTA_LEARNING_RATE,
+            batch_size=settings.MDEBERTA_BATCH_SIZE,
+            max_length=settings.MDEBERTA_MAX_SEQ_LENGTH,
             seed=settings.RANDOM_STATE,
         )
         y_pred = []
         for text in test_texts:
-            label, _, probs = roberta_service.predict(text)
+            label, _, probs = xlm_roberta_service.predict(text)
             y_pred.append(label)
-            test_model_probabilities["RoBERTa"].append(np.asarray(probs, dtype=float))
+            test_model_probabilities["XLM-RoBERTa"].append(np.asarray(probs, dtype=float))
         for text in val_texts:
-            _, _, probs = roberta_service.predict(text)
-            val_model_probabilities["RoBERTa"].append(np.asarray(probs, dtype=float))
+            _, _, probs = xlm_roberta_service.predict(text)
+            val_model_probabilities["XLM-RoBERTa"].append(np.asarray(probs, dtype=float))
         roberta_metrics = _metrics_for_labels(test_labels, y_pred)
         roberta_metrics["training_time_seconds"] = float(metrics.get("training_time_seconds", 0.0))
         roberta_metrics["inference_time_ms"] = float(metrics.get("inference_time_ms", 0.0))
         roberta_metrics["memory_usage_mb"] = float(metrics.get("memory_usage_mb", 0.0))
         roberta_metrics["dataset_size"] = len(df)
         roberta_metrics["split_sizes"] = {"train": len(train_texts), "validation": len(val_texts), "test": len(test_texts)}
-        roberta_metrics["validation"] = _metrics_for_labels(val_labels, [roberta_service.predict(text)[0] for text in val_texts])
-        roberta_metrics["hyperparameters"] = {"epochs": settings.DEBERTA_EPOCHS, "learning_rate": settings.DEBERTA_LEARNING_RATE, "batch_size": settings.DEBERTA_BATCH_SIZE, "max_seq_length": settings.DEBERTA_MAX_SEQ_LENGTH, "seed": settings.RANDOM_STATE, "checkpoint": settings.ROBERTA_MODEL_NAME}
+        roberta_metrics["validation"] = _metrics_for_labels(val_labels, [xlm_roberta_service.predict(text)[0] for text in val_texts])
+        roberta_metrics["hyperparameters"] = {"epochs": settings.MDEBERTA_EPOCHS, "learning_rate": settings.MDEBERTA_LEARNING_RATE, "batch_size": settings.MDEBERTA_BATCH_SIZE, "max_seq_length": settings.MDEBERTA_MAX_SEQ_LENGTH, "seed": settings.RANDOM_STATE, "checkpoint": settings.XLM_ROBERTA_MODEL_NAME}
         _persist_history(db, roberta_history, roberta_metrics, TrainingStatus.COMPLETED)
-        results["RoBERTa"] = roberta_metrics
+        results["XLM-RoBERTa"] = roberta_metrics
     except Exception as exc:  # noqa: BLE001
         logger.exception(f"RoBERTa training failed: {exc}")
         roberta_history.status = TrainingStatus.FAILED; roberta_history.notes = str(exc); db.commit()
 
-    if not test_model_probabilities["XGBoost"] or not test_model_probabilities["DeBERTa"] or not test_model_probabilities["RoBERTa"]:
-        raise RuntimeError("The active research pipeline requires successful XGBoost, DeBERTa, and RoBERTa training to complete.")
+    if not test_model_probabilities["XGBoost (TF-DF)"] or not test_model_probabilities["mDeBERTa"] or not test_model_probabilities["XLM-RoBERTa"]:
+        raise RuntimeError("The active research pipeline requires successful XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa training to complete.")
 
     # Build all four approved ensembles. Member weights are selected on the
     # untouched validation split; final metrics are computed on the untouched
     # test set so no test observation influences selection.
     available_members: set[str] = set()
-    for name in ("XGBoost", "DeBERTa", "RoBERTa"):
+    for name in ("XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa"):
         if test_model_probabilities[name]:
             available_members.add(name)
 

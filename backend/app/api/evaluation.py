@@ -284,14 +284,14 @@ def submit_evaluation(
         evaluation.is_mismatch = mismatch.is_mismatch
         evaluation.mismatch_type = mismatch.mismatch_type.value
 
-    # --- Single commit point: the row only ever appears once, complete ---
+    # Keep the evaluation and its prediction in one transaction. A prediction
+    # failure must not leave a partially persisted evaluation behind.
     db.add(evaluation)
-    db.commit()
-    db.refresh(evaluation)
+    db.flush()
 
     if prediction_result is not None:
         prediction = Prediction(
-             evaluation_id=evaluation.id,
+            evaluation_id=evaluation.id,
             xgb_prediction=prediction_result["xgb_prediction"],
             xgb_confidence=prediction_result["xgb_confidence"],
             deberta_prediction=prediction_result["deberta_prediction"],
@@ -304,7 +304,10 @@ def submit_evaluation(
             processing_time_ms=prediction_result["processing_time_ms"],
         )
         db.add(prediction)
-        db.commit()
+        db.flush()
+
+    db.commit()
+    db.refresh(evaluation)
 
     evaluation.submitted_by = db.query(User).filter(User.id == user_id).first() if user_id else None
 

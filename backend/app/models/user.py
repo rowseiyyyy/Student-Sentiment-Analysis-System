@@ -6,6 +6,7 @@ from sqlalchemy import Boolean, DateTime, Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.time import utcnow_naive
 
 
 class UserRole(str, enum.Enum):
@@ -27,9 +28,9 @@ class User(Base):
     student_id: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     course: Mapped[str | None] = mapped_column(String(150), nullable=True)
     year_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow_naive, onupdate=utcnow_naive
     )
 
     # NOTE: cascade intentionally excludes "delete"/"delete-orphan". The

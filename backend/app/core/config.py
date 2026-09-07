@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Asiatech Sentiment Analysis API"
     PROJECT_DESCRIPTION: str = (
         "Sentiment Analysis of Student Feedback from Asiatech College of "
-        "Sta. Rosa, Laguna using XGBoost, DeBERTa and RoBERTa."
+        "Sta. Rosa, Laguna using XGBoost (TF-DF), mDeBERTa and XLM-RoBERTa."
     )
     VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
@@ -69,9 +69,9 @@ class Settings(BaseSettings):
     # IMPORTANT: every value below MUST be overridden in production via
     # environment variables. A startup guard further down refuses to boot
     # in production with the default SECRET_KEY.
-    SECRET_KEY: str = Field(default="change-me-in-production-please-use-a-long-random-string")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
-    REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080
+    SECRET_KEY: str = Field(default="CHANGE_THIS_SECRET_KEY_IN_PRODUCTION_1234567890")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
     # ------------------------------------------------------------------
     # CORS
@@ -154,9 +154,8 @@ class Settings(BaseSettings):
         )
 
     # ------------------------------------------------------------------
-    # Security / JWT
+    # JWT
     # ------------------------------------------------------------------
-    SECRET_KEY: str = "CHANGE_THIS_SECRET_KEY_IN_PRODUCTION_1234567890"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
@@ -176,22 +175,21 @@ class Settings(BaseSettings):
     DATASETS_DIR: Path = BASE_DIR / "app" / "datasets"
 
     # Active paths.
-    # Native XGBoost model (Booster.save_model format). Version-safe across
-    # xgboost releases — preferred over the pickled XGBClassifier in xgb_model.pkl.
-    XGB_MODEL_JSON_PATH: Path = ML_DIR / "xgb_model.json"
-    XGB_MODEL_PATH: Path = ML_DIR / "xgb_model.pkl"
+    # TF-DF GradientBoostedTrees model. This is deliberately separate from
+    # the legacy native XGBoost artifacts; the formats are not interchangeable.
+    XGB_MODEL_PATH: Path = ML_DIR / "xgb_tfdf"
     XGB_TFIDF_VECTORIZER_PATH: Path = ML_DIR / "tfidf_vectorizer_xgb.pkl"
     XGB_LABEL_ENCODER_PATH: Path = ML_DIR / "label_encoder_xgb.pkl"
-    DEBERTA_MODEL_PATH: Path = ML_DIR / "deberta_v3"
-    ROBERTA_MODEL_PATH: Path = ML_DIR / "roberta_sentiment"
+    MDEBERTA_MODEL_PATH: Path = ML_DIR / "mdeberta_v3"
+    XLM_ROBERTA_MODEL_PATH: Path = ML_DIR / "xlm_roberta_sentiment"
 
     MODEL_METADATA_PATH: Path = ML_DIR / "model_metadata.json"
     COMPARISON_RESULTS_PATH: Path = ML_DIR / "comparison_results.json"
 
     # General RoBERTa is fine-tuned on the actual student-feedback labels;
     # avoid treating a Twitter-domain sentiment checkpoint as a final model.
-    ROBERTA_MODEL_NAME: str = "roberta-base"
-    DEBERTA_MODEL_NAME: str = "microsoft/deberta-v3-base"
+    XLM_ROBERTA_MODEL_NAME: str = "xlm-roberta-base"
+    MDEBERTA_MODEL_NAME: str = "microsoft/mdeberta-v3-base"
 
     TRANSFORMER_DEVICE: str = "cpu"
 
@@ -204,22 +202,22 @@ class Settings(BaseSettings):
     # Initial weights for the soft-vote ensemble. These are NOT claimed
     # to be optimal; they are starting values for the ensemble.
     ENSEMBLE_WEIGHTS: dict[str, float] = {
-        "DeBERTa": 0.4,
-        "RoBERTa": 0.4,
-        "XGBoost": 0.2,
+        "mDeBERTa": 0.4,
+        "XLM-RoBERTa": 0.4,
+        "XGBoost (TF-DF)": 0.2,
     }
     BOOTSTRAP_N_ITER: int = 1000
     BOOTSTRAP_ALPHA: float = 0.05
     BOOTSTRAP_SEED: int = 42
 
-    # DeBERTa fine-tune defaults (initial configuration; not validated
+    # mDeBERTa fine-tune defaults (initial configuration; not validated
     # as optimal until a real labelled training/evaluation run).
-    DEBERTA_EPOCHS: int = 3
-    DEBERTA_BATCH_SIZE: int = 8
-    DEBERTA_LEARNING_RATE: float = 2e-5
-    DEBERTA_WEIGHT_DECAY: float = 0.01
-    DEBERTA_WARMUP_RATIO: float = 0.1
-    DEBERTA_MAX_SEQ_LENGTH: int = 256
+    MDEBERTA_EPOCHS: int = 3
+    MDEBERTA_BATCH_SIZE: int = 8
+    MDEBERTA_LEARNING_RATE: float = 2e-5
+    MDEBERTA_WEIGHT_DECAY: float = 0.01
+    MDEBERTA_WARMUP_RATIO: float = 0.1
+    MDEBERTA_MAX_SEQ_LENGTH: int = 256
 
 
     # XGBoost defaults.
@@ -250,12 +248,11 @@ def get_settings() -> Settings:
         settings.TEMP_VALIDATION_ROOT = validation_root
         settings.ML_DIR = validation_root / "ml"
         settings.DATASETS_DIR = validation_root / "datasets"
-        settings.XGB_MODEL_JSON_PATH = settings.ML_DIR / "xgb_model.json"
-        settings.XGB_MODEL_PATH = settings.ML_DIR / "xgb_model.pkl"
+        settings.XGB_MODEL_PATH = settings.ML_DIR / "xgb_tfdf"
         settings.XGB_TFIDF_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_xgb.pkl"
         settings.XGB_LABEL_ENCODER_PATH = settings.ML_DIR / "label_encoder_xgb.pkl"
-        settings.DEBERTA_MODEL_PATH = settings.ML_DIR / "deberta_v3"
-        settings.ROBERTA_MODEL_PATH = settings.ML_DIR / "roberta_sentiment"
+        settings.MDEBERTA_MODEL_PATH = settings.ML_DIR / "mdeberta_v3"
+        settings.XLM_ROBERTA_MODEL_PATH = settings.ML_DIR / "xlm_roberta_sentiment"
         settings.MODEL_METADATA_PATH = settings.ML_DIR / "model_metadata.json"
         settings.COMPARISON_RESULTS_PATH = settings.ML_DIR / "comparison_results.json"
 
@@ -296,7 +293,10 @@ def assert_production_readiness() -> None:
     issues: list[str] = []
     if settings.DEBUG:
         issues.append("DEBUG must be False in production.")
-    if settings.SECRET_KEY.startswith("change-me-in-production"):
+    if settings.SECRET_KEY in {
+        "change-me-in-production-please-use-a-long-random-string",
+        "CHANGE_THIS_SECRET_KEY_IN_PRODUCTION_1234567890",
+    }:
         issues.append("SECRET_KEY is still the default value — generate a long random secret.")
     if "*" in settings.CORS_ORIGINS:
         issues.append("CORS_ORIGINS is wide-open (*) — restrict to your frontend origin(s).")

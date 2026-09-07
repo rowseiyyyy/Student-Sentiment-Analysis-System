@@ -6,6 +6,7 @@ from sqlalchemy import Boolean, DateTime, Enum, Float, Integer, JSON, String, Te
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.time import utcnow_naive
 
 
 class TrainingAlgorithm(str, enum.Enum):
@@ -17,6 +18,11 @@ class TrainingAlgorithm(str, enum.Enum):
 
     # Approved active research models.
     XGBOOST = "XGBoost"
+    XGBOOST_TFDF = "XGBoost (TF-DF)"
+    MDEBERTA = "mDeBERTa"
+    XLM_ROBERTA = "XLM-RoBERTa"
+    # Historical values remain readable but are not active approaches.
+    LEGACY_XGBOOST = "XGBoost"
     DEBERTA = "DeBERTa"
     ROBERTA = "RoBERTa"
 
@@ -28,6 +34,10 @@ class TrainingAlgorithm(str, enum.Enum):
     ENSEMBLE_DEBERTA_ROBERTA = "DeBERTa + RoBERTa"
     ENSEMBLE_ROBERTA_XGB = "RoBERTa + XGBoost"
     ENSEMBLE_XGB_DEBERTA_ROBERTA = "XGBoost + DeBERTa + RoBERTa"
+    ENSEMBLE_TFDF_MDEBERTA = "XGBoost (TF-DF) + mDeBERTa"
+    ENSEMBLE_MDEBERTA_XLM = "mDeBERTa + XLM-RoBERTa"
+    ENSEMBLE_XLM_TFDF = "XLM-RoBERTa + XGBoost (TF-DF)"
+    ENSEMBLE_TFDF_MDEBERTA_XLM = "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa"
 
 
 class TrainingStatus(str, enum.Enum):
@@ -66,4 +76,4 @@ class TrainingHistory(Base):
     is_production_model: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, index=True)

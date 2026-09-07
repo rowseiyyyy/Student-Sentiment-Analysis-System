@@ -40,6 +40,12 @@ class TransformerSentimentService:
     def is_ready(self) -> bool:
         return self.model is not None or self.artifact_path.exists()
 
+    def reload(self) -> None:
+        """Reload model and tokenizer after an artifact replacement."""
+        self.model = None
+        self.tokenizer = None
+        self._load()
+
     @staticmethod
     def align_probabilities(raw: list[float] | np.ndarray, model_id2label: dict | None = None) -> list[float]:
         """Map any checkpoint order into the application order."""

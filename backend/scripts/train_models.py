@@ -23,7 +23,7 @@ from app.services.training import run_full_training  # noqa: E402
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train XGBoost and fine-tune DeBERTa/RoBERTa.")
+    parser = argparse.ArgumentParser(description="Train XGBoost (TF-DF) and fine-tune mDeBERTa/XLM-RoBERTa.")
     parser.add_argument("--dataset", required=True, help="Path to a labeled CSV (id, category, comment, sentiment).")
     args = parser.parse_args()
 

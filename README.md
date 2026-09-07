@@ -2,7 +2,7 @@
 
 A **web-based student feedback evaluation and sentiment analysis system** developed for **Asia Technological School of Science and Arts (Asiatech), Sta. Rosa, Laguna, Philippines**.
 
-The system collects student evaluations and analyzes open-ended feedback using **XGBoost, DeBERTa, and RoBERTa**, combined through a **weighted soft-voting ensemble** to classify feedback as **Positive, Neutral, or Negative**.
+The system collects student evaluations and analyzes open-ended feedback using **XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa**, combined through a **weighted soft-voting ensemble** to classify feedback as **Positive, Neutral, or Negative**.
 
 ---
 
@@ -46,7 +46,7 @@ The system uses **three machine learning models** combined through a **weighted 
 
 | Model       | Role                                                |
 | ----------- | --------------------------------------------------- |
-| **XGBoost** | Traditional machine learning model using **TF-IDF** |
+| **XGBoost (TF-DF)** | TensorFlow Decision Forests gradient-boosted trees using **TF-IDF** features |
 | **DeBERTa** | Transformer-based sentiment classifier              |
 | **RoBERTa** | Transformer-based sentiment classifier              |
 

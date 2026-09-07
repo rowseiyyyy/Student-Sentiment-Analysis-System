@@ -254,7 +254,7 @@ const FACULTY = {
                     <div class="empty-state">
                         <div class="empty-icon"><i class="fas fa-database"></i></div>
                         <h3>No Data Available</h3>
-                        <p>${error.message}</p>
+                        <p>${escapeHtml(error.message)}</p>
                     </div>
                 </div>
             `;
@@ -323,7 +323,7 @@ const FACULTY = {
                 html += complaints.items.map(c => `
                     <div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);">
                         <p style="font-size:.85rem;">"${escapeHtml(c.comment.substring(0, 120))}"</p>
-                        <small style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">${c.category}</small>
+                        <small style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">${escapeHtml(c.category)}</small>
                     </div>
                 `).join('');
             }
@@ -333,7 +333,7 @@ const FACULTY = {
                 html += appreciations.items.map(a => `
                     <div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);">
                         <p style="font-size:.85rem;">"${escapeHtml(a.comment.substring(0, 120))}"</p>
-                        <small style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">${a.category}</small>
+                        <small style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">${escapeHtml(a.category)}</small>
                     </div>
                 `).join('');
             }
@@ -350,7 +350,7 @@ const FACULTY = {
                     <div class="empty-state">
                         <div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div>
                         <h3>Analytics Error</h3>
-                        <p>${error.message}</p>
+                        <p>${escapeHtml(error.message)}</p>
                     </div>
                 </div>
             `;

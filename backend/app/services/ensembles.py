@@ -7,7 +7,7 @@ assembled, combined and reported.
 
 Approved models / ensembles
 ---------------------------
-Single models:  XGBoost, DeBERTa, RoBERTa
+Single models:  XGBoost (TF-DF), mDeBERTa, XLM-RoBERTa
 Ensembles (weighted soft voting):
     * XGBoost + DeBERTa
     * DeBERTa + RoBERTa
@@ -27,14 +27,14 @@ from app.services.xgboost_service import CLASS_ORDER
 
 # Canonical ordered mapping of ensemble name -> participating model keys.
 ENSEMBLES: dict[str, list[str]] = {
-    "XGBoost + DeBERTa": ["XGBoost", "DeBERTa"],
-    "DeBERTa + RoBERTa": ["DeBERTa", "RoBERTa"],
-    "RoBERTa + XGBoost": ["RoBERTa", "XGBoost"],
-    "XGBoost + DeBERTa + RoBERTa": ["XGBoost", "DeBERTa", "RoBERTa"],
+    "XGBoost (TF-DF) + mDeBERTa": ["XGBoost (TF-DF)", "mDeBERTa"],
+    "mDeBERTa + XLM-RoBERTa": ["mDeBERTa", "XLM-RoBERTa"],
+    "XLM-RoBERTa + XGBoost (TF-DF)": ["XLM-RoBERTa", "XGBoost (TF-DF)"],
+    "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa": ["XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa"],
 }
 
 # Approved single-model approaches.
-SINGLE_MODELS: tuple[str, ...] = ("XGBoost", "DeBERTa", "RoBERTa")
+SINGLE_MODELS: tuple[str, ...] = ("XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa")
 
 # Complete approved approach set (individual models + all four ensembles).
 APPROVED_APPROACHES: tuple[str, ...] = SINGLE_MODELS + tuple(ENSEMBLES.keys())

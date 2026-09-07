@@ -16,7 +16,11 @@ function showToast(message, type = 'info', duration = 4000) {
         info: 'ℹ'
     };
     
-    toast.innerHTML = `<span>${icons[type] || icons.info}</span><span>${message}</span>`;
+    const icon = document.createElement('span');
+    icon.textContent = icons[type] || icons.info;
+    const content = document.createElement('span');
+    content.textContent = message;
+    toast.append(icon, content);
     container.appendChild(toast);
     
     setTimeout(() => {
@@ -157,7 +161,7 @@ function selectField(name, label, options, placeholder = '') {
 // The comparison UI displays ONLY these four approved models. "DeBERTa +
 // RoBERTa" is the stored backend label for the same two-member ensemble that
 // is displayed to the user as "RoBERTa + DeBERTa".
-const MODEL_PERFORMANCE_ALLOWED = ['XGBoost', 'DeBERTa', 'RoBERTa', 'DeBERTa + RoBERTa'];
+const MODEL_PERFORMANCE_ALLOWED = ['XGBoost (TF-DF)', 'mDeBERTa', 'XLM-RoBERTa', 'mDeBERTa + XLM-RoBERTa'];
 
 function filterModelPerfRows(rows) {
     if (!Array.isArray(rows)) return [];
@@ -167,8 +171,8 @@ function filterModelPerfRows(rows) {
 }
 
 function modelPerfDisplayName(algorithm) {
-    if (algorithm === 'DeBERTa + RoBERTa' || algorithm === 'RoBERTa + DeBERTa') {
-        return 'RoBERTa + DeBERTa';
+    if (algorithm === 'mDeBERTa + XLM-RoBERTa' || algorithm === 'XLM-RoBERTa + mDeBERTa') {
+        return 'XLM-RoBERTa + mDeBERTa';
     }
     return algorithm;
 }

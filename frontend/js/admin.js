@@ -379,7 +379,7 @@ var ADMIN = {
             this.renderSentimentChart(overall.breakdown);
             this.renderModelPerfChart(perfRows);
         } catch (error) {
-            container.innerHTML = '<div class="page-header"><h1>Dashboard Overview</h1></div><div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-database"></i></div><h3>No Data Available</h3><p>' + error.message + '</p></div></div>';
+            container.innerHTML = '<div class="page-header"><h1>Dashboard Overview</h1></div><div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-database"></i></div><h3>No Data Available</h3><p>' + escapeHtml(error.message) + '</p></div></div>';
         }
     },
 
@@ -883,7 +883,7 @@ var ADMIN = {
                 }
             }
         } catch (error) {
-            if (tableContainer) tableContainer.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div><h3>Error Loading Responses</h3><p>' + error.message + '</p></div>';
+            if (tableContainer) tableContainer.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div><h3>Error Loading Responses</h3><p>' + escapeHtml(error.message) + '</p></div>';
         } finally {
             if (loading) loading.classList.add('hidden');
         }
@@ -1022,9 +1022,9 @@ var ADMIN = {
             var pred = item.prediction || null;
             if (pred) {
                 var modelRows = [
-                    { label: 'XGBoost', pred: pred.xgb_prediction, conf: pred.xgb_confidence },
-                    { label: 'DeBERTa', pred: pred.deberta_prediction, conf: pred.deberta_confidence },
-                    { label: 'RoBERTa', pred: pred.roberta_prediction, conf: pred.roberta_confidence }
+                    { label: 'XGBoost (TF-DF)', pred: pred.xgb_prediction, conf: pred.xgb_confidence },
+                    { label: 'mDeBERTa', pred: pred.deberta_prediction, conf: pred.deberta_confidence },
+                    { label: 'XLM-RoBERTa', pred: pred.roberta_prediction, conf: pred.roberta_confidence }
                 ].map(function(m) {
                     var isOfficial = pred.algorithm_used === m.label;
                     return '<tr>' +
@@ -1040,7 +1040,7 @@ var ADMIN = {
                 predictionHtml = '<div class="form-section" style="margin-top:1rem;">' +
                     '<h4 style="margin-bottom:0.5rem;">Text Sentiment â€” Model Breakdown</h4>' +
                     '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody>' + modelRows + '</tbody></table></div>' +
-                    (pred.algorithm_used === 'XGBoost + DeBERTa + RoBERTa' && pred.ensemble_prediction
+                    (pred.algorithm_used === 'XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa' && pred.ensemble_prediction
                         ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result is the weighted ensemble of all three models above (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence).</p>'
                         : '') +
                 '</div>';
@@ -1237,7 +1237,7 @@ predictionHtml +
             var complaintsList = document.getElementById('top-complaints-list');
             if (complaints.items && complaints.items.length > 0) {
                 complaintsList.innerHTML = complaints.items.map(function(c) {
-                    return '<div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);"><p style="font-size:.88rem;">"' + escapeHtml(c.comment.substring(0, 150)) + '"</p><small class="text-muted" style="font-family:var(--font-mono);font-size:.72rem;">' + c.category + ' | Confidence: ' + formatNumber(c.confidence) + '</small></div>';
+                    return '<div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);"><p style="font-size:.88rem;">"' + escapeHtml(c.comment.substring(0, 150)) + '"</p><small class="text-muted" style="font-family:var(--font-mono);font-size:.72rem;">' + escapeHtml(c.category) + ' | Confidence: ' + formatNumber(c.confidence) + '</small></div>';
                 }).join('');
             } else {
                 complaintsList.innerHTML = '<p class="text-muted text-center">No complaints data available.</p>';
@@ -1246,7 +1246,7 @@ predictionHtml +
             var appreciationsList = document.getElementById('top-appreciations-list');
             if (appreciations.items && appreciations.items.length > 0) {
                 appreciationsList.innerHTML = appreciations.items.map(function(a) {
-                    return '<div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);"><p style="font-size:.88rem;">"' + escapeHtml(a.comment.substring(0, 150)) + '"</p><small class="text-muted" style="font-family:var(--font-mono);font-size:.72rem;">' + a.category + ' | Confidence: ' + formatNumber(a.confidence) + '</small></div>';
+                    return '<div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);"><p style="font-size:.88rem;">"' + escapeHtml(a.comment.substring(0, 150)) + '"</p><small class="text-muted" style="font-family:var(--font-mono);font-size:.72rem;">' + escapeHtml(a.category) + ' | Confidence: ' + formatNumber(a.confidence) + '</small></div>';
                 }).join('');
             } else {
                 appreciationsList.innerHTML = '<p class="text-muted text-center">No appreciations data available.</p>';
@@ -1300,22 +1300,22 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training XGBoost, DeBERTa, and RoBERTa in Colab, upload the exported metrics JSON here (see the export cell in the Colab notebook). Optionally attach the trained model files so the app can serve them for live predictions.</p>' +
+                '<p class="form-desc">After training XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa in Colab, upload the exported metrics JSON here. Optionally attach the trained model files so the app can serve them for live predictions.</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
                 '</div>' +
-                '<div class="form-group"><label>XGBoost model (.pkl / .joblib)</label><input type="file" class="form-control" id="import-xgb-model" accept=".pkl,.joblib" /></div>' +
+                '<div class="form-group"><label>XGBoost (TF-DF) model (.pkl/.joblib/.zip)</label><input type="file" class="form-control" id="import-xgb-model" accept=".pkl,.joblib,.zip" /></div>' +
                 '<div class="form-group"><label>XGBoost TF-IDF vectorizer (.pkl / .joblib)</label><input type="file" class="form-control" id="import-xgb-vectorizer" accept=".pkl,.joblib" /></div>' +
-                '<div class="form-group"><label>DeBERTa model folder (.zip)</label><input type="file" class="form-control" id="import-deberta-zip" accept=".zip" /></div>' +
-                '<div class="form-group"><label>RoBERTa model folder (.zip)</label><input type="file" class="form-control" id="import-roberta-zip" accept=".zip" /></div>' +
+                '<div class="form-group"><label>mDeBERTa model folder (.zip)</label><input type="file" class="form-control" id="import-deberta-zip" accept=".zip" /></div>' +
+                '<div class="form-group"><label>XLM-RoBERTa model folder (.zip)</label><input type="file" class="form-control" id="import-roberta-zip" accept=".zip" /></div>' +
                 '<div class="form-group"><label>Set as production model (optional)</label>' +
                     '<select class="form-control" id="import-set-production">' +
                         '<option value="">Auto (best weighted F1 among imported)</option>' +
-                        '<option value="XGBoost">XGBoost</option>' +
-                        '<option value="DeBERTa">DeBERTa</option>' +
-                        '<option value="RoBERTa">RoBERTa</option>' +
-                        '<option value="DeBERTa + RoBERTa">DeBERTa + RoBERTa</option>' +
+                        '<option value="XGBoost (TF-DF)">XGBoost (TF-DF)</option>' +
+                        '<option value="mDeBERTa">mDeBERTa</option>' +
+                        '<option value="XLM-RoBERTa">XLM-RoBERTa</option>' +
+                        '<option value="mDeBERTa + XLM-RoBERTa">mDeBERTa + XLM-RoBERTa</option>' +
                     '</select>' +
                 '</div>' +
                 '<button class="btn btn-primary btn-lg" onclick="ADMIN.submitImportResults()"><i class="fas fa-upload"></i> Import Results</button>' +

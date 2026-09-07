@@ -6,7 +6,7 @@ Laguna, Philippines Using Machine Learning Algorithms**
 A production-ready FastAPI backend that classifies open-ended student
 evaluation comments (Faculty, Staff, Payment, Facilities) into
 **Positive / Neutral / Negative** sentiment, comparing three algorithms —
-**XGBoost**, **DeBERTa**, and **RoBERTa** — and automatically promoting the
+**XGBoost (TF-DF)**, **mDeBERTa**, and **XLM-RoBERTa** — and automatically promoting the
 best-performing model (or ensemble) to production.
 
 ## Quick Start (Windows)
@@ -51,8 +51,8 @@ python run.pypuy
 
 ## Features
 
-- **Three-model sentiment pipeline**: XGBoost (TF-IDF), DeBERTa
-  (`microsoft/deberta-v3-base`), and RoBERTa (`roberta-base`) via HuggingFace
+- **Three-model sentiment pipeline**: XGBoost (TF-DF with TF-IDF), mDeBERTa
+  (`microsoft/mdeberta-v3-base`), and XLM-RoBERTa (`xlm-roberta-base`) via HuggingFace
   Transformers, trained/evaluated on identical splits.
 - **Research mode**: `/ml/import-results` records training metrics from the
   Colab notebook — accuracy, precision, recall, F1,
@@ -118,7 +118,7 @@ backend/
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.11 (required by the currently supported TF-DF release)
 - MySQL 8.0+ (running instance, with a database created for this project)
 - `pip` and (recommended) a virtual environment tool
 
@@ -129,7 +129,7 @@ backend/
 cd backend
 
 # 2. Create and activate a virtual environment
-python3.12 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 
 # 3. Install dependencies
@@ -333,10 +333,13 @@ Set the following in production (never commit real secrets):
    ```
 3. Put a reverse proxy (Nginx / Traefik) in front for TLS termination and
    static file caching.
-4. Pre-warm the transformer models at startup (first request will otherwise
-   pay the HuggingFace download/load cost) by touching
-   `deberta_service` / `roberta_service` once during app startup if desired.
-5. Persist `app/ml/*.pkl` and `app/datasets/` on a volume that survives
+5. Run TF-DF inference/training on Linux or WSL2. The current Windows TF-DF
+  package lacks its native custom inference operation; installing the Python
+  packages alone is insufficient.
+6. Pre-warm the multilingual transformer models at startup (first request will
+  otherwise pay the HuggingFace download/load cost) if desired.
+7. Persist `app/ml/` (including the TF-DF SavedModel directory) and
+  `app/datasets/` on a volume that survives
    deployments/restarts (or move them to object storage and adjust
    `app/core/config.py` paths accordingly).
 6. Configure log shipping from `logs/app.log` (rotated via Loguru) to your

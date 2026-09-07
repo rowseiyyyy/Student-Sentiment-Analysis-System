@@ -28,13 +28,11 @@ slowapi==0.1.9
 # ==============================
 # Machine Learning / NLP
 # ==============================
-# The saved XGBoost model is persisted in native save_model() JSON format
-# (app/ml/xgb_model.json), which loads under any xgboost >= 3.0, so the
-# pin here only needs to satisfy the Python version of the environment.
-# 3.4.x requires Python >= 3.12; the official backend environment is
-# Python 3.11, so it falls back to 3.2.0 there.
-xgboost==3.2.0; python_version < "3.12"
-xgboost==3.4.1; python_version >= "3.12"
+# XGBoost (TF-DF) uses TensorFlow Decision Forests; native xgboost artifacts
+# are not compatible with the TF-DF SavedModel format.
+# TF-DF 1.8.1 currently requires TensorFlow 2.15 and Python 3.9-3.11.
+tensorflow==2.15.0
+tensorflow-decision-forests==1.8.1
 # The TF-IDF vectorizer is pickled; models were (re)generated with 1.6.1.
 scikit-learn==1.6.1
 transformers==4.44.2

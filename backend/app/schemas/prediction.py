@@ -41,6 +41,9 @@ class PredictionOut(BaseModel):
 
 class PredictionResponse(BaseModel):
     text: str
+    xgboost_tfdf: SingleModelResult | None = None
+    mdeberta: SingleModelResult | None = None
+    xlm_roberta: SingleModelResult | None = None
     xgb: SingleModelResult | None = None
     deberta: SingleModelResult | None = None
     roberta: SingleModelResult | None = None

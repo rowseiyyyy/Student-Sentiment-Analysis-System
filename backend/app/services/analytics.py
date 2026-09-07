@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction, SentimentLabel
+from app.core.time import utcnow_naive
 from app.services.preprocessing import STOPWORDS
 
 
@@ -27,7 +28,7 @@ def _breakdown(
     if category is not None:
         query = query.filter(Evaluation.category == category)
     if days is not None:
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = utcnow_naive() - timedelta(days=days)
         query = query.filter(Evaluation.created_at >= cutoff)
     query = query.group_by(Prediction.official_prediction)
 
@@ -65,7 +66,7 @@ def overall_analytics(
         conf_query = conf_query.filter(Evaluation.category == category)
         vol_query = vol_query.filter(Evaluation.category == category)
     if days is not None:
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = utcnow_naive() - timedelta(days=days)
         conf_query = conf_query.filter(Evaluation.created_at >= cutoff)
         vol_query = vol_query.filter(Evaluation.created_at >= cutoff)
     avg_conf = conf_query.scalar() or 0.0
@@ -91,7 +92,7 @@ def category_analytics(
         .filter(Evaluation.category == category)
     )
     if days is not None:
-        conf_query = conf_query.filter(Evaluation.created_at >= datetime.utcnow() - timedelta(days=days))
+        conf_query = conf_query.filter(Evaluation.created_at >= utcnow_naive() - timedelta(days=days))
     avg_conf = conf_query.scalar() or 0.0
     return {
         "category": category.value,
@@ -114,7 +115,7 @@ def trend_analytics(
     if category is not None:
         query = query.filter(Evaluation.category == category)
     if days is not None:
-        query = query.filter(Evaluation.created_at >= datetime.utcnow() - timedelta(days=days))
+        query = query.filter(Evaluation.created_at >= utcnow_naive() - timedelta(days=days))
     rows = query.all()
 
     buckets: dict[str, Counter] = {}

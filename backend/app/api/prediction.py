@@ -31,6 +31,9 @@ def predict_sentiment(
 
     return PredictionResponse(
         text=payload.text,
+        xgboost_tfdf=SingleModelResult(prediction=result["xgb_prediction"], confidence=result["xgb_confidence"]),
+        mdeberta=SingleModelResult(prediction=result["deberta_prediction"], confidence=result["deberta_confidence"]),
+        xlm_roberta=SingleModelResult(prediction=result["roberta_prediction"], confidence=result["roberta_confidence"]),
         xgb=SingleModelResult(prediction=result["xgb_prediction"], confidence=result["xgb_confidence"]),
         deberta=SingleModelResult(prediction=result["deberta_prediction"], confidence=result["deberta_confidence"]),
         roberta=SingleModelResult(prediction=result["roberta_prediction"], confidence=result["roberta_confidence"]),

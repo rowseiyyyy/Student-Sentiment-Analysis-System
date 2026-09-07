@@ -3,6 +3,7 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.security import (
@@ -99,10 +100,14 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Sessio
     if not user:
         return {"detail": "If that email exists, a reset link has been sent."}
     token = create_password_reset_token(subject=user.id)
-    return {
+    response = {
         "detail": "If that email exists, a reset link has been sent.",
-        "reset_token": token,
     }
+    # The local UI uses this convenience field because no mail provider is
+    # configured. Never expose a password-reset credential in production.
+    if settings.ENVIRONMENT != "production":
+        response["reset_token"] = token
+    return response
 
 
 @router.post("/reset-password", status_code=status.HTTP_200_OK)

@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, JSON, String,
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.time import utcnow_naive
 from app.services.mismatch import MismatchType
 
 
@@ -15,6 +16,24 @@ class EvaluationCategory(str, enum.Enum):
     STAFF = "Staff"
     PAYMENTS = "Payments"
     FACILITIES = "Facilities"
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            aliases = {
+                "faculty": cls.PROFESSOR,
+                "professor": cls.PROFESSOR,
+                "professors": cls.PROFESSOR,
+                "staff": cls.STAFF,
+                "facilities": cls.FACILITIES,
+                "facility": cls.FACILITIES,
+                "payment": cls.PAYMENTS,
+                "payments": cls.PAYMENTS,
+            }
+            if normalized in aliases:
+                return aliases[normalized]
+        return None
 
 
 class Evaluation(Base):
@@ -48,7 +67,7 @@ class Evaluation(Base):
     mismatch_type: Mapped[str] = mapped_column(
         String(30), default=MismatchType.NONE.value, nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, index=True)
 
     @property
     def student(self) -> dict[str, Any] | None:

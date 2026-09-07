@@ -50,18 +50,28 @@ else:
     from sqlalchemy import inspect as sa_inspect
 
     try:
-        _db_columns = {c["name"] for c in sa_inspect(engine).get_columns("evaluations")}
-        _model_columns = {c.name for c in Evaluation.__table__.columns}  # noqa: F841
-        _missing = _model_columns - _db_columns
-        if _missing:
-            logger.error(
-                "DATABASE SCHEMA OUT OF DATE: the 'evaluations' table is missing "
-                f"column(s): {', '.join(sorted(_missing))}. Submissions will fail "
-                "with 500 errors until the database is migrated. Run "
-                "'alembic upgrade head' against the production database."
+        inspector = sa_inspect(engine)
+        missing_schema: list[str] = []
+        for table in Base.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                missing_schema.append(f"missing table '{table.name}'")
+                continue
+            database_columns = {column["name"] for column in inspector.get_columns(table.name)}
+            model_columns = {column.name for column in table.columns}
+            for column in sorted(model_columns - database_columns):
+                missing_schema.append(f"missing column '{table.name}.{column}'")
+
+        if missing_schema:
+            message = (
+                "DATABASE SCHEMA OUT OF DATE: " + ", ".join(missing_schema) + ". "
+                "Run 'alembic upgrade head' against the production database."
             )
+            logger.error(message)
+            raise RuntimeError(message)
     except Exception as _exc:  # table truly missing, DB unreachable, etc.
-        logger.error(f"Could not verify database schema at startup: {_exc}")
+        if isinstance(_exc, RuntimeError):
+            raise
+        raise RuntimeError(f"Could not verify database schema at startup: {_exc}") from _exc
 
 # Refuse to boot in production with unsafe defaults (DEBUG on, default
 # secret, wide-open CORS). Must run after settings are loaded.

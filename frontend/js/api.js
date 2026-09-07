@@ -76,11 +76,17 @@ const API = {
                 return { success: true };
             }
             
-            const data = await response.json();
+            const contentType = response.headers.get('content-type') || '';
+            const data = contentType.includes('application/json')
+                ? await response.json()
+                : await response.text();
             
             if (!response.ok) {
-                const detail = data.detail || 
-                    (Array.isArray(data.detail) ? data.detail.map(e => e.msg).join(', ') : 'Request failed');
+                const detail = typeof data === 'object' && data !== null
+                    ? (Array.isArray(data.detail)
+                        ? data.detail.map(e => e.msg || String(e)).join(', ')
+                        : data.detail || 'Request failed')
+                    : (data || 'Request failed');
                 throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
             }
             
@@ -360,6 +366,6 @@ async getEvaluations(params = {}) {
     // Public config — no auth required. Exposes only the config
     // (public by design) so no auth required.
     async getPublicConfig() {
-        return this.request('GET', '/evaluations/public/config');
+        return this.request('GET', '/evaluation/public/config');
     },
 };

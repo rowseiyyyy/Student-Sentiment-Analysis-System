@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin
 from app.core.database import get_db
+from app.core.time import utcnow_naive
 from app.models.action_update import ActionStatus, ActionUpdate
 from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction, SentimentLabel
@@ -46,7 +47,7 @@ def get_public_bulletin(db: Session = Depends(get_db)):
         # Aggregate counts are scoped to the current calendar month so the
         # bulletin line reads "received this month". Counts only — never
         # comment text, evaluation ids, or student ids.
-        month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_start = utcnow_naive().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         rows = (
             db.query(Evaluation.category, Prediction.official_prediction, func.count(Evaluation.id))
             .join(Prediction, Prediction.evaluation_id == Evaluation.id)

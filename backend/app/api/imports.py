@@ -91,29 +91,27 @@ async def import_evaluations(
         )
 
     try:
-        rows = parse_uploaded_file(tmp_path)
-    except ImportValidationError as exc:
-        tmp_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        try:
+            rows = parse_uploaded_file(tmp_path)
+        except ImportValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
-    try:
-        clean_rows, error_rows = validate_imported_data(
-            rows, category=category.value if category else None
+        try:
+            clean_rows, error_rows = validate_imported_data(
+                rows, category=category.value if category else None
+            )
+        except ImportValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+        # Each row is attributed to its own student_id when present, never to
+        # the administrator performing the import.
+        result = process_imported_evaluations(
+            db=db,
+            clean_rows=clean_rows,
+            run_prediction=True,
         )
-    except ImportValidationError as exc:
+    finally:
         tmp_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-
-    # NOTE: no user_id is passed here anymore — each row is attributed
-    # to its OWN student_id (if the file included one) or left
-    # anonymous, never to the importing admin.
-    result = process_imported_evaluations(
-        db=db,
-        clean_rows=clean_rows,
-        run_prediction=True,
-    )
-
-    tmp_path.unlink(missing_ok=True)
 
     all_errors = [
         ImportRowError(
