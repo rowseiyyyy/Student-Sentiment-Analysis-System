@@ -6,9 +6,11 @@ Run from the project root (``asiatech-sentiment-backend/``)::
     python run.py
 
 This inserts the ``backend/`` directory onto ``sys.path`` and starts the
-development server via ``uvicorn main:app``, so the app can be launched from
-the root without tripping over the ``No module named 'app'`` error.
+API over uvicorn. Reload is disabled by default to avoid accidental
+production-like behavior during deployment; use ``APP_RELOAD=true`` only for
+local development.
 """
+import os
 import sys
 from pathlib import Path
 
@@ -22,11 +24,17 @@ import uvicorn  # noqa: E402
 
 
 def main() -> None:
+    reload_enabled = os.getenv("APP_RELOAD", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,
+        reload=reload_enabled,
     )
 
 

@@ -2,6 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    ENVIRONMENT=production \
+    DEBUG=false \
+    APP_RELOAD=false
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     default-libmysqlclient-dev \
@@ -15,4 +21,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "cd backend && alembic upgrade head && cd .. && python run.py"]
+CMD ["sh", "-c", "cd backend && alembic upgrade head && cd .. && gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"]

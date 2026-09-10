@@ -147,10 +147,20 @@ mysql -u root -p -e "CREATE DATABASE asiatech_sentiment_db CHARACTER SET utf8mb4
 # 7. Configure environment variables
 cp .env.example .env
 # then edit .env with your real DB credentials and a strong SECRET_KEY
+# for production, do not leave DEBUG=true or localhost in CORS_ORIGINS
 
 # 8. Apply database migrations
 alembic upgrade head
 ```
+
+### Production launch notes
+
+- Set `ENVIRONMENT=production` and `DEBUG=false` in the deployed environment.
+- Set `APP_RELOAD=false` for production; reload mode is only for local development.
+- Restrict `CORS_ORIGINS` to the exact public frontend domain(s).
+- Run the backend with Gunicorn instead of the debug server for public deployment.
+- Keep secrets in environment variables or a managed secrets store, not in source control.
+
 
 > In `ENVIRONMENT=development` mode, `main.py` also calls
 > `Base.metadata.create_all()` on startup as a convenience, so tables  you skip Alembic locally. **Always use Alembic in

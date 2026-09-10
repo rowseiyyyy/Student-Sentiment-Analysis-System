@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import analytics, auth, evaluation, imports, ml, prediction, action_updates
@@ -227,6 +228,54 @@ def root():
 @app.get("/health", tags=["Health"])
 def health_check():
     return {"status": "healthy"}
+
+
+def _database_is_ready() -> bool:
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return True
+    except Exception as exc:  # pragma: no cover - exercised in deployment monitoring
+        logger.warning(f"Database readiness check failed: {exc}")
+        return False
+
+
+def _models_are_ready() -> bool:
+    required_paths = [
+        settings.XGB_MODEL_PATH,
+        settings.MDEBERTA_MODEL_PATH,
+        settings.XLM_ROBERTA_MODEL_PATH,
+        settings.XGB_TFIDF_VECTORIZER_PATH,
+        settings.XGB_LABEL_ENCODER_PATH,
+    ]
+    for path in required_paths:
+        if not path.exists():
+            logger.warning(f"Model readiness check failed: missing artifact at {path}")
+            return False
+    return True
+
+
+@app.get("/ready", tags=["Health"])
+def readiness_check():
+    db_ready = _database_is_ready()
+    models_ready = _models_are_ready()
+    if db_ready and models_ready:
+        return {
+            "status": "ready",
+            "database": "connected",
+            "models": "ready",
+            "environment": settings.ENVIRONMENT,
+        }
+
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "status": "not_ready",
+            "database": "connected" if db_ready else "disconnected",
+            "models": "ready" if models_ready else "missing",
+            "environment": settings.ENVIRONMENT,
+        },
+    )
 
 
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)

@@ -91,22 +91,27 @@ def get_me(current_user: User = Depends(get_current_user)):
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
 @limiter.limit("5/minute")
 def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    """Request a password-reset token. Always returns 200 (even if the
-    email does not exist) to avoid leaking which accounts are registered.
-    In this local/educational deployment the token is returned in the
-    response body so the frontend can reset the password; for production
-    you should instead email the token to the user."""
+    """Request a password-reset token.
+
+    In local/dev mode, the token is returned directly so UI testing works without
+    a mail provider. In production, the server sends a reset email and never leaks
+    the token back in the API response.
+    """
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
         return {"detail": "If that email exists, a reset link has been sent."}
+
     token = create_password_reset_token(subject=user.id)
-    response = {
-        "detail": "If that email exists, a reset link has been sent.",
-    }
-    # The local UI uses this convenience field because no mail provider is
-    # configured. Never expose a password-reset credential in production.
+    response = {"detail": "If that email exists, a reset link has been sent."}
+
     if settings.ENVIRONMENT != "production":
         response["reset_token"] = token
+    else:
+        from app.utils.email import send_password_reset_email
+
+        reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}"
+        send_password_reset_email(user.email, reset_url)
+
     return response
 
 

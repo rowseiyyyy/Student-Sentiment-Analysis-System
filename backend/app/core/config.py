@@ -86,6 +86,7 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "https://student-sentiment-analysis-system.vercel.app",
     ]
+    FRONTEND_URL: str = "http://localhost:3000"
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -114,6 +115,14 @@ class Settings(BaseSettings):
     # (e.g., mysql+pymysql://user:pass@host:3306/dbname or sqlite:///path/to/db.sqlite)
     # If not set, falls back to individual component settings below (for local dev).
     db_url_override: str | None = Field(default=None, validation_alias="DATABASE_URL")
+
+    # Email / deployment configuration used for password resets and live frontend links.
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "no-reply@example.com"
+    SMTP_USE_TLS: bool = True
 
     DB_HOST: str = "localhost"
     DB_PORT: int = 3306
@@ -279,8 +288,9 @@ def assert_production_readiness() -> None:
 
     Called once at startup from main.py. Checks that DEBUG is off,
     SECRET_KEY has been changed from the default, and CORS is not
-    wide-open. Any failure logs the specific issue and raises
-    RuntimeError so the process exits before serving traffic.
+    wide-open or still pointed at local-only origins. Any failure logs the
+    specific issue and raises RuntimeError so the process exits before
+    serving traffic.
     """
     # Local import avoids a circular import at module load time
     # (config ← logger ← config). By the time this runs at startup,
@@ -298,8 +308,39 @@ def assert_production_readiness() -> None:
         "CHANGE_THIS_SECRET_KEY_IN_PRODUCTION_1234567890",
     }:
         issues.append("SECRET_KEY is still the default value — generate a long random secret.")
-    if "*" in settings.CORS_ORIGINS:
+
+    cors_origins = settings.CORS_ORIGINS
+    if isinstance(cors_origins, str):
+        cors_list = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+    else:
+        cors_list = list(cors_origins)
+
+    if not cors_list:
+        issues.append("CORS_ORIGINS is empty — set at least your production frontend origin(s).")
+    if any(origin == "*" for origin in cors_list):
         issues.append("CORS_ORIGINS is wide-open (*) — restrict to your frontend origin(s).")
+    if any(
+        origin.lower().startswith((
+            "http://localhost",
+            "https://localhost",
+            "http://127.0.0.1",
+            "https://127.0.0.1",
+            "http://0.0.0.0",
+            "https://0.0.0.0",
+        ))
+        for origin in cors_list
+    ):
+        issues.append("CORS_ORIGINS still includes localhost or loopback origins in production.")
+    if not settings.FRONTEND_URL or settings.FRONTEND_URL.lower().startswith((
+        "http://localhost",
+        "https://localhost",
+        "http://127.0.0.1",
+        "https://127.0.0.1",
+        "http://0.0.0.0",
+        "https://0.0.0.0",
+    )):
+        issues.append("FRONTEND_URL must point to the live public frontend, not localhost, in production.")
+
     if issues:
         for msg in issues:
             logger.error("PRODUCTION GUARD: " + msg)
