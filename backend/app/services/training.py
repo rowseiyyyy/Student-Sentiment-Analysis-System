@@ -552,8 +552,11 @@ def _normalize_colab_model(model: dict, label_map: dict | list) -> dict:
     persists (``_persist_history`` reads accuracy/precision/recall/f1_score/
     macro_f1/weighted_f1/labels/confusion_matrix/classification_report)."""
     # label_map may be a dict (index->name mapping) or an already-resolved list of labels
+    # A dict maps numeric index -> human class name (e.g. {"0": "Negative", ...}),
+    # so the *values* are the class labels that must align the confusion-matrix
+    # labels and per-class report rows with the exported ``per_class`` keys.
     if isinstance(label_map, dict):
-        labels = [str(n) for n in label_map.keys()] or list(CLASS_ORDER)
+        labels = [str(n) for n in label_map.values()] or list(CLASS_ORDER)
     elif isinstance(label_map, list):
         labels = [str(n) for n in label_map] or list(CLASS_ORDER)
     else:

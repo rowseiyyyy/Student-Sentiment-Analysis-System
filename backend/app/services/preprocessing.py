@@ -320,12 +320,12 @@ def clean_for_classical(
     text = _collapse_repeats(text)
     text = _replace_punct_runs(text)
     text = _replace_numbers(text)
-    text = text.lower()
     text = _normalize_whitespace(text)
 
     tokens = _tokenize(text)
-    tokens = _drop_punct_only_tokens(tokens)
     tokens = _tag_all_caps(tokens)
+    tokens = [t.lower() for t in tokens]
+    tokens = _drop_punct_only_tokens(tokens)
     if remove_stopwords:
         sw = _get_stopwords()
         tokens = [t for t in tokens if t.lower() not in sw]
