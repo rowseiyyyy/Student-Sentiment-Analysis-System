@@ -63,6 +63,11 @@ class Evaluation(Base):
     ratings: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     likert_sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True)
     likert_average: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Demographics captured by the anonymous evaluation form. Stored on the
+    # response itself (not a User record) because submissions carry no
+    # identity — there is no User row to join for anonymous entries.
+    course: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    year_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_mismatch: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     mismatch_type: Mapped[str] = mapped_column(
         String(30), default=MismatchType.NONE.value, nullable=False

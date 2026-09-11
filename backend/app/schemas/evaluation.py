@@ -77,6 +77,10 @@ class EvaluationOut(BaseModel):
     # False/"none" whenever ratings or comment weren't both submitted.
     is_mismatch: bool = False
     mismatch_type: str = "none"
+    # Demographics captured by the anonymous evaluation form (see
+    # Evaluation.course/year_level in app.models.evaluation).
+    course: str | None = None
+    year_level: str | None = None
     created_at: datetime
     prediction: PredictionOut | None = None
     student: StudentInfo | None = None

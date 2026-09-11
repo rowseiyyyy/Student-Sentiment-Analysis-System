@@ -268,6 +268,10 @@ def submit_evaluation(
         likert_sentiment=likert_label,
         likert_average=likert_average,
         sentiment=official_sentiment,
+        # Anonymous submissions carry their own demographics (the form is
+        # unauthenticated); logged-in users fall back to their profile.
+        course=payload.course or (current_user.course if current_user else None),
+        year_level=payload.year_level or (current_user.year_level if current_user else None),
     )
 
     # Mismatch is only meaningful when BOTH a Likert score and a text

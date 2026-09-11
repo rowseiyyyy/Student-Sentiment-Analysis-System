@@ -290,7 +290,14 @@ const STUDENT = {
 
         const course = document.getElementById("sel-course")?.value;
         const yearLevel = document.getElementById("sel-year")?.value;
-        if (!course) return;
+        if (!course) {
+            showToast("Please select your course / program before submitting.", "warning");
+            return;
+        }
+        if (!yearLevel) {
+            showToast("Please select your year level before submitting.", "warning");
+            return;
+        }
 
         this.saveStepData();
 
@@ -309,6 +316,7 @@ const STUDENT = {
                     ratings: data.ratings || null,
                     student_id: null,
                     course: course,
+                    year_level: yearLevel,
                 };
 
                 const response = await fetch(getApiBase() + "/evaluation", {

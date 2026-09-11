@@ -847,9 +847,8 @@ var ADMIN = {
                     return '<tr>' +
                         '<td><input type="checkbox" class="row-select-checkbox" data-id="' + item.id + '" ' + (isChecked ? 'checked' : '') + ' onchange="ADMIN.toggleRowSelect(\'' + item.id + '\', this.checked)" /></td>' +
                         '<td style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">' + rowNum + '</td>' +
-                        '<td>' + escapeHtml(si.student_id || 'N/A') + '</td>' +
-                        '<td>' + escapeHtml(si.course || 'N/A') + '</td>' +
-                        '<td>' + escapeHtml(si.year_level || 'N/A') + '</td>' +
+                        '<td>' + escapeHtml(item.course || si.course || 'N/A') + '</td>' +
+                        '<td>' + escapeHtml(item.year_level || si.year_level || 'N/A') + '</td>' +
                         '<td><span class="badge badge-' + badgeClass + '">' + escapeHtml(categoryDisplay) + '</span></td>' +
                         '<td style="white-space:nowrap;">' + sentimentBadge(item.sentiment) + '</td>' +
                         '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:pre-line;" title="' + escapeHtml(commentsRaw) + '">' + commentsDisplay + '</td>' +
@@ -861,7 +860,7 @@ var ADMIN = {
                 }).join('');
 
                 if (tableContainer) tableContainer.innerHTML = '<div class="table-container"><table>' +
-                    '<thead><tr><th><input type="checkbox" id="select-all-checkbox" onchange="ADMIN.toggleSelectAll(this.checked)" title="Select all on this page" /></th><th>#</th><th>Student ID</th><th>Course</th><th>Year Level</th><th>Category</th><th>Sentiment</th><th style="max-width:320px;">Comments</th><th style="white-space:nowrap;">Date</th><th style="white-space:nowrap;">Actions</th></tr></thead>' +
+                    '<thead><tr><th><input type="checkbox" id="select-all-checkbox" onchange="ADMIN.toggleSelectAll(this.checked)" title="Select all on this page" /></th><th>#</th><th>Course</th><th>Year Level</th><th>Category</th><th>Sentiment</th><th style="max-width:320px;">Comments</th><th style="white-space:nowrap;">Date</th><th style="white-space:nowrap;">Actions</th></tr></thead>' +
                     '<tbody>' + rows + '</tbody></table></div>';
             }
 
@@ -1125,8 +1124,8 @@ predictionHtml +
                 var pred = item.prediction || {};
                                 aoa.push([
                     si.student_id || '',
-                    si.course || '',
-                    si.year_level || '',
+                    item.course || si.course || '',
+                    item.year_level || si.year_level || '',
                     ADMIN.getCategoryDisplayName(item.category),
                     item.share_your_thoughts || '',
                     ratingAvg,
