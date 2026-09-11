@@ -190,11 +190,23 @@ def replace_xgboost_artifacts(model_bytes: bytes, vectorizer_bytes: bytes) -> No
                     _safe_extract_zip(archive, tmp_model_path)
             except zipfile.BadZipFile as exc:
                 shutil.rmtree(tmp_model_path, ignore_errors=True)
+                version_hint = ""
+                if any("ModuleNotFoundError" in error for error in load_errors):
+                    version_hint = (
+                        " The pickle was saved by a Python environment whose "
+                        "library versions differ from this server's (commonly "
+                        "NumPy 2.x vs 1.26.x, or a different scikit-learn "
+                        "minor). Re-export from an environment pinned to the "
+                        "server's versions: numpy==1.26.4, "
+                        "scikit-learn==1.6.1, xgboost==3.0.2, joblib==1.4.2 "
+                        "(install them in the notebook, restart the runtime, "
+                        "then retrain and re-export)."
+                    )
                 raise DatasetValidationError(
                     "Invalid XGBoost artifact. Upload a .pkl/.joblib model, a native XGBoost model, "
                     "or a TF-DF SavedModel .zip. The model must provide predict_proba() when using "
                     "Joblib. "
-                    f"Deserialization failed: {'; '.join(load_errors)}"
+                    f"Deserialization failed: {'; '.join(load_errors)}.{version_hint}"
                 ) from exc
             except Exception:
                 shutil.rmtree(tmp_model_path, ignore_errors=True)

@@ -28,11 +28,13 @@ slowapi==0.1.9
 # ==============================
 # Machine Learning / NLP
 # ==============================
-# XGBoost (TF-DF) uses TensorFlow Decision Forests; native xgboost artifacts
-# are not compatible with the TF-DF SavedModel format.
+# The default Colab export is a pickled xgboost.XGBClassifier (joblib) or a
+# native Booster; both require the xgboost package to deserialize. The TF-DF
+# SavedModel path uses TensorFlow Decision Forests.
 # TF-DF 1.8.1 currently requires TensorFlow 2.15 and Python 3.9-3.11.
 tensorflow==2.15.0
 tensorflow-decision-forests==1.8.1
+xgboost==3.0.2
 # The TF-IDF vectorizer is pickled; models were (re)generated with 1.6.1.
 scikit-learn==1.6.1
 transformers==4.44.2
