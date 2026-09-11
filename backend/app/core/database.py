@@ -15,16 +15,16 @@ engine_kwargs = {
     "echo": False,
 }
 
-# Match the raw PyMySQL working pattern by passing the SSL object through
-# the dialect's native connection kwargs instead of encoding it as a URL
-# query token. The PyMySQL DBAPI consumes the object directly as the
-# `ssl=` keyword argument, not as a nested `ssl` map inside another map.
+# Match the raw PyMySQL working pattern by sending the SSL context as
+# the dialect's native connect-args object instead of encoding the TLS
+# hint into the URL query string. The DBAPI sees the nested `ssl` object
+# exactly as `pymysql.connect(..., ssl={'ssl': {}})` does.
 database_url = settings.DATABASE_URL
 
 # Add SSL for MySQL connections (required by most cloud providers)
 if "mysql" in database_url:
     engine_kwargs["connect_args"] = {
-        "ssl": {}
+        "ssl": {"ssl": {}}
     }
 
 engine = create_engine(database_url, **engine_kwargs)

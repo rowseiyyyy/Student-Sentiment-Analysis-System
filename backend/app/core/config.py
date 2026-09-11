@@ -185,10 +185,11 @@ class Settings(BaseSettings):
         # Build SQLAlchemy DSNs using URL.create so username/password,
         # host, port, and database names are escaped the normal way and
         # credentials containing punctuation survive a round-trip.
-        # Do not place the SSL requirement in the URL query string.
-        # PyMySQL's native `connect()` interface receives SSL via the
-        # `ssl=` keyword object in `connect_args`, which matches the
-        # raw working `pymysql.connect(..., ssl={...})` shape.
+        # Keep SQLite untouched and let the PyMySQL SSL handshake be
+        # expressed in the engine's native `connect_args` object, which
+        # matches the working raw `pymysql.connect(..., ssl={'ssl': {}})`
+        # argument structure more closely than encoding `ssl-mode` into the
+        # database URL string.
         parsed = URL.create(
             drivername=self.DB_DRIVER,
             username=self.DB_USER,

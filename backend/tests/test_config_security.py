@@ -103,7 +103,7 @@ def test_database_url_round_trips_special_characters_and_ssl_mode():
     assert parsed.host == "localhost"
     assert parsed.port == 3306
     assert parsed.database == "app"
-    assert parsed.query["ssl-mode"] == "REQUIRED"
+    assert dict(parsed.query) == {}
 
 
 def test_readiness_endpoint_reports_database_and_model_state(client):
