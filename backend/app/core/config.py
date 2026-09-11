@@ -185,12 +185,10 @@ class Settings(BaseSettings):
         # Build SQLAlchemy DSNs using URL.create so username/password,
         # host, port, and database names are escaped the normal way and
         # credentials containing punctuation survive a round-trip.
-        # Aiven/MySQL requires an SSL/TLS query attribute. Keep SQLite
-        # untouched and only opt in for the PyMySQL driver.
-        query = None
-        if self.DB_DRIVER == "mysql+pymysql":
-            query = {"ssl-mode": "REQUIRED"}
-
+        # Do not place the SSL requirement in the URL query string.
+        # PyMySQL's native `connect()` interface receives SSL via the
+        # `ssl=` keyword object in `connect_args`, which matches the
+        # raw working `pymysql.connect(..., ssl={...})` shape.
         parsed = URL.create(
             drivername=self.DB_DRIVER,
             username=self.DB_USER,
@@ -198,7 +196,7 @@ class Settings(BaseSettings):
             host=self.DB_HOST,
             port=self.DB_PORT,
             database=db_name,
-            query=query,
+            query=None,
         )
         return str(parsed)
 
