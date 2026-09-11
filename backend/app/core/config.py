@@ -139,15 +139,12 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         # If DATABASE_URL is set via environment variable, use it directly
-        # (allows overriding for production deployments). Normalise it
-        # back to the configured driver family so deployments cannot
-        # silently downgrade from `mysql+pymysql` to the default `mysql`
-        # alias that resolves through MySQLdb.
+        # (allows overriding for production deployments). Keep the driver
+        # family explicit and normalized to the installed PyMySQL dialect;
+        # do not reinterpret the override into a MySQLdb-style URL token.
         if self.db_url_override:
             parsed_override = make_url(self.db_url_override)
             if self.DB_DRIVER == "mysql+pymysql" and parsed_override.drivername in {"mysql", "mysql+mysqldb", "mysql+pymysql"}:
-                query = dict(parsed_override.query)
-                query.setdefault("ssl-mode", "REQUIRED")
                 normalized_override = URL.create(
                     drivername="mysql+pymysql",
                     username=parsed_override.username,
@@ -155,7 +152,7 @@ class Settings(BaseSettings):
                     host=parsed_override.host,
                     port=parsed_override.port,
                     database=parsed_override.database,
-                    query=query,
+                    query=None,
                 )
                 return str(normalized_override)
             return self.db_url_override
