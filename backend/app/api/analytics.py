@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_staff
-from app.core.database import get_db
+from app.core.database import get_db, retry_on_disconnect
 from app.models.evaluation import Evaluation
 from app.models.prediction import Prediction, SentimentLabel
 from app.models.user import User
@@ -35,6 +35,7 @@ def _days_param(days: Optional[int]) -> Optional[int]:
 
 
 @router.get("/overall", response_model=OverallAnalyticsResponse)
+@retry_on_disconnect()
 def get_overall_analytics(
     days: Optional[int] = Query(None, ge=1, le=3650, description="Only include submissions from the last N days."),
     category: Optional[NormalizedCategory] = Query(None, description="Restrict to one department/category."),
@@ -45,6 +46,7 @@ def get_overall_analytics(
 
 
 @router.get("/category", response_model=CategoryAnalyticsResponse)
+@retry_on_disconnect()
 def get_category_analytics(
     category: NormalizedCategory,
     days: Optional[int] = Query(None, ge=1, le=3650, description="Only include submissions from the last N days."),
@@ -55,6 +57,7 @@ def get_category_analytics(
 
 
 @router.get("/monthly", response_model=TrendResponse)
+@retry_on_disconnect()
 def get_monthly_trend(
     days: Optional[int] = Query(None, ge=1, le=3650),
     category: Optional[NormalizedCategory] = Query(None),
@@ -65,6 +68,7 @@ def get_monthly_trend(
 
 
 @router.get("/daily", response_model=TrendResponse)
+@retry_on_disconnect()
 def get_daily_trend(
     days: Optional[int] = Query(None, ge=1, le=3650),
     category: Optional[NormalizedCategory] = Query(None),
@@ -75,6 +79,7 @@ def get_daily_trend(
 
 
 @router.get("/word-frequency", response_model=WordFrequencyResponse)
+@retry_on_disconnect()
 def get_word_frequency(
     sentiment: SentimentLabel,
     top_n: int = Query(30, ge=1, le=200),
@@ -85,6 +90,7 @@ def get_word_frequency(
 
 
 @router.get("/top-complaints", response_model=TopCommentsResponse)
+@retry_on_disconnect()
 def get_top_complaints(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -94,6 +100,7 @@ def get_top_complaints(
 
 
 @router.get("/top-appreciations", response_model=TopCommentsResponse)
+@retry_on_disconnect()
 def get_top_appreciations(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -103,6 +110,7 @@ def get_top_appreciations(
 
 
 @router.get("/export/csv")
+@retry_on_disconnect()
 def export_evaluations_csv(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
     """Streams all evaluations + predictions as a downloadable CSV report."""
     rows = (
