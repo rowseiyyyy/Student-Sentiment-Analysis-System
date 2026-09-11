@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, List, Union
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
     ENVIRONMENT: str = Field(default="development")  # development | production
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     @field_validator("DEBUG", mode="before")
     @classmethod
@@ -67,26 +67,23 @@ class Settings(BaseSettings):
     # Security
     # ------------------------------------------------------------------
     # IMPORTANT: every value below MUST be overridden in production via
-    # environment variables. A startup guard further down refuses to boot
-    # in production with the default SECRET_KEY.
-    SECRET_KEY: str = Field(default="CHANGE_THIS_SECRET_KEY_IN_PRODUCTION_1234567890")
+    # environment variables. The settings object must fail loudly if a
+    # production deployment forgets to provide SECRET_KEY. Do not ship a
+    # fallback secret in source control.
+    SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
     # ------------------------------------------------------------------
     # CORS
     # ------------------------------------------------------------------
-    # Default is wide-open for local development. In production, set
-    # CORS_ORIGINS to your frontend origin(s) only, e.g.
-    #   CORS_ORIGINS=["https://feedback.asiatech.edu.ph"]
+    # Production must not ship with loopback or local development origins.
+    # The deployment must supply CORS_ORIGINS explicitly from an environment
+    # variable or secrets manager; no '*' and no localhost/loopback origins.
     # Accepts either a JSON array or a Render-style comma-separated string
     # (normalized to a list by the validator below).
-    CORS_ORIGINS: Union[str, List[str]] = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://student-sentiment-analysis-system.vercel.app",
-    ]
-    FRONTEND_URL: str = "http://localhost:3000"
+    CORS_ORIGINS: Union[str, List[str]]
+    FRONTEND_URL: str
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -124,11 +121,11 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "no-reply@example.com"
     SMTP_USE_TLS: bool = True
 
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 3306
-    DB_USER: str = "root"
-    DB_PASSWORD: str = "password"
-    DB_NAME: str = "asiatech_sentiment_db"
+    DB_HOST: str
+    DB_PORT: int
+    DB_USER: str
+    DB_PASSWORD: str
+    DB_NAME: str
     DB_DRIVER: str = Field(default="mysql+pymysql")  # "mysql+pymysql" | "sqlite"
 
     # Temporary validation-only override: when set, all ML artifacts and the
@@ -176,6 +173,67 @@ class Settings(BaseSettings):
     RATE_LIMIT_DEFAULT: str = "100/minute"
     RATE_LIMIT_PREDICT: str = "20/minute"
     RATE_LIMIT_AUTH: str = "10/minute"
+
+    @model_validator(mode="after")
+    def validate_production_environment_shape(self) -> "Settings":
+        """Fail fast with a clear message if production is configured
+        without the required environment-backed public release variables.
+        """
+        if self.ENVIRONMENT != "production":
+            return self
+
+        required = [
+            "SECRET_KEY",
+            "CORS_ORIGINS",
+            "FRONTEND_URL",
+            "DB_HOST",
+            "DB_PORT",
+            "DB_USER",
+            "DB_PASSWORD",
+            "DB_NAME",
+        ]
+        missing = [name for name in required if not getattr(self, name, None)]
+        if missing:
+            raise ValueError(
+                "Missing required production environment variables: " + ", ".join(missing)
+            )
+
+        if self.DEBUG:
+            raise ValueError("DEBUG must be False in production mode.")
+
+        cors = self.CORS_ORIGINS
+        if isinstance(cors, str):
+            cors_list = [origin.strip() for origin in cors.split(",") if origin.strip()]
+        else:
+            cors_list = list(cors)
+
+        if not cors_list or any(origin == "*" for origin in cors_list):
+            raise ValueError("CORS_ORIGINS must be restricted to the live frontend origin(s) in production.")
+        if any(
+            origin.lower().startswith((
+                "http://localhost",
+                "https://localhost",
+                "http://127.0.0.1",
+                "https://127.0.0.1",
+                "http://0.0.0.0",
+                "https://0.0.0.0",
+            ))
+            for origin in cors_list
+        ):
+            raise ValueError("CORS_ORIGINS must not include localhost or loopback origins in production.")
+
+        frontend = self.FRONTEND_URL.lower() if self.FRONTEND_URL else ""
+        if frontend.startswith((
+            "http://localhost",
+            "https://localhost",
+            "http://127.0.0.1",
+            "https://127.0.0.1",
+            "http://0.0.0.0",
+            "https://0.0.0.0",
+        )):
+            raise ValueError("FRONTEND_URL must not point to localhost in production.")
+
+        return self
 
     # ------------------------------------------------------------------
     # ML / Model paths
