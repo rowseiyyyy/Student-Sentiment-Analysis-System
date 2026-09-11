@@ -92,6 +92,40 @@ APPROVED_ALGORITHMS = (
     TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
 )
 
+# Multipart uploads are read into memory, so an unbounded model upload will
+# OOM the (free-tier, ~512 MB) Render instance long before any request-size
+# limit is enforced. Model weight archives are OPTIONAL — only the metrics
+# JSON is required — so cap them and return a clear, actionable message
+# instead of crashing the process.
+MAX_CLASSICAL_ARTIFACT_BYTES = 64 * 1024 * 1024  # XGBoost model / vectorizer
+MAX_TRANSFORMER_ARCHIVE_BYTES = 128 * 1024 * 1024  # DeBERTa / XLM-RoBERTa .zip
+
+
+async def _read_limited_size(upload: UploadFile, max_bytes: int) -> bytes:
+    """Read an uploaded file in bounded chunks, never buffering more than
+    ``max_bytes``. Raises 413 with a helpful message if the upload is larger,
+    so an oversized (and for this server, unservable) model archive fails
+    cleanly instead of exhausting memory."""
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            await upload.close()
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"Uploaded file exceeds the {max_bytes // (1024 * 1024)} MB limit. "
+                    "Model weight archives are optional — import the metrics JSON only "
+                    "(the free-tier server cannot load these weights anyway)."
+                ),
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
 
 
 @router.post("/import-results", response_model=ImportResultsResponse)
@@ -129,19 +163,28 @@ async def import_results(
     artifacts_updated: list[str] = []
     if xgb_model and xgb_vectorizer:
         try:
-            replace_xgboost_artifacts(await xgb_model.read(), await xgb_vectorizer.read())
+            replace_xgboost_artifacts(
+                await _read_limited_size(xgb_model, MAX_CLASSICAL_ARTIFACT_BYTES),
+                await _read_limited_size(xgb_vectorizer, MAX_CLASSICAL_ARTIFACT_BYTES),
+            )
         except DatasetValidationError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
         artifacts_updated.append("XGBoost (TF-DF)")
     if deberta_archive:
         try:
-            replace_transformer_artifacts(await deberta_archive.read(), Path(settings.MDEBERTA_MODEL_PATH))
+            replace_transformer_artifacts(
+                await _read_limited_size(deberta_archive, MAX_TRANSFORMER_ARCHIVE_BYTES),
+                Path(settings.MDEBERTA_MODEL_PATH),
+            )
         except (DatasetValidationError, zipfile.BadZipFile) as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid DeBERTa archive: {exc}") from exc
         artifacts_updated.append("mDeBERTa")
     if roberta_archive:
         try:
-            replace_transformer_artifacts(await roberta_archive.read(), Path(settings.XLM_ROBERTA_MODEL_PATH))
+            replace_transformer_artifacts(
+                await _read_limited_size(roberta_archive, MAX_TRANSFORMER_ARCHIVE_BYTES),
+                Path(settings.XLM_ROBERTA_MODEL_PATH),
+            )
         except (DatasetValidationError, zipfile.BadZipFile) as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid RoBERTa archive: {exc}") from exc
         artifacts_updated.append("XLM-RoBERTa")

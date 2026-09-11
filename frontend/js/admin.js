@@ -1299,7 +1299,7 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa in Colab, upload the exported metrics JSON here. Optionally attach the trained model files so the app can serve them for live predictions.</p>' +
+                '<p class="form-desc">After training XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa in Colab, upload the <strong>metrics JSON</strong> here to record the results. The model-weight files below are optional and only needed if you want the app to serve that exact model live &mdash; the free-tier server cannot run the multi-GB mDeBERTa/XLM-RoBERTa weights, so leave both .zip fields empty and just import the metrics.</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
