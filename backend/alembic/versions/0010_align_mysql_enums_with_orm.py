@@ -190,8 +190,18 @@ def upgrade() -> None:
     # are 'Professors'/'Payments'; map every historical spelling to the
     # member name the ORM persists.
     # ------------------------------------------------------------------
-    bind.execute(text("UPDATE evaluations SET category = 'PROFESSOR' WHERE category IN ('Faculty', 'Professors')"))
-    bind.execute(text("UPDATE evaluations SET category = 'PAYMENTS' WHERE category IN ('Payment', 'Payments')"))
+    bind.execute(
+        text(
+            "UPDATE evaluations SET category = 'PROFESSOR' "
+            "WHERE category IN ('Faculty', 'Professors', 'FACULTY', 'PROFESSOR')"
+        )
+    )
+    bind.execute(
+        text(
+            "UPDATE evaluations SET category = 'PAYMENTS' "
+            "WHERE category IN ('Payment', 'Payments', 'PAYMENT')"
+        )
+    )
     bind.execute(text("UPDATE evaluations SET category = 'STAFF' WHERE category = 'Staff'"))
     bind.execute(text("UPDATE evaluations SET category = 'FACILITIES' WHERE category = 'Facilities'"))
     bind.execute(
