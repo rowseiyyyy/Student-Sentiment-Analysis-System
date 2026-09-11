@@ -5,6 +5,7 @@ All values are loaded from environment variables (or a .env file in the
 backend/ root). Sensible development defaults are provided so the project
 runs out of the box, but every value should be overridden in production.
 """
+import hashlib
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -154,7 +155,7 @@ class Settings(BaseSettings):
                     database=parsed_override.database,
                     query=None,
                 )
-                return str(normalized_override)
+                return normalized_override.render_as_string(hide_password=False)
             return self.db_url_override
 
         if self.DB_DRIVER == "sqlite":
@@ -174,6 +175,17 @@ class Settings(BaseSettings):
         print("DEBUG DB_DRIVER passed to URL.create:", repr(self.DB_DRIVER), flush=True)
         print("DEBUG DB_USER:", repr(settings.DB_USER), flush=True)
         print("DEBUG DB_PASSWORD length:", len(settings.DB_PASSWORD), flush=True)
+        _pw = settings.DB_PASSWORD
+        _fp = hashlib.sha256(_pw.encode("utf-8")).hexdigest()[:12]
+        print("DEBUG DB_PASSWORD length:", len(_pw), flush=True)
+        print("DEBUG DB_PASSWORD sha256[:12]:", _fp, flush=True)
+        print("DEBUG DB_PASSWORD has surrounding whitespace:", _pw != _pw.strip(), flush=True)
+        print(
+            "DEBUG DB_PASSWORD charset:",
+            sorted({c for c in _pw if not (c.isalnum())}),
+            flush=True,
+        )
+
         print("DEBUG DB_HOST:", settings.DB_HOST, flush=True)
         print("DEBUG DB_PORT:", settings.DB_PORT, flush=True)
         print("DEBUG DB_NAME:", settings.DB_NAME, flush=True)
@@ -196,7 +208,7 @@ class Settings(BaseSettings):
             database=db_name,
             query=None,
         )
-        return str(parsed)
+        return parsed.render_as_string(hide_password=False)
 
     # ------------------------------------------------------------------
     # JWT
