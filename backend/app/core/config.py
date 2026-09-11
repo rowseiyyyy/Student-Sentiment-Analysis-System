@@ -174,7 +174,13 @@ class Settings(BaseSettings):
         else:
             db_name = self.DB_NAME
 
-        print(f"DEBUG DB_DRIVER passed to URL.create: {self.DB_DRIVER!r}")
+        print("DEBUG DB_DRIVER passed to URL.create:", repr(self.DB_DRIVER), flush=True)
+        print("DEBUG DB_USER:", repr(settings.DB_USER), flush=True)
+        print("DEBUG DB_PASSWORD length:", len(settings.DB_PASSWORD), flush=True)
+        print("DEBUG DB_HOST:", settings.DB_HOST, flush=True)
+        print("DEBUG DB_PORT:", settings.DB_PORT, flush=True)
+        print("DEBUG DB_NAME:", settings.DB_NAME, flush=True)
+        print("DEBUG db_url_override is set:", bool(settings.db_url_override), flush=True)
 
         # Build SQLAlchemy DSNs using URL.create so username/password,
         # host, port, and database names are escaped the normal way and
