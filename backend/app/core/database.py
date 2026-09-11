@@ -12,10 +12,10 @@ from app.core.config import settings
 engine_kwargs = {
     "pool_pre_ping": True,
     # Aiven's TLS proxy silently drops connections that sit idle in the
-    # pool for too long (surfacing later as 2006 "MySQL server has gone
-    # away" / SSL EOF mid-query). Recycle aggressively — opening a fresh
-    # TLS connection is cheap compared to serving a request on a dead one.
-    "pool_recycle": 300,
+    # pool (surfacing later as 2006 "MySQL server has gone away" / SSL EOF
+    # mid-query). Keep connections very short-lived — recycling every two
+    # minutes is cheap compared to serving a request on a dead one.
+    "pool_recycle": 120,
     "echo": False,
 }
 
