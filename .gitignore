@@ -26,7 +26,20 @@ __pycache__/
 *.bin
 *.safetensors
 
-backend/app/ml/
+# ML artifacts: the small XGBoost/TF-IDF artifacts ship with the app so every
+# deploy starts with a working sentiment model (the prediction pipeline falls
+# back to XGBoost when the transformers are absent). The ~1GB transformer
+# checkpoints stay ignored (GitHub hard-limits files >100MB); they must be
+# re-imported via the admin panel after each deploy since the Render disk is
+# ephemeral.
+backend/app/ml/*
+!backend/app/ml/comparison_results.json
+!backend/app/ml/model_metadata.json
+!backend/app/ml/xgb_model.pkl
+!backend/app/ml/xgb_model.json
+!backend/app/ml/xgb_tfdf
+!backend/app/ml/tfidf_vectorizer_xgb.pkl
+!backend/app/ml/label_encoder_xgb.pkl
 backend/app/training_outputs/
 
 node_modules/
