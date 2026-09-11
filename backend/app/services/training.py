@@ -511,9 +511,12 @@ def normalize_metrics_payload(payload: Any) -> tuple[dict[str, dict], str | None
         return payload, None
 
     label_map = payload.get("label_map") or {}
-    # Handle both dict (index->name mapping) and list (direct label names) formats
+    # Handle both dict (index->name mapping) and list (direct label names) formats.
+    # A dict maps numeric index -> human class name (e.g. {"0": "Negative", ...}),
+    # so the *values* are the class labels that must align the confusion-matrix
+    # labels and per-class report rows with the exported ``per_class`` keys.
     if isinstance(label_map, dict):
-        labels = [str(name) for name in label_map.keys()] if label_map else list(CLASS_ORDER)
+        labels = [str(name) for name in label_map.values()] if label_map else list(CLASS_ORDER)
     elif isinstance(label_map, list):
         labels = [str(name) for name in label_map] if label_map else list(CLASS_ORDER)
     else:

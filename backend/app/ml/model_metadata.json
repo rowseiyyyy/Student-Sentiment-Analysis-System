@@ -1,44 +1,60 @@
 {
-  "production_model": "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa",
-  "approach_type": "ensemble",
+  "production_model": "XLM-RoBERTa",
+  "approach_type": "single",
   "selection_metric": "weighted_f1",
-  "selection_score": 0.9158888217947109,
+  "selection_score": 0.908,
   "models": {
     "XGBoost (TF-DF)": {
-      "accuracy": 0.8946666666666667,
-      "precision": 0.9062584769742837,
-      "recall": 0.8946666666666667,
-      "f1_score": 0.8959961432047782,
-      "macro_f1": 0.8929597010672007,
-      "weighted_f1": 0.8959961432047782,
+      "accuracy": 0.8898,
+      "precision": 0.8901,
+      "recall": 0.8898,
+      "f1_score": 0.8898,
+      "macro_f1": 0.8801,
+      "weighted_f1": 0.8898,
       "labels": [
         "Negative",
         "Neutral",
         "Positive"
       ],
-      "confusion_matrix": null,
+      "confusion_matrix": [
+        [
+          818,
+          18,
+          34
+        ],
+        [
+          26,
+          438,
+          82
+        ],
+        [
+          12,
+          76,
+          746
+        ]
+      ],
       "classification_report": {
-        "accuracy": 0.8946666666666667,
+        "accuracy": 0.8898,
         "Negative": {
-          "precision": 0.9939516129032258,
-          "recall": 0.986,
-          "f1-score": 0.9899598393574297,
-          "support": 500
+          "precision": 0.9556,
+          "recall": 0.9402,
+          "f1-score": 0.9479,
+          "support": 870
         },
         "Neutral": {
-          "precision": 0.7457627118644068,
-          "recall": 0.9238845144356955,
-          "f1-score": 0.8253223915592028,
-          "support": 381
+          "precision": 0.8233,
+          "recall": 0.8022,
+          "f1-score": 0.8126,
+          "support": 546
         },
         "Positive": {
-          "precision": 0.9342105263157895,
-          "recall": 0.802907915993538,
-          "f1-score": 0.8635968722849696,
-          "support": 619
+          "precision": 0.8654,
+          "recall": 0.8945,
+          "f1-score": 0.8797,
+          "support": 834
         },
         "macro avg": {
-          "f1-score": 0.8929597010672007
+          "f1-score": 0.8800666666666667
         }
       },
       "training_time_seconds": null,
@@ -47,40 +63,56 @@
       "hyperparameters": null
     },
     "mDeBERTa": {
-      "accuracy": 0.914,
-      "precision": 0.9340040322580644,
-      "recall": 0.914,
-      "f1_score": 0.915232773428593,
-      "macro_f1": 0.9128474069570064,
-      "weighted_f1": 0.915232773428593,
+      "accuracy": 0.9049,
+      "precision": 0.904,
+      "recall": 0.9049,
+      "f1_score": 0.9041,
+      "macro_f1": 0.894,
+      "weighted_f1": 0.9041,
       "labels": [
         "Negative",
         "Neutral",
         "Positive"
       ],
-      "confusion_matrix": null,
+      "confusion_matrix": [
+        [
+          840,
+          18,
+          12
+        ],
+        [
+          26,
+          434,
+          86
+        ],
+        [
+          16,
+          56,
+          762
+        ]
+      ],
       "classification_report": {
-        "accuracy": 0.914,
+        "accuracy": 0.9049,
         "Negative": {
-          "precision": 1.0,
-          "recall": 1.0,
-          "f1-score": 1.0,
-          "support": 500
+          "precision": 0.9524,
+          "recall": 0.9655,
+          "f1-score": 0.9589,
+          "support": 870
         },
         "Neutral": {
-          "precision": 0.75,
-          "recall": 0.9921259842519685,
-          "f1-score": 0.8542372881355932,
-          "support": 381
+          "precision": 0.8543,
+          "recall": 0.7949,
+          "f1-score": 0.8235,
+          "support": 546
         },
         "Positive": {
-          "precision": 0.9939516129032258,
-          "recall": 0.7964458804523424,
-          "f1-score": 0.884304932735426,
-          "support": 619
+          "precision": 0.886,
+          "recall": 0.9137,
+          "f1-score": 0.8996,
+          "support": 834
         },
         "macro avg": {
-          "f1-score": 0.9128474069570064
+          "f1-score": 0.894
         }
       },
       "training_time_seconds": null,
@@ -89,40 +121,56 @@
       "hyperparameters": null
     },
     "XLM-RoBERTa": {
-      "accuracy": 0.914,
-      "precision": 0.9340040322580644,
-      "recall": 0.914,
-      "f1_score": 0.915232773428593,
-      "macro_f1": 0.9128474069570064,
-      "weighted_f1": 0.915232773428593,
+      "accuracy": 0.908,
+      "precision": 0.9081,
+      "recall": 0.908,
+      "f1_score": 0.908,
+      "macro_f1": 0.899,
+      "weighted_f1": 0.908,
       "labels": [
         "Negative",
         "Neutral",
         "Positive"
       ],
-      "confusion_matrix": null,
+      "confusion_matrix": [
+        [
+          834,
+          20,
+          16
+        ],
+        [
+          18,
+          455,
+          73
+        ],
+        [
+          13,
+          67,
+          754
+        ]
+      ],
       "classification_report": {
-        "accuracy": 0.914,
+        "accuracy": 0.908,
         "Negative": {
-          "precision": 1.0,
-          "recall": 1.0,
-          "f1-score": 1.0,
-          "support": 500
+          "precision": 0.9642,
+          "recall": 0.9586,
+          "f1-score": 0.9614,
+          "support": 870
         },
         "Neutral": {
-          "precision": 0.75,
-          "recall": 0.9921259842519685,
-          "f1-score": 0.8542372881355932,
-          "support": 381
+          "precision": 0.8395,
+          "recall": 0.8333,
+          "f1-score": 0.8364,
+          "support": 546
         },
         "Positive": {
-          "precision": 0.9939516129032258,
-          "recall": 0.7964458804523424,
-          "f1-score": 0.884304932735426,
-          "support": 619
+          "precision": 0.8944,
+          "recall": 0.9041,
+          "f1-score": 0.8992,
+          "support": 834
         },
         "macro avg": {
-          "f1-score": 0.9128474069570064
+          "f1-score": 0.899
         }
       },
       "training_time_seconds": null,
@@ -130,57 +178,73 @@
       "memory_usage_mb": null,
       "hyperparameters": null
     },
-    "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa": {
-      "accuracy": 0.9146666666666666,
-      "precision": 0.9349584025069174,
-      "recall": 0.9146666666666666,
-      "f1_score": 0.9158888217947109,
-      "macro_f1": 0.9135430724360455,
-      "weighted_f1": 0.9158888217947109,
+    "mDeBERTa + XLM-RoBERTa": {
+      "accuracy": 0.908,
+      "precision": 0.9074,
+      "recall": 0.908,
+      "f1_score": 0.9076,
+      "macro_f1": 0.8985,
+      "weighted_f1": 0.9076,
       "labels": [
         "Negative",
         "Neutral",
         "Positive"
       ],
-      "confusion_matrix": null,
+      "confusion_matrix": [
+        [
+          838,
+          16,
+          16
+        ],
+        [
+          25,
+          447,
+          74
+        ],
+        [
+          14,
+          62,
+          758
+        ]
+      ],
       "classification_report": {
-        "accuracy": 0.9146666666666666,
+        "accuracy": 0.908,
         "Negative": {
-          "precision": 1.0,
-          "recall": 1.0,
-          "f1-score": 1.0,
-          "support": 500
+          "precision": 0.9555,
+          "recall": 0.9632,
+          "f1-score": 0.9594,
+          "support": 870
         },
         "Neutral": {
-          "precision": 0.7504950495049505,
-          "recall": 0.994750656167979,
-          "f1-score": 0.8555304740406321,
-          "support": 381
+          "precision": 0.8514,
+          "recall": 0.8187,
+          "f1-score": 0.8347,
+          "support": 546
         },
         "Positive": {
-          "precision": 0.9959595959595959,
-          "recall": 0.7964458804523424,
-          "f1-score": 0.8850987432675045,
-          "support": 619
+          "precision": 0.8939,
+          "recall": 0.9089,
+          "f1-score": 0.9013,
+          "support": 834
         },
         "macro avg": {
-          "f1-score": 0.9135430724360455
+          "f1-score": 0.8984666666666667
         }
       },
       "training_time_seconds": null,
       "inference_time_ms": null,
       "memory_usage_mb": null,
-      "hyperparameters": null
+      "hyperparameters": {
+        "members": [
+          "mDeBERTa",
+          "XLM-RoBERTa"
+        ],
+        "weights": {
+          "mDeBERTa": 0.45,
+          "XLM-RoBERTa": 0.55
+        },
+        "selection": "validation macro-F1"
+      }
     }
-  },
-  "ensemble_members": [
-    "XGBoost (TF-DF)",
-    "mDeBERTa",
-    "XLM-RoBERTa"
-  ],
-  "ensemble_weights": {
-    "XGBoost (TF-DF)": 0.3333333333333333,
-    "mDeBERTa": 0.3333333333333333,
-    "XLM-RoBERTa": 0.3333333333333333
   }
 }
