@@ -1019,6 +1019,7 @@ var ADMIN = {
 
             var predictionHtml = '';
             var pred = item.prediction || null;
+            var missingModelCount = pred ? [pred.xgb_prediction, pred.deberta_prediction, pred.roberta_prediction].filter(function(p) { return !p; }).length : 3;
             if (pred) {
                 var modelRows = [
                     { label: 'XGBoost (TF-DF)', pred: pred.xgb_prediction, conf: pred.xgb_confidence },
@@ -1026,19 +1027,26 @@ var ADMIN = {
                     { label: 'XLM-RoBERTa', pred: pred.roberta_prediction, conf: pred.roberta_confidence }
                 ].map(function(m) {
                     var isOfficial = pred.algorithm_used === m.label;
+                    var predCell = m.pred
+                        ? sentimentBadge(m.pred)
+                        : '<span class="text-muted" title="No stored prediction - this model has no weights deployed on this server">Not deployed</span>';
+                    var confCell = m.conf != null
+                        ? (m.conf * 100).toFixed(1) + '%'
+                        : '<span class="text-muted" title="No stored confidence - this model has no weights deployed on this server">Not deployed</span>';
                     return '<tr>' +
                         '<td><strong>' + m.label + '</strong> ' + (isOfficial ? '<span class="badge badge-positive" title="Used for the official sentiment"><i class="fas fa-crown"></i> Official</span>' : '') + '</td>' +
-                        '<td>' + (m.pred ? sentimentBadge(m.pred) : '<span class="text-muted">N/A</span>') + '</td>' +
+                        '<td>' + predCell + '</td>' +
                         '<td style="white-space:nowrap;">' + sentimentBadge(item.sentiment) + 
                         (item.is_mismatch ? ' <span class="badge badge-warning" title="Likert/Text sentiment disagree: ' + escapeHtml(item.mismatch_type || '') + '"><i class="fas fa-triangle-exclamation"></i></span>' : '') +
 '</td>' +
-                        '<td>' + (m.conf != null ? (m.conf * 100).toFixed(1) + '%' : '<span class="text-muted">N/A</span>') + '</td>' +
+                        '<td>' + confCell + '</td>' +
                     '</tr>';
                 }).join('');
 
                 predictionHtml = '<div class="form-section" style="margin-top:1rem;">' +
                     '<h4 style="margin-bottom:0.5rem;">Text Sentiment â€” Model Breakdown</h4>' +
                     '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody>' + modelRows + '</tbody></table></div>' +
+                    (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> ' + missingModelCount + ' model(s) show "Not deployed" — their trained weights are not loaded on this server (currently only XGBoost is available). Upload the model weights via <strong>Model Result &gt; Import</strong> to enable the full per-model breakdown on new submissions.</p>' : '') +
                     (pred.algorithm_used === 'XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa' && pred.ensemble_prediction
                         ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result is the weighted ensemble of all three models above (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence).</p>'
                         : '') +

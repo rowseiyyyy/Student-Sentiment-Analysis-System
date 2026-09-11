@@ -38,7 +38,20 @@ class TransformerSentimentService:
         self.model.eval()
 
     def is_ready(self) -> bool:
-        return self.model is not None or self.artifact_path.exists()
+        """A transformer is usable only if its weights are loaded or a full
+        serialized checkpoint (config + weights) exists on disk. Having only a
+        tokenizer/config folder is not enough: without ``model.safetensors`` /
+        ``pytorch_model.bin`` the model cannot load, so ``is_ready()`` must
+        report False (otherwise the pipeline attempts a failing load every
+        request and the per-model breakdown silently shows N/A even though the
+        model is simply not deployed)."""
+        if self.model is not None:
+            return True
+        if not self.artifact_path or not self.artifact_path.exists():
+            return False
+        return (self.artifact_path / "model.safetensors").exists() or (
+            self.artifact_path / "pytorch_model.bin"
+        ).exists()
 
     def reload(self) -> None:
         """Reload model and tokenizer after an artifact replacement."""

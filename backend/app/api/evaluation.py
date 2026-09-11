@@ -331,7 +331,10 @@ def list_evaluations(
     sort_by: str | None = None,
     sort_order: str | None = "desc",
 ):
-    query = db.query(Evaluation).options(joinedload(Evaluation.submitted_by))
+    query = db.query(Evaluation).options(
+        joinedload(Evaluation.submitted_by),
+        joinedload(Evaluation.prediction),
+    )
 
     if not _can_view_all_evaluations(current_user):
         query = query.filter(Evaluation.user_id == current_user.id)
@@ -387,7 +390,10 @@ def get_evaluation(
 ):
     evaluation = (
         db.query(Evaluation)
-        .options(joinedload(Evaluation.submitted_by))
+        .options(
+            joinedload(Evaluation.submitted_by),
+            joinedload(Evaluation.prediction),
+        )
         .filter(Evaluation.id == evaluation_id)
         .first()
     )
