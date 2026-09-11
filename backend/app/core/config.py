@@ -12,6 +12,7 @@ from typing import Any, List, Union
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL, make_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
 
@@ -138,10 +139,27 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         # If DATABASE_URL is set via environment variable, use it directly
-        # (allows overriding for production deployments)
+        # (allows overriding for production deployments). Normalise it
+        # back to the configured driver family so deployments cannot
+        # silently downgrade from `mysql+pymysql` to the default `mysql`
+        # alias that resolves through MySQLdb.
         if self.db_url_override:
+            parsed_override = make_url(self.db_url_override)
+            if self.DB_DRIVER == "mysql+pymysql" and parsed_override.drivername in {"mysql", "mysql+mysqldb", "mysql+pymysql"}:
+                query = dict(parsed_override.query)
+                query.setdefault("ssl-mode", "REQUIRED")
+                normalized_override = URL.create(
+                    drivername="mysql+pymysql",
+                    username=parsed_override.username,
+                    password=parsed_override.password,
+                    host=parsed_override.host,
+                    port=parsed_override.port,
+                    database=parsed_override.database,
+                    query=query,
+                )
+                return str(normalized_override)
             return self.db_url_override
-        
+
         if self.DB_DRIVER == "sqlite":
             sqlite_path = self.VALIDATION_SQLITE_PATH
             if sqlite_path is None and self.TEMP_VALIDATION_ROOT is not None:
@@ -150,14 +168,33 @@ class Settings(BaseSettings):
                 return f"sqlite:///{BASE_DIR / 'asiatech_sentiment.db'}"
             sqlite_target = _resolve_config_path(sqlite_path)
             return f"sqlite:///{sqlite_target}"
+
         if self.VALIDATION_DB_NAME:
             db_name = self.VALIDATION_DB_NAME
         else:
             db_name = self.DB_NAME
-        return (
-            f"{self.DB_DRIVER}://{self.DB_USER}:{self.DB_PASSWORD}"
-            f"@{self.DB_HOST}:{self.DB_PORT}/{db_name}"
+
+        print(f"DEBUG DB_DRIVER passed to URL.create: {self.DB_DRIVER!r}")
+
+        # Build SQLAlchemy DSNs using URL.create so username/password,
+        # host, port, and database names are escaped the normal way and
+        # credentials containing punctuation survive a round-trip.
+        # Aiven/MySQL requires an SSL/TLS query attribute. Keep SQLite
+        # untouched and only opt in for the PyMySQL driver.
+        query = None
+        if self.DB_DRIVER == "mysql+pymysql":
+            query = {"ssl-mode": "REQUIRED"}
+
+        parsed = URL.create(
+            drivername=self.DB_DRIVER,
+            username=self.DB_USER,
+            password=self.DB_PASSWORD,
+            host=self.DB_HOST,
+            port=self.DB_PORT,
+            database=db_name,
+            query=query,
         )
+        return str(parsed)
 
     # ------------------------------------------------------------------
     # JWT

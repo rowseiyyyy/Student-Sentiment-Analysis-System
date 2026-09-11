@@ -1,5 +1,6 @@
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.engine import make_url
 
 from app.core.config import Settings, assert_production_readiness, settings
 
@@ -80,6 +81,29 @@ def test_assert_production_readiness_rejects_localhost_cors(monkeypatch):
 
     with pytest.raises(RuntimeError, match="CORS_ORIGINS"):
         assert_production_readiness()
+
+
+def test_database_url_round_trips_special_characters_and_ssl_mode():
+    cfg = Settings(
+        SECRET_KEY="a-very-long-production-secret-key-1234567890",
+        CORS_ORIGINS=["https://feedback.example.com"],
+        FRONTEND_URL="https://feedback.example.com",
+        DB_HOST="localhost",
+        DB_PORT=3306,
+        DB_USER="user/name@example",
+        DB_PASSWORD="pa:ss@word",
+        DB_NAME="app",
+        DB_DRIVER="mysql+pymysql",
+    )
+
+    parsed = make_url(cfg.DATABASE_URL)
+    assert parsed.drivername == "mysql+pymysql"
+    assert parsed.username == "user/name@example"
+    assert parsed.password == "pa:ss@word"
+    assert parsed.host == "localhost"
+    assert parsed.port == 3306
+    assert parsed.database == "app"
+    assert parsed.query["ssl-mode"] == "REQUIRED"
 
 
 def test_readiness_endpoint_reports_database_and_model_state(client):
