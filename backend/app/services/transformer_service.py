@@ -1,6 +1,7 @@
 """Shared, standalone three-class transformer service support (Phase 2)."""
 from __future__ import annotations
 
+import gc
 import json
 from pathlib import Path
 from time import perf_counter
@@ -18,9 +19,87 @@ class TransformerSentimentService:
     checkpoint_name: str
     artifact_path: Path
 
-    def __init__(self, checkpoint_name: str, artifact_path: Path, device: str = "cpu") -> None:
-        self.checkpoint_name, self.artifact_path, self.device = checkpoint_name, artifact_path, device
+    def __init__(
+        self,
+        checkpoint_name: str,
+        artifact_path: Path,
+        device: str = "cpu",
+        quantized_filename: str | None = None,
+    ) -> None:
+        self.checkpoint_name = checkpoint_name
+        self.artifact_path = artifact_path
+        self.device = device
+        # Filename (in artifact_path) of the quantized state_dict used for
+        # inference; None means this service instance is training/full-precision.
+        self.quantized_filename = quantized_filename
         self.model = self.tokenizer = None
+
+    def _quantized_state_path(self) -> Path:
+        """Absolute path of the quantized state_dict used for inference."""
+        if not self.quantized_filename:
+            raise RuntimeError("No quantized state_dict filename is configured for this service.")
+        return self.artifact_path / self.quantized_filename
+
+    def _build_quantized_model(self) -> tuple:
+        """Build a fresh quantized model + tokenizer for a single prediction.
+
+        The classification architecture is created from the model's own
+        ``config.json`` (no full-size weights are ever loaded onto RAM), then
+        dynamically quantized with the exact same ``qconfig_spec`` used when the
+        quantized ``.pt`` was exported, and finally the quantized state_dict is
+        loaded. Returns ``(tokenizer, model)``; the caller is responsible for
+        deleting them (and GC) once inference is done.
+        """
+        import warnings
+
+        import torch
+        from transformers import (
+            AutoConfig,
+            AutoModelForSequenceClassification,
+            AutoTokenizer,
+        )
+
+        from app.utils.logger import logger
+
+        has_saved = bool(
+            self.artifact_path
+            and self.artifact_path.exists()
+            and (self.artifact_path / "config.json").exists()
+        )
+        source = str(self.artifact_path) if has_saved else self.checkpoint_name
+
+        tokenizer = AutoTokenizer.from_pretrained(source)
+        config = AutoConfig.from_pretrained(
+            source,
+            num_labels=len(CLASS_ORDER),
+            id2label=dict(enumerate(CLASS_ORDER)),
+            label2id=LABEL_TO_ID,
+        )
+        # Build architecture WITHOUT loading full-precision weights — the
+        # RandomInit is harmless because load_state_dict overwrites everything.
+        model = AutoModelForSequenceClassification.from_config(config)
+
+        qconfig_spec = {
+            torch.nn.Linear: torch.quantization.default_dynamic_qconfig,
+            torch.nn.Embedding: torch.quantization.float_qparams_weight_only_qconfig,
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # quantize_dynamic API deprecation noise
+            model = torch.quantization.quantize_dynamic(  # type: ignore[no-untyped-call]
+                model, qconfig_spec
+            )
+
+        state = torch.load(self._quantized_state_path(), map_location="cpu")
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        if missing or unexpected:
+            logger.warning(
+                "Quantized state_dict mismatch for %s | missing=%s | unexpected=%s",
+                self.__class__.__name__,
+                missing,
+                unexpected,
+            )
+        model.eval()
+        return tokenizer, model
 
     def _load(self) -> None:
         if self.model is not None:
@@ -38,20 +117,20 @@ class TransformerSentimentService:
         self.model.eval()
 
     def is_ready(self) -> bool:
-        """A transformer is usable only if its weights are loaded or a full
-        serialized checkpoint (config + weights) exists on disk. Having only a
-        tokenizer/config folder is not enough: without ``model.safetensors`` /
-        ``pytorch_model.bin`` the model cannot load, so ``is_ready()`` must
-        report False (otherwise the pipeline attempts a failing load every
-        request and the per-model breakdown silently shows N/A even though the
-        model is simply not deployed)."""
-        if self.model is not None:
-            return True
-        if not self.artifact_path or not self.artifact_path.exists():
-            return False
-        return (self.artifact_path / "model.safetensors").exists() or (
-            self.artifact_path / "pytorch_model.bin"
-        ).exists()
+        """A transformer is usable for inference when its quantized state_dict
+        and config are on disk.
+
+        Models are built per-prediction and unloaded afterwards, so readiness is
+        a cheap file check rather than a check for a resident model. (The local
+        dir may also contain a full-precision checkpoint from /ml/train, but that
+        is not what inference uses.)
+        """
+        return bool(
+            self.artifact_path
+            and self.artifact_path.exists()
+            and (self.artifact_path / "config.json").exists()
+            and self._quantized_state_path().exists()
+        )
 
     def reload(self) -> None:
         """Reload model and tokenizer after an artifact replacement."""
@@ -167,16 +246,23 @@ class TransformerSentimentService:
         return self.metrics(y_true, y_pred)
 
     def predict(self, text: str) -> tuple[str, float, list[float]]:
-        self._load()
-        import torch
-        cleaned = clean_for_transformer(text)
-        inputs = self.tokenizer(cleaned, return_tensors="pt", truncation=True, max_length=256)
-        inputs = {key: value.to(next(self.model.parameters()).device) for key, value in inputs.items()}
-        with torch.no_grad():
-            raw = torch.softmax(self.model(**inputs).logits[0], dim=-1).cpu().numpy()
-        probabilities = self.align_probabilities(raw, self.model.config.id2label)
-        index = int(np.argmax(probabilities))
-        return CLASS_ORDER[index], probabilities[index], probabilities
+        # Quantized inference is strictly load -> predict -> unload: build a
+        # fresh model, run once, then delete + GC so RAM is freed between calls
+        # (no persistent cache), as required for the constrained Render tier.
+        tokenizer, model = self._build_quantized_model()
+        try:
+            import torch
+
+            cleaned = clean_for_transformer(text)
+            inputs = tokenizer(cleaned, return_tensors="pt", truncation=True, max_length=256)
+            with torch.no_grad():
+                raw = torch.softmax(model(**inputs).logits[0], dim=-1).cpu().numpy()
+            probabilities = self.align_probabilities(raw, model.config.id2label)
+            index = int(np.argmax(probabilities))
+            return CLASS_ORDER[index], probabilities[index], probabilities
+        finally:
+            del model, tokenizer
+            gc.collect()
 
     @staticmethod
     def metrics(y_true: list[str], y_pred: list[str]) -> dict:

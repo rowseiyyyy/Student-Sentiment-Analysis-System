@@ -105,6 +105,24 @@ async def lifespan(app: FastAPI):
         if xgboost_service.model is None:
             logger.info("Reloading XGBoost service after hub download.")
             xgboost_service._try_load()
+
+    # Bootstrap the model registry on a fresh database so the admin panel and the
+    # production-model selection reflect the hub-hosted models without a manual
+    # /ml/import-results. Idempotent + best-effort: it never overwrites an existing
+    # row or a selected production model, and a DB hiccup here must not block boot.
+    try:
+        from app.core.database import SessionLocal
+        from app.services.training import register_hub_models
+
+        db = SessionLocal()
+        try:
+            outcome = register_hub_models(db, settings.HF_PRODUCTION_MODEL)
+            if outcome["registered"] or outcome["production_model"]:
+                logger.info(f"HF model bootstrap -> {outcome}")
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001 - bootstrap is best-effort
+        logger.warning(f"HF model bootstrap skipped: {exc}")
     yield
 
 

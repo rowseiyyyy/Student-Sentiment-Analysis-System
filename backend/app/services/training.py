@@ -718,6 +718,74 @@ def sync_deployment_metadata(db: Session, algorithm_name: str) -> None:
         json.dump(metadata, fh, indent=2)
 
 
+HF_BOOTSTRAP_NOTES = (
+    "Registered from private HuggingFace Hub artifacts at startup. Metrics are "
+    "null because HF hubs serve model weights, not evaluation metrics; run "
+    "/ml/import-results with the training metrics to populate them."
+)
+
+
+def register_hub_models(db: Session, production: str) -> dict:
+    """Idempotent first-boot bootstrap: record the hub-hosted models in TrainingHistory.
+
+    HF hubs serve weights, not eval metrics, so metric columns stay NULL. This
+    only fills *gaps* on a fresh database — it never overwrites an existing row,
+    and it only sets a production model when none is currently selected. That makes
+    the admin panel model list / performance comparison and the
+    ``TrainingHistory.is_production_model`` selection (used by the prediction
+    pipeline) work without a manual /ml/import-results on first boot.
+
+    Returns ``{"registered": [...], "production_model": str | None}``.
+    """
+    if production not in APPROACH_TO_ALGORITHM:
+        raise DatasetValidationError(f"'{production}' is not an approved approach.")
+
+    registered: list[str] = []
+    # Ensure a row exists for each of the three individual approved models.
+    for approach in ("XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa"):
+        algorithm = APPROACH_TO_ALGORITHM[approach]
+        exists = db.query(TrainingHistory).filter(TrainingHistory.algorithm == algorithm).first()
+        if exists is None:
+            db.add(TrainingHistory(
+                algorithm=algorithm,
+                status=TrainingStatus.COMPLETED,
+                dataset_filename="huggingface_hub",
+                notes=HF_BOOTSTRAP_NOTES,
+            ))
+            registered.append(approach)
+
+    # The chosen production approach may be an ensemble — ensure its row exists so
+    # _mark_production_model can select it (runtime reconstructs equal weights via
+    # sync_deployment_metadata when no trained weights were persisted).
+    production_algorithm = APPROACH_TO_ALGORITHM[production]
+    prod_exists = (
+        db.query(TrainingHistory)
+        .filter(TrainingHistory.algorithm == production_algorithm)
+        .first()
+    )
+    if prod_exists is None and production not in registered:
+        db.add(TrainingHistory(
+            algorithm=production_algorithm,
+            status=TrainingStatus.COMPLETED,
+            dataset_filename="huggingface_hub",
+            notes=HF_BOOTSTRAP_NOTES,
+        ))
+        registered.append(production)
+
+    selected: str | None = None
+    current_prod = db.query(TrainingHistory).filter(TrainingHistory.is_production_model.is_(True)).first()
+    if current_prod is None:
+        db.flush()  # persist new rows so _mark_production_model can find them
+        _mark_production_model(db, production_algorithm, commit=False)
+        selected = production
+
+    if registered or selected is not None:
+        sync_deployment_metadata(db, production)
+        db.commit()
+
+    return {"registered": registered, "production_model": selected}
+
+
 def run_full_training(
     db: Session,
     csv_path: Path,

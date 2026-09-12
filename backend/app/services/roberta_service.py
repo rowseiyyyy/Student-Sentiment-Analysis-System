@@ -4,7 +4,12 @@ from app.services.transformer_service import TransformerSentimentService
 
 class XLMRoBERTaService(TransformerSentimentService):
     def __init__(self) -> None:
-        super().__init__(settings.XLM_ROBERTA_MODEL_NAME, settings.XLM_ROBERTA_MODEL_PATH, settings.TRANSFORMER_DEVICE)
+        super().__init__(
+            settings.XLM_ROBERTA_MODEL_NAME,
+            settings.XLM_ROBERTA_MODEL_PATH,
+            settings.TRANSFORMER_DEVICE,
+            settings.XLM_ROBERTA_QUANTIZED_FILE,
+        )
 
 
 xlm_roberta_service = XLMRoBERTaService()

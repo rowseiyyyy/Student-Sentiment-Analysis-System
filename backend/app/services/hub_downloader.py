@@ -18,16 +18,14 @@ from app.core.config import settings
 from app.utils.logger import logger
 
 
-def _transformer_ready(path: Path) -> bool:
-    """Mirror ``TransformerSentimentService.is_ready``: a full checkpoint is present.
-
-    A tokenizer/config folder alone is not enough — actual weights must exist, so
-    this mirrors the same guard the transformer service itself applies.
-    """
+def _transformer_ready(path: Path, quantized_file: str) -> bool:
+    """Mirror ``TransformerSentimentService.is_ready``: a config and the quantized
+    state_dict are present (the repos carry config.json/tokenizer + the .pt; the
+    full-size safetensors checkpoints are no longer used for inference)."""
     return (
         path.exists()
         and (path / "config.json").exists()
-        and ((path / "model.safetensors").exists() or (path / "pytorch_model.bin").exists())
+        and (path / quantized_file).exists()
     )
 
 
@@ -107,14 +105,14 @@ def ensure_hub_artifacts() -> bool:
 
     downloaded = False
 
-    if _transformer_ready(settings.MDEBERTA_MODEL_PATH):
+    if _transformer_ready(settings.MDEBERTA_MODEL_PATH, settings.MDEBERTA_QUANTIZED_FILE):
         logger.info("mDeBERTa artifacts already present locally — skipping download.")
     else:
         logger.info(f"Downloading private mDeBERTa repo: {settings.HF_MDEBERTA_REPO}")
         _snapshot(settings.HF_MDEBERTA_REPO, settings.MDEBERTA_MODEL_PATH)
         downloaded = True
 
-    if _transformer_ready(settings.XLM_ROBERTA_MODEL_PATH):
+    if _transformer_ready(settings.XLM_ROBERTA_MODEL_PATH, settings.XLM_ROBERTA_QUANTIZED_FILE):
         logger.info("XLM-RoBERTa artifacts already present locally — skipping download.")
     else:
         logger.info(f"Downloading private XLM-RoBERTa repo: {settings.HF_XLM_ROBERTA_REPO}")

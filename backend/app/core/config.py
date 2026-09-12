@@ -321,6 +321,19 @@ class Settings(BaseSettings):
     HF_MDEBERTA_REPO: str = "rowseiy/mdeberta-sentiment"
     HF_XGB_TFIDF_REPO: str = "rowseiy/xgb-tfidf-sentiment"
 
+    # Approved approach to register as production on a fresh database when the
+    # models are pulled from the private hub at startup. Must match an approved
+    # approach name (see training.APPROACH_TO_ALGORITHM). Defaults to the
+    # XLM-RoBERTa + mDeBERTa ensemble (the app's "4th model").
+    HF_PRODUCTION_MODEL: str = "mDeBERTa + XLM-RoBERTa"
+
+    # Quantized PyTorch state_dict filenames in the private hub repos. The repos
+    # still carry config.json + tokenizer files (only the weight files were
+    # replaced with these quantized .pt artifacts). Inference rebuilds the
+    # architecture from config then loads these weights per prediction.
+    MDEBERTA_QUANTIZED_FILE: str = "mdeberta_quantized_v2.pt"
+    XLM_ROBERTA_QUANTIZED_FILE: str = "xlmr_quantized_v2.pt"
+
     # General RoBERTa is fine-tuned on the actual student-feedback labels;
     # avoid treating a Twitter-domain sentiment checkpoint as a final model.
     XLM_ROBERTA_MODEL_NAME: str = "xlm-roberta-base"

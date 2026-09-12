@@ -4,7 +4,12 @@ from app.services.transformer_service import TransformerSentimentService
 
 class mDeBERTaService(TransformerSentimentService):
     def __init__(self) -> None:
-        super().__init__(settings.MDEBERTA_MODEL_NAME, settings.MDEBERTA_MODEL_PATH, settings.TRANSFORMER_DEVICE)
+        super().__init__(
+            settings.MDEBERTA_MODEL_NAME,
+            settings.MDEBERTA_MODEL_PATH,
+            settings.TRANSFORMER_DEVICE,
+            settings.MDEBERTA_QUANTIZED_FILE,
+        )
 
 
 mdeberta_service = mDeBERTaService()
