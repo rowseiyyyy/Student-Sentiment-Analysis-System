@@ -304,6 +304,23 @@ class Settings(BaseSettings):
     MODEL_METADATA_PATH: Path = ML_DIR / "model_metadata.json"
     COMPARISON_RESULTS_PATH: Path = ML_DIR / "comparison_results.json"
 
+    # ------------------------------------------------------------------
+    # HuggingFace Hub (private model repos)
+    # ------------------------------------------------------------------
+    # Token used to authenticate against the private HuggingFace Hub repos
+    # below. Populate HF_TOKEN in the environment / .env file. When empty, the
+    # startup downloader (services/hub_downloader.py) skips hub downloads —
+    # useful when the artifacts are already present locally (e.g. the
+    # pre-committed app/ml/ files in this repo, or dev/test environments).
+    HF_TOKEN: str = ""
+
+    # Private repos holding the tuned sentiment artifacts. The downloader pulls
+    # these into the corresponding app/ml/ paths at startup only when the local
+    # files are missing, using HF_TOKEN to authenticate.
+    HF_XLM_ROBERTA_REPO: str = "rowseiy/xlm-roberta-sentiment"
+    HF_MDEBERTA_REPO: str = "rowseiy/mdeberta-sentiment"
+    HF_XGB_TFIDF_REPO: str = "rowseiy/xgb-tfidf-sentiment"
+
     # General RoBERTa is fine-tuned on the actual student-feedback labels;
     # avoid treating a Twitter-domain sentiment checkpoint as a final model.
     XLM_ROBERTA_MODEL_NAME: str = "xlm-roberta-base"

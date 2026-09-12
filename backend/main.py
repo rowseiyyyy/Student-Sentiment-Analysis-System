@@ -19,6 +19,7 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -79,6 +80,34 @@ else:
 logger.info(f"STARTUP DEBUG CHECK: DEBUG={settings.DEBUG!r}, ENVIRONMENT={settings.ENVIRONMENT!r}")
 assert_production_readiness()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup hook: ensure the private HF artifacts exist before serving traffic.
+
+    Pulls the private mDeBERTa / XLM-RoBERTa / XGBoost+TF-IDF repositories into
+    the local ``app/ml/`` paths when they are missing (no-op when already present,
+    which is the case for the pre-committed artifacts in this repo). This keeps
+    everything in place on first boot for fresh deployments.
+
+    This layer only guarantees the files exist on disk. Actually loading them into
+    memory stays with the existing service singletons — the transformers load
+    lazily via ``TransformerSentimentService._load()`` on first predict, and
+    XGBoost loads on construction. For a fresh deployment where XGBoost was
+    constructed before its files existed, we retrigger its load here using the
+    same in-place reload pattern the training pipeline uses.
+    """
+    from app.services.hub_downloader import ensure_hub_artifacts
+
+    downloaded = ensure_hub_artifacts()
+    if downloaded:
+        from app.services.xgboost_service import xgboost_service
+
+        if xgboost_service.model is None:
+            logger.info("Reloading XGBoost service after hub download.")
+            xgboost_service._try_load()
+    yield
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description=settings.PROJECT_DESCRIPTION,
@@ -86,6 +115,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
 
