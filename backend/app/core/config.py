@@ -324,8 +324,9 @@ class Settings(BaseSettings):
     # Approved approach to register as production on a fresh database when the
     # models are pulled from the private hub at startup. Must match an approved
     # approach name (see training.APPROACH_TO_ALGORITHM). Defaults to the
-    # XLM-RoBERTa + mDeBERTa ensemble (the app's "4th model").
-    HF_PRODUCTION_MODEL: str = "mDeBERTa + XLM-RoBERTa"
+    # mDeBERTa + XGBoost ensemble — the live production model set (XLM-RoBERTa
+    # stays available for offline/reporting only).
+    HF_PRODUCTION_MODEL: str = "XGBoost (TF-DF) + mDeBERTa"
 
     # Quantized PyTorch state_dict filenames in the private hub repos. The repos
     # still carry config.json + tokenizer files (only the weight files were

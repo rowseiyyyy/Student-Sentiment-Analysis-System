@@ -158,10 +158,12 @@ function selectField(name, label, options, placeholder = '') {
 // Model Performance Comparison helpers (frontend-only filter)
 // ============================================================
 // The backend /api/v1/ml/performance may still return other models/ensembles.
-// The comparison UI displays ONLY these four approved models. "DeBERTa +
+// The comparison UI displays ONLY these approved models. "DeBERTa +
 // RoBERTa" is the stored backend label for the same two-member ensemble that
-// is displayed to the user as "RoBERTa + DeBERTa".
-const MODEL_PERFORMANCE_ALLOWED = ['XGBoost (TF-DF)', 'mDeBERTa', 'XLM-RoBERTa', 'mDeBERTa + XLM-RoBERTa'];
+// is displayed to the user as "RoBERTa + DeBERTa". "XGBoost (TF-DF) + mDeBERTa"
+// is the live production ensemble; XLM-RoBERTa entries remain as historical
+// training/reporting data.
+const MODEL_PERFORMANCE_ALLOWED = ['XGBoost (TF-DF)', 'mDeBERTa', 'XLM-RoBERTa', 'mDeBERTa + XLM-RoBERTa', 'XGBoost (TF-DF) + mDeBERTa'];
 
 function filterModelPerfRows(rows) {
     if (!Array.isArray(rows)) return [];
@@ -173,6 +175,9 @@ function filterModelPerfRows(rows) {
 function modelPerfDisplayName(algorithm) {
     if (algorithm === 'mDeBERTa + XLM-RoBERTa' || algorithm === 'XLM-RoBERTa + mDeBERTa') {
         return 'XLM-RoBERTa + mDeBERTa';
+    }
+    if (algorithm === 'XGBoost (TF-DF) + mDeBERTa' || algorithm === 'mDeBERTa + XGBoost (TF-DF)') {
+        return 'mDeBERTa + XGBoost';
     }
     return algorithm;
 }

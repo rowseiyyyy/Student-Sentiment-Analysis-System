@@ -37,8 +37,11 @@ from app.utils.logger import logger
 deberta_service = mdeberta_service
 roberta_service = xlm_roberta_service
 
-_MODEL_KEYS = ("XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa")
-_TRIPLE_NAME = "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa"
+_MODEL_KEYS = ("XGBoost (TF-DF)", "mDeBERTa")
+# Live ensemble name. XLM-RoBERTa is excluded from the real-time path to respect
+# the free-host RAM budget; it remains fully trained/registered and is used only
+# for offline evaluation and reporting (see roberta_service / training.py).
+_ENSEMBLE_NAME = "XGBoost (TF-DF) + mDeBERTa"
 _XGB_COMPAT_NAME = "XGBoost"
 
 
@@ -73,16 +76,16 @@ def _load_deployment_metadata() -> dict:
 def _normalize_algorithm_name(value: str | None) -> str:
     """Map a stored approach name to a canonical approved approach name.
 
-    Legacy aliases (``Ensemble`` / ``Ensemble (soft vote)``) map to the
-    triple ensemble; any other unrecognised name passes through unchanged so
+    Legacy aliases (``Ensemble`` / ``Ensemble (soft vote)``) map to the live
+    two-model ensemble; any other unrecognised name passes through unchanged so
     the caller can ignore non-approved (legacy) values.
     """
     if value is None:
         return ""
     normalized = value.strip()
     aliases = {
-        "Ensemble": _TRIPLE_NAME,
-        "Ensemble (soft vote)": _TRIPLE_NAME,
+        "Ensemble": _ENSEMBLE_NAME,
+        "Ensemble (soft vote)": _ENSEMBLE_NAME,
     }
     return aliases.get(normalized, normalized)
 
@@ -167,35 +170,27 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
             logger.warning("DeBERTa returned an unusable output (NaN/invalid) — excluded.")
             deberta_label, deberta_conf, deberta_probs = None, None, None
 
-    if xlm_roberta_service.is_ready():
-        try:
-            roberta_label, roberta_conf, roberta_probs = xlm_roberta_service.predict(text)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"RoBERTa prediction failed: {exc}")
-            roberta_label, roberta_conf, roberta_probs = None, None, None
-        if not _usable(roberta_label, roberta_conf, roberta_probs):
-            logger.warning("RoBERTa returned an unusable output (NaN/invalid) — excluded.")
-            roberta_label, roberta_conf, roberta_probs = None, None, None
+    # XLM-RoBERTa is intentionally NOT run in the live request path (RAM budget);
+    # roberta_* fields below therefore remain None and are kept only for
+    # historical/compat reporting. Offline evaluation still uses roberta_service.
 
     active_probs = {
         "XGBoost (TF-DF)": xgb_probs,
         "mDeBERTa": deberta_probs,
-        "XLM-RoBERTa": roberta_probs,
     }
     active_candidates = {
         "XGBoost (TF-DF)": (xgb_label, xgb_conf),
         "mDeBERTa": (deberta_label, deberta_conf),
-        "XLM-RoBERTa": (roberta_label, roberta_conf),
     }
 
     # Backward-compat "ensemble" report: the three-model soft vote, using the
     # *persisted* triple weights when the triple ensemble is the selected
     # approach, otherwise equal member weights.
     metadata = _load_deployment_metadata()
-    if metadata.get("production_model") == _TRIPLE_NAME:
-        triple_weights = normalize_weights(list(_MODEL_KEYS), metadata.get("ensemble_weights"))
+    if metadata.get("production_model") == _ENSEMBLE_NAME:
+        ensemble_weights = normalize_weights(list(_MODEL_KEYS), metadata.get("ensemble_weights"))
     else:
-        triple_weights = normalize_weights(list(_MODEL_KEYS), {})
+        ensemble_weights = normalize_weights(list(_MODEL_KEYS), {})
 
     ensemble_label: Optional[str] = None
     ensemble_conf: Optional[float] = None
@@ -203,7 +198,7 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
     if all(active_probs[key] is not None for key in _MODEL_KEYS):
         ensemble_label, ensemble_conf, ensemble_probs = soft_vote(
             {key: active_probs[key] for key in _MODEL_KEYS},
-            triple_weights,
+            ensemble_weights,
             list(_MODEL_KEYS),
         )
 
@@ -238,7 +233,7 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
     if official_label is None and ensemble_label is not None:
         official_label = ensemble_label
         official_conf = ensemble_conf
-        production_algo = _TRIPLE_NAME
+        production_algo = _ENSEMBLE_NAME
 
     if official_label is None:
         raise RuntimeError(

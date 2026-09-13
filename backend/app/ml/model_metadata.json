@@ -1,6 +1,6 @@
 {
-  "production_model": "XLM-RoBERTa",
-  "approach_type": "single",
+  "production_model": "XGBoost (TF-DF) + mDeBERTa",
+  "approach_type": "ensemble",
   "selection_metric": "weighted_f1",
   "selection_score": 0.908,
   "models": {
@@ -246,5 +246,13 @@
         "selection": "validation macro-F1"
       }
     }
+  },
+  "ensemble_members": [
+    "XGBoost (TF-DF)",
+    "mDeBERTa"
+  ],
+  "ensemble_weights": {
+    "XGBoost (TF-DF)": 0.5,
+    "mDeBERTa": 0.5
   }
 }

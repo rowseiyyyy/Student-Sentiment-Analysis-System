@@ -112,12 +112,9 @@ def ensure_hub_artifacts() -> bool:
         _snapshot(settings.HF_MDEBERTA_REPO, settings.MDEBERTA_MODEL_PATH)
         downloaded = True
 
-    if _transformer_ready(settings.XLM_ROBERTA_MODEL_PATH, settings.XLM_ROBERTA_QUANTIZED_FILE):
-        logger.info("XLM-RoBERTa artifacts already present locally — skipping download.")
-    else:
-        logger.info(f"Downloading private XLM-RoBERTa repo: {settings.HF_XLM_ROBERTA_REPO}")
-        _snapshot(settings.HF_XLM_ROBERTA_REPO, settings.XLM_ROBERTA_MODEL_PATH)
-        downloaded = True
+    # XLM-RoBERTa is intentionally NOT downloaded at startup: it is excluded from
+    # the live inference path (RAM budget) and only used for offline evaluation /
+    # reporting. Its repo/config/tokenizer remain available for that offline use.
 
     if _classical_ready():
         logger.info("XGBoost / TF-IDF artifacts already present locally — skipping download.")

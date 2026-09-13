@@ -77,18 +77,20 @@ async def upload_dataset(
 
     return {"rows": len(rows), "columns": reader.fieldnames, "message": "Dataset uploaded successfully."}
 
-# Approved active approaches: 3 individual models + 2 approved ensembles.
-# This is the strict, system-wide whitelist: the platform may ONLY use
-# XGBoost (TF-DF), mDeBERTa, XLM-RoBERTa, the 2-model ensemble
-# "mDeBERTa + XLM-RoBERTa", and the 3-model ensemble
-# "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa".
-# Legacy models (SVM / Random Forest / Naive Bayes / BERT) and the other
-# ensemble combinations are retained only as historical training_history rows
-# and are excluded from performance, rollback, confusion-matrix, and download.
+# Approved active approaches: 3 individual models + 3 approved ensembles.
+# This is the strict, system-wide whitelist. The LIVE production ensemble is
+# the 2-model "XGBoost (TF-DF) + mDeBERTa" — XLM-RoBERTa is excluded from the
+# real-time prediction path (free-tier RAM budget) but its model and the
+# XLM-involving ensembles remain approved for offline evaluation, reporting,
+# and rollback of historical training runs.
+# Legacy models (SVM / Random Forest / Naive Bayes / BERT) are retained only
+# as historical training_history rows and are excluded from performance,
+# rollback, confusion-matrix, and download.
 APPROVED_ALGORITHMS = (
     TrainingAlgorithm.XGBOOST_TFDF,
     TrainingAlgorithm.MDEBERTA,
     TrainingAlgorithm.XLM_ROBERTA,
+    TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA,
     TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
     TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA_XLM,
 )

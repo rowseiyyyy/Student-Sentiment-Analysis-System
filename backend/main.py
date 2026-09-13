@@ -292,7 +292,6 @@ def _models_are_ready() -> bool:
     required_paths = [
         settings.XGB_MODEL_PATH,
         settings.MDEBERTA_MODEL_PATH,
-        settings.XLM_ROBERTA_MODEL_PATH,
         settings.XGB_TFIDF_VECTORIZER_PATH,
         settings.XGB_LABEL_ENCODER_PATH,
     ]

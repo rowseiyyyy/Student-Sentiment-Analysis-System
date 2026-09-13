@@ -1019,14 +1019,25 @@ var ADMIN = {
 
             var predictionHtml = '';
             var pred = item.prediction || null;
-            var missingModelCount = pred ? [pred.xgb_prediction, pred.deberta_prediction, pred.roberta_prediction].filter(function(p) { return !p; }).length : 3;
+            var missingModelCount = pred ? [pred.xgb_prediction, pred.deberta_prediction].filter(function(p) { return !p; }).length : 2;
             if (pred) {
+                // Live models only. XLM-RoBERTa is excluded from live inference
+                // (free-tier RAM budget); its row is shown only for historical
+                // submissions that still carry a stored prediction.
                 var modelRows = [
                     { label: 'XGBoost (TF-DF)', pred: pred.xgb_prediction, conf: pred.xgb_confidence },
-                    { label: 'mDeBERTa', pred: pred.deberta_prediction, conf: pred.deberta_confidence },
-                    { label: 'XLM-RoBERTa', pred: pred.roberta_prediction, conf: pred.roberta_confidence }
-                ].map(function(m) {
-                    var isOfficial = pred.algorithm_used === m.label;
+                    { label: 'mDeBERTa', pred: pred.deberta_prediction, conf: pred.deberta_confidence }
+                ];
+                if (pred.roberta_prediction) {
+                    modelRows.push({ label: 'XLM-RoBERTa (historical)', pred: pred.roberta_prediction, conf: pred.roberta_confidence });
+                }
+                if (pred.ensemble_prediction) {
+                    modelRows.push({ label: 'Ensemble (Official)', pred: pred.ensemble_prediction, conf: pred.ensemble_confidence, isEnsemble: true });
+                }
+                modelRows = modelRows.map(function(m) {
+                    var isOfficial = m.isEnsemble
+                        ? pred.algorithm_used === 'XGBoost (TF-DF) + mDeBERTa'
+                        : pred.algorithm_used === m.label;
                     var predCell = m.pred
                         ? sentimentBadge(m.pred)
                         : '<span class="text-muted" title="No stored prediction - this model has no weights deployed on this server">Not deployed</span>';
@@ -1046,9 +1057,9 @@ var ADMIN = {
                 predictionHtml = '<div class="form-section" style="margin-top:1rem;">' +
                     '<h4 style="margin-bottom:0.5rem;">Text Sentiment â€” Model Breakdown</h4>' +
                     '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody>' + modelRows + '</tbody></table></div>' +
-                    (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> ' + missingModelCount + ' model(s) show "Not deployed" — their trained weights are not loaded on this server (currently only XGBoost is available). Upload the model weights via <strong>Model Result &gt; Import</strong> to enable the full per-model breakdown on new submissions.</p>' : '') +
-                    (pred.algorithm_used === 'XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa' && pred.ensemble_prediction
-                        ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result is the weighted ensemble of all three models above (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence).</p>'
+                    (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> ' + missingModelCount + ' model(s) show "Not deployed" — their trained weights are not loaded on this server. Weights for the live models (XGBoost, mDeBERTa) are fetched from the private Hugging Face repos at startup; XLM-RoBERTa is excluded from live inference by design (free-tier RAM budget).</p>' : '') +
+                    (pred.algorithm_used === 'XGBoost (TF-DF) + mDeBERTa' && pred.ensemble_prediction
+                        ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result is the weighted ensemble of the two live models above (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence).</p>'
                         : '') +
                 '</div>';
             }
@@ -1307,7 +1318,7 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa in Colab, upload the <strong>metrics JSON</strong> here to record the results. The model-weight files below are optional and only needed if you want the app to serve that exact model live &mdash; the free-tier server cannot run the multi-GB mDeBERTa/XLM-RoBERTa weights, so leave both .zip fields empty and just import the metrics.</p>' +
+                '<p class="form-desc">After training XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa in Colab, upload the <strong>metrics JSON</strong> here to record the results. Weights for the live models (XGBoost + mDeBERTa) are fetched automatically from the private Hugging Face repos at startup, so the file fields below are optional &mdash; in most cases just import the metrics. XLM-RoBERTa is excluded from live inference (free-tier RAM budget) and has no .zip upload; it is used for offline evaluation and reporting only.</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
@@ -1315,14 +1326,12 @@ predictionHtml +
                 '<div class="form-group"><label>XGBoost (TF-DF) model (.pkl/.joblib/.zip)</label><input type="file" class="form-control" id="import-xgb-model" accept=".pkl,.joblib,.zip" /></div>' +
                 '<div class="form-group"><label>XGBoost TF-IDF vectorizer (.pkl / .joblib)</label><input type="file" class="form-control" id="import-xgb-vectorizer" accept=".pkl,.joblib" /></div>' +
                 '<div class="form-group"><label>mDeBERTa model folder (.zip)</label><input type="file" class="form-control" id="import-deberta-zip" accept=".zip" /></div>' +
-                '<div class="form-group"><label>XLM-RoBERTa model folder (.zip)</label><input type="file" class="form-control" id="import-roberta-zip" accept=".zip" /></div>' +
                 '<div class="form-group"><label>Set as production model (optional)</label>' +
                     '<select class="form-control" id="import-set-production">' +
                         '<option value="">Auto (best weighted F1 among imported)</option>' +
                         '<option value="XGBoost (TF-DF)">XGBoost (TF-DF)</option>' +
                         '<option value="mDeBERTa">mDeBERTa</option>' +
-                        '<option value="XLM-RoBERTa">XLM-RoBERTa</option>' +
-                        '<option value="mDeBERTa + XLM-RoBERTa">mDeBERTa + XLM-RoBERTa</option>' +
+                        '<option value="XGBoost (TF-DF) + mDeBERTa">XGBoost (TF-DF) + mDeBERTa</option>' +
                     '</select>' +
                 '</div>' +
                 '<button class="btn btn-primary btn-lg" onclick="ADMIN.submitImportResults()"><i class="fas fa-upload"></i> Import Results</button>' +
@@ -1371,10 +1380,9 @@ predictionHtml +
                 xgbModel: document.getElementById('import-xgb-model').files[0],
                 xgbVectorizer: document.getElementById('import-xgb-vectorizer').files[0],
                 debertaZip: document.getElementById('import-deberta-zip').files[0],
-                robertaZip: document.getElementById('import-roberta-zip').files[0],
                 setProduction: document.getElementById('import-set-production').value || null
             });
-            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '. If DeBERTa/RoBERTa weights changed, restart the API server so it loads the new weights.' : 'No model files were uploaded â€” only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';
+            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '. If DeBERTa weights changed, restart the API server so it loads the new weights.' : 'No model files were uploaded â€” only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';
             showToast('Model results imported!', 'success');
         } catch (error) {
             resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--neg);"><h4 style="color:var(--neg);"><i class="fas fa-times-circle"></i> Import Failed</h4><p>' + error.message + '</p></div>';
