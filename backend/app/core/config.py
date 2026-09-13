@@ -326,7 +326,7 @@ class Settings(BaseSettings):
     # approach name (see training.APPROACH_TO_ALGORITHM). Defaults to the
     # mDeBERTa + XGBoost ensemble — the live production model set (XLM-RoBERTa
     # stays available for offline/reporting only).
-    HF_PRODUCTION_MODEL: str = "XGBoost (TF-DF) + mDeBERTa"
+    HF_PRODUCTION_MODEL: str = "XGBoost (TF-DF)"
 
     # Quantized PyTorch state_dict filenames in the private hub repos. The repos
     # still carry config.json + tokenizer files (only the weight files were

@@ -29,21 +29,21 @@ def _register_and_login(client, email="predictuser@example.com", role="student")
 
 
 def test_run_prediction_pipeline_uses_approved_research_models(db_session):
-    # Live pipeline runs XGBoost + mDeBERTa only; XLM-RoBERTa is excluded for RAM
-    # and is used solely for offline evaluation/reporting, so it is NOT patched here.
+    # Live pipeline runs XGBoost (TF-DF) only; both transformer models are
+    # excluded for RAM and are used solely for offline evaluation/reporting,
+    # so neither is patched here.
     with patch("app.services.prediction.xgboost_service.is_ready", return_value=True), \
-         patch("app.services.prediction.xgboost_service.predict", return_value=("Positive", 0.81, [0.1, 0.1, 0.8])), \
-         patch("app.services.prediction.deberta_service.is_ready", return_value=True), \
-         patch("app.services.prediction.deberta_service.predict", return_value=("Neutral", 0.55, [0.2, 0.6, 0.2])):
+         patch("app.services.prediction.xgboost_service.predict", return_value=("Positive", 0.81, [0.1, 0.1, 0.8])):
         result = run_prediction_pipeline(db_session, "The professor is very helpful.")
 
     assert result["official_prediction"] == "Positive"
     assert result["algorithm_used"] == "XGBoost"
     assert result["xgb_prediction"] == "Positive"
-    assert result["deberta_prediction"] == "Neutral"
-    # XLM-RoBERTa is not part of the live request path anymore.
+    # Transformers are not part of the live request path anymore.
+    assert result["deberta_prediction"] is None
     assert result["roberta_prediction"] is None
-    assert "ensemble_prediction" in result
+    # Single-member "ensemble" degenerates to the XGBoost result.
+    assert result["ensemble_prediction"] == "Positive"
 
 
 @patch("app.api.prediction.run_prediction_pipeline")

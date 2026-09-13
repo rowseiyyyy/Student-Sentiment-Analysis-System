@@ -37,11 +37,13 @@ from app.utils.logger import logger
 deberta_service = mdeberta_service
 roberta_service = xlm_roberta_service
 
-_MODEL_KEYS = ("XGBoost (TF-DF)", "mDeBERTa")
-# Live ensemble name. XLM-RoBERTa is excluded from the real-time path to respect
-# the free-host RAM budget; it remains fully trained/registered and is used only
-# for offline evaluation and reporting (see roberta_service / training.py).
-_ENSEMBLE_NAME = "XGBoost (TF-DF) + mDeBERTa"
+_MODEL_KEYS = ("XGBoost (TF-DF)",)
+# Live inference model. Both transformer models (mDeBERTa and XLM-RoBERTa) are
+# excluded from the real-time path to respect the free-host RAM budget; they
+# remain fully trained/registered and are used only for offline evaluation and
+# reporting (see deberta_service / roberta_service / training.py).
+# Legacy "ensemble" aliases resolve to the live single model.
+_ENSEMBLE_NAME = "XGBoost (TF-DF)"
 _XGB_COMPAT_NAME = "XGBoost"
 
 
@@ -77,8 +79,8 @@ def _normalize_algorithm_name(value: str | None) -> str:
     """Map a stored approach name to a canonical approved approach name.
 
     Legacy aliases (``Ensemble`` / ``Ensemble (soft vote)``) map to the live
-    two-model ensemble; any other unrecognised name passes through unchanged so
-    the caller can ignore non-approved (legacy) values.
+    single model (XGBoost); any other unrecognised name passes through unchanged
+    so the caller can ignore non-approved (legacy) values.
     """
     if value is None:
         return ""
@@ -160,32 +162,23 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
             logger.warning("XGBoost returned an unusable output (NaN/invalid) — excluded.")
             xgb_label, xgb_conf, xgb_probs = None, None, None
 
-    if mdeberta_service.is_ready():
-        try:
-            deberta_label, deberta_conf, deberta_probs = mdeberta_service.predict(text)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"DeBERTa prediction failed: {exc}")
-            deberta_label, deberta_conf, deberta_probs = None, None, None
-        if not _usable(deberta_label, deberta_conf, deberta_probs):
-            logger.warning("DeBERTa returned an unusable output (NaN/invalid) — excluded.")
-            deberta_label, deberta_conf, deberta_probs = None, None, None
-
-    # XLM-RoBERTa is intentionally NOT run in the live request path (RAM budget);
-    # roberta_* fields below therefore remain None and are kept only for
-    # historical/compat reporting. Offline evaluation still uses roberta_service.
+    # mDeBERTa is intentionally NOT run in the live request path (RAM budget —
+    # it previously OOM-crashed Render's 512 MB free tier); the deberta_* fields
+    # below therefore remain None and are kept only for historical/compat
+    # reporting. XLM-RoBERTa is likewise excluded. Offline evaluation and
+    # /ml/train still use both transformer services.
 
     active_probs = {
         "XGBoost (TF-DF)": xgb_probs,
-        "mDeBERTa": deberta_probs,
     }
     active_candidates = {
         "XGBoost (TF-DF)": (xgb_label, xgb_conf),
-        "mDeBERTa": (deberta_label, deberta_conf),
     }
 
-    # Backward-compat "ensemble" report: the three-model soft vote, using the
-    # *persisted* triple weights when the triple ensemble is the selected
-    # approach, otherwise equal member weights.
+    # Backward-compat "ensemble" report: with a single live member the soft
+    # vote degenerates to that member's output (weight 1.0), using the
+    # *persisted* weights when the stored production model matches, otherwise
+    # equal member weights.
     metadata = _load_deployment_metadata()
     if metadata.get("production_model") == _ENSEMBLE_NAME:
         ensemble_weights = normalize_weights(list(_MODEL_KEYS), metadata.get("ensemble_weights"))
@@ -222,7 +215,8 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
         lookup_name = "XGBoost (TF-DF)" if production_algo == _XGB_COMPAT_NAME else production_algo
         official_label, official_conf = active_candidates.get(lookup_name, (None, None))
 
-    # Fallbacks: any available approved model, then the triple ensemble.
+    # Fallbacks: the live model's output, then the backward-compat ensemble
+    # field (degenerates to the same single-model result).
     if official_label is None:
         for algo in _MODEL_KEYS:
             label, conf = active_candidates.get(algo, (None, None))

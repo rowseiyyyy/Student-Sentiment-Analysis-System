@@ -105,16 +105,11 @@ def ensure_hub_artifacts() -> bool:
 
     downloaded = False
 
-    if _transformer_ready(settings.MDEBERTA_MODEL_PATH, settings.MDEBERTA_QUANTIZED_FILE):
-        logger.info("mDeBERTa artifacts already present locally — skipping download.")
-    else:
-        logger.info(f"Downloading private mDeBERTa repo: {settings.HF_MDEBERTA_REPO}")
-        _snapshot(settings.HF_MDEBERTA_REPO, settings.MDEBERTA_MODEL_PATH)
-        downloaded = True
-
-    # XLM-RoBERTa is intentionally NOT downloaded at startup: it is excluded from
-    # the live inference path (RAM budget) and only used for offline evaluation /
-    # reporting. Its repo/config/tokenizer remain available for that offline use.
+    # mDeBERTa is intentionally NOT downloaded at startup: like XLM-RoBERTa it
+    # is excluded from the live inference path (RAM budget — its quantized
+    # build/unload still OOM-crashed Render's 512 MB free tier). Its repo,
+    # config/tokenizer, and trained weights remain available for offline
+    # evaluation, reporting, and /ml/train fine-tuning.
 
     if _classical_ready():
         logger.info("XGBoost / TF-IDF artifacts already present locally — skipping download.")
