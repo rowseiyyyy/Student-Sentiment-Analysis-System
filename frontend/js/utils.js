@@ -162,7 +162,7 @@ function selectField(name, label, options, placeholder = '') {
 // pair ensembles are "XGBoost (TF-IDF) + mDeBERTa" and "XGBoost (TF-IDF) +
 // XLM-RoBERTa"; "Average (All Models)" is the plain equal-weight average of
 // all three models. XLM-RoBERTa entries remain as historical/reporting data.
-const MODEL_PERFORMANCE_ALLOWED = ['XGBoost (TF-IDF)', 'mDeBERTa', 'XLM-RoBERTa', 'XGBoost (TF-IDF) + mDeBERTa', 'XGBoost (TF-IDF) + XLM-RoBERTa', 'Average (All Models)'];
+const MODEL_PERFORMANCE_ALLOWED = ['XGBoost (TF-IDF)', 'mDeBERTa', 'XLM-RoBERTa', 'Multilingual MiniLM', 'mDeBERTa + XLM-RoBERTa'];
 
 function filterModelPerfRows(rows) {
     if (!Array.isArray(rows)) return [];
@@ -172,6 +172,12 @@ function filterModelPerfRows(rows) {
 }
 
 function modelPerfDisplayName(algorithm) {
+    // Active ensemble: mDeBERTa + XLM-RoBERTa.
+    if (algorithm === 'mDeBERTa + XLM-RoBERTa' || algorithm === 'XLM-RoBERTa + mDeBERTa') {
+        return 'XLM-RoBERTa + mDeBERTa';
+    }
+    // Legacy composites (superseded ensembles) keep their historical display
+    // names so older comparison rows remain readable.
     if (algorithm === 'XGBoost (TF-IDF) + mDeBERTa' || algorithm === 'mDeBERTa + XGBoost (TF-IDF)') {
         return 'mDeBERTa + XGBoost (TF-IDF)';
     }
@@ -180,10 +186,6 @@ function modelPerfDisplayName(algorithm) {
     }
     if (algorithm === 'Average (All Models)') {
         return 'Average (All Models)';
-    }
-    // Legacy 'mDeBERTa + XLM-RoBERTa' / 'XLM-RoBERTa + mDeBERTa' display.
-    if (algorithm === 'mDeBERTa + XLM-RoBERTa' || algorithm === 'XLM-RoBERTa + mDeBERTa') {
-        return 'XLM-RoBERTa + mDeBERTa';
     }
     return algorithm;
 }

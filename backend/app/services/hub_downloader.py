@@ -118,4 +118,15 @@ def ensure_hub_artifacts() -> bool:
         _download_classical()
         downloaded = True
 
+    # Multilingual MiniLM IS the live production sentiment model — its
+    # config/tokenizer + quantized ONNX model are required for real-time
+    # inference, so they are downloaded at startup (small footprint fits the
+    # free-tier RAM budget).
+    if _transformer_ready(settings.MINILM_MODEL_PATH, settings.MINILM_ONNX_FILE):
+        logger.info("Multilingual MiniLM artifacts already present locally — skipping download.")
+    else:
+        logger.info(f"Downloading private Multilingual MiniLM repo: {settings.HF_MINILM_REPO}")
+        _snapshot(settings.HF_MINILM_REPO, settings.MINILM_MODEL_PATH)
+        downloaded = True
+
     return downloaded

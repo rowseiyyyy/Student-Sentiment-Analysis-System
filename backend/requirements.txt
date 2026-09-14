@@ -43,6 +43,8 @@ transformers==4.44.2
 datasets==5.0.1
 sentencepiece==0.2.2
 torch==2.4.1
+# ONNX Runtime serves the live Multilingual MiniLM model (quantized model.onnx)
+onnxruntime==1.19.2
 pandas==2.2.3
 numpy==1.26.4
 joblib==1.4.2

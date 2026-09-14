@@ -21,6 +21,7 @@ class TrainingAlgorithm(str, enum.Enum):
     XGBOOST_TFDF = "XGBoost (TF-IDF)"
     MDEBERTA = "mDeBERTa"
     XLM_ROBERTA = "XLM-RoBERTa"
+    MINILM = "Multilingual MiniLM"
     # Historical values remain readable but are not active approaches.
     LEGACY_XGBOOST = "XGBoost"
     DEBERTA = "DeBERTa"

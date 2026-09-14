@@ -7,16 +7,12 @@ assembled, combined and reported.
 
 Approved models / ensembles
 ---------------------------
-Single models:  XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa
+Single models:  XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa, Multilingual MiniLM
 Ensembles:
-    * XGBoost (TF-IDF) + mDeBERTa          (weighted soft voting)
-    * XGBoost (TF-IDF) + XLM-RoBERTa       (weighted soft voting)
-    * Average (All Models)                 (plain equal-weight average)
+    * mDeBERTa + XLM-RoBERTa               (weighted soft voting)
 
-The two-member ensembles use weights selected on a validation split and
-persisted so runtime inference uses the *trained* values. The all-model
-ensemble is deliberately a plain average: every member vote counts equally
-regardless of validation-tuning (see ``EQUAL_WEIGHT_ENSEMBLES``).
+The two-member ensemble uses weights selected on a validation split and
+persisted so runtime inference uses the *trained* values.
 """
 from __future__ import annotations
 
@@ -26,17 +22,22 @@ from app.services.xgboost_service import CLASS_ORDER
 
 # Canonical ordered mapping of ensemble name -> participating model keys.
 ENSEMBLES: dict[str, list[str]] = {
-    "XGBoost (TF-IDF) + mDeBERTa": ["XGBoost (TF-IDF)", "mDeBERTa"],
-    "XGBoost (TF-IDF) + XLM-RoBERTa": ["XGBoost (TF-IDF)", "XLM-RoBERTa"],
-    "Average (All Models)": ["XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa"],
+    "mDeBERTa + XLM-RoBERTa": ["mDeBERTa", "XLM-RoBERTa"],
 }
 
-# Ensembles that are combined with a plain equal-weight average (each member
-# vote counts the same) instead of validation-tuned weights.
-EQUAL_WEIGHT_ENSEMBLES: frozenset[str] = frozenset({"Average (All Models)"})
+# Ensembles combined with a plain equal-weight average instead of
+# validation-tuned weights. The current approved set has none — the single
+# mDeBERTa + XLM-RoBERTa ensemble uses tuned weights. Kept (empty) for
+# backward compatibility with training.py's combine logic.
+EQUAL_WEIGHT_ENSEMBLES: frozenset[str] = frozenset()
 
 # Approved single-model approaches.
-SINGLE_MODELS: tuple[str, ...] = ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa")
+SINGLE_MODELS: tuple[str, ...] = (
+    "XGBoost (TF-IDF)",
+    "mDeBERTa",
+    "XLM-RoBERTa",
+    "Multilingual MiniLM",
+)
 
 # Complete approved approach set (individual models + all approved ensembles).
 APPROVED_APPROACHES: tuple[str, ...] = SINGLE_MODELS + tuple(ENSEMBLES.keys())

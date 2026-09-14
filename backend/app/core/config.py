@@ -320,13 +320,14 @@ class Settings(BaseSettings):
     HF_XLM_ROBERTA_REPO: str = "rowseiy/xlm-roberta-sentiment"
     HF_MDEBERTA_REPO: str = "rowseiy/mdeberta-sentiment"
     HF_XGB_TFIDF_REPO: str = "rowseiy/xgb-tfidf-sentiment"
+    HF_MINILM_REPO: str = "rowseiy/minilm-sentiment"
 
     # Approved approach to register as production on a fresh database when the
     # models are pulled from the private hub at startup. Must match an approved
-    # approach name (see training.APPROACH_TO_ALGORITHM). Defaults to the
-    # mDeBERTa + XGBoost ensemble — the live production model set (XLM-RoBERTa
-    # stays available for offline/reporting only).
-    HF_PRODUCTION_MODEL: str = "XGBoost (TF-IDF)"
+    # approach name (see training.APPROACH_TO_ALGORITHM). The live production
+    # sentiment model is Multilingual MiniLM — small enough to serve within the
+    # free-tier RAM budget.
+    HF_PRODUCTION_MODEL: str = "Multilingual MiniLM"
 
     # Quantized PyTorch state_dict filenames in the private hub repos. The repos
     # still carry config.json + tokenizer files (only the weight files were
@@ -334,11 +335,21 @@ class Settings(BaseSettings):
     # architecture from config then loads these weights per prediction.
     MDEBERTA_QUANTIZED_FILE: str = "mdeberta_quantized_v2.pt"
     XLM_ROBERTA_QUANTIZED_FILE: str = "xlmr_quantized_v2.pt"
+    # Multilingual MiniLM is served from a dynamic-INT8 quantized ONNX file
+    # (exported via onnxruntime.quantization in Colab) — see minilm_service.
+    MINILM_ONNX_FILE: str = "model.onnx"
 
     # General RoBERTa is fine-tuned on the actual student-feedback labels;
     # avoid treating a Twitter-domain sentiment checkpoint as a final model.
     XLM_ROBERTA_MODEL_NAME: str = "xlm-roberta-base"
     MDEBERTA_MODEL_NAME: str = "microsoft/mdeberta-v3-base"
+
+    # Multilingual MiniLM — fourth approved single model. Trained in Colab and
+    # used for offline evaluation/comparison; excluded from the live inference
+    # path like the other transformers (free-tier RAM budget).
+    MINILM_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    MINILM_MODEL_PATH: Path = ML_DIR / "minilm_sentiment"
+    MINILM_MAX_SEQ_LENGTH: int = 128
 
     TRANSFORMER_DEVICE: str = "cpu"
 
@@ -349,11 +360,11 @@ class Settings(BaseSettings):
     # Ensemble / evaluation
     # ------------------------------------------------------------------
     # Initial weights for the soft-vote ensemble. These are NOT claimed
-    # to be optimal; they are starting values for the ensemble.
+    # to be optimal; they are starting values for the ensemble. The only
+    # approved ensemble is mDeBERTa + XLM-RoBERTa.
     ENSEMBLE_WEIGHTS: dict[str, float] = {
-        "mDeBERTa": 0.4,
-        "XLM-RoBERTa": 0.4,
-        "XGBoost (TF-IDF)": 0.2,
+        "mDeBERTa": 0.5,
+        "XLM-RoBERTa": 0.5,
     }
     BOOTSTRAP_N_ITER: int = 1000
     BOOTSTRAP_ALPHA: float = 0.05
@@ -402,6 +413,7 @@ def get_settings() -> Settings:
         settings.XGB_LABEL_ENCODER_PATH = settings.ML_DIR / "label_encoder_xgb.pkl"
         settings.MDEBERTA_MODEL_PATH = settings.ML_DIR / "mdeberta_v3"
         settings.XLM_ROBERTA_MODEL_PATH = settings.ML_DIR / "xlm_roberta_sentiment"
+        settings.MINILM_MODEL_PATH = settings.ML_DIR / "minilm_sentiment"
         settings.MODEL_METADATA_PATH = settings.ML_DIR / "model_metadata.json"
         settings.COMPARISON_RESULTS_PATH = settings.ML_DIR / "comparison_results.json"
 

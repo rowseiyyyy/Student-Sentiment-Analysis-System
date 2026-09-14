@@ -20,6 +20,7 @@ class AlgorithmName(str, enum.Enum):
     XGBOOST_TFDF = "XGBoost (TF-IDF)"
     MDEBERTA = "mDeBERTa"
     XLM_ROBERTA = "XLM-RoBERTa"
+    MINILM = "Multilingual MiniLM"
     LEGACY_XGBOOST = "XGBoost"
     DEBERTA = "DeBERTa"
     ROBERTA = "RoBERTa"

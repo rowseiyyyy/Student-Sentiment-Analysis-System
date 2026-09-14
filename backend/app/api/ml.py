@@ -77,11 +77,11 @@ async def upload_dataset(
 
     return {"rows": len(rows), "columns": reader.fieldnames, "message": "Dataset uploaded successfully."}
 
-# Approved active approaches: 3 individual models + 3 approved ensembles.
-# This is the strict, system-wide whitelist. The LIVE production ensemble is
-# the 2-model "XGBoost (TF-IDF) + mDeBERTa" — XLM-RoBERTa is excluded from the
-# real-time prediction path (free-tier RAM budget) but its model and the
-# XLM-involving ensembles remain approved for offline evaluation, reporting,
+# Approved active approaches: 4 individual models + 1 approved ensemble.
+# This is the strict, system-wide whitelist. The LIVE production model is the
+# single XGBoost (TF-IDF) — the transformers (mDeBERTa, XLM-RoBERTa,
+# Multilingual MiniLM) are excluded from the real-time prediction path
+# (free-tier RAM budget) but remain approved for offline evaluation, reporting,
 # and rollback of historical training runs.
 # Legacy models (SVM / Random Forest / Naive Bayes / BERT) and the superseded
 # ensemble composites are retained only as historical training_history rows
@@ -90,12 +90,10 @@ APPROVED_ALGORITHMS = (
     TrainingAlgorithm.XGBOOST_TFDF,
     TrainingAlgorithm.MDEBERTA,
     TrainingAlgorithm.XLM_ROBERTA,
-    # XGBoost (TF-IDF) + mDeBERTa
-    TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA,
-    # XGBoost (TF-IDF) + XLM-RoBERTa
-    TrainingAlgorithm.ENSEMBLE_TFIDF_XLM,
-    # Average (All Models) — equal-weight average of all three models
-    TrainingAlgorithm.ENSEMBLE_AVERAGE_ALL,
+    # Multilingual MiniLM
+    TrainingAlgorithm.MINILM,
+    # mDeBERTa + XLM-RoBERTa — the only approved ensemble
+    TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
 )
 
 # Multipart uploads are read into memory, so an unbounded model upload will

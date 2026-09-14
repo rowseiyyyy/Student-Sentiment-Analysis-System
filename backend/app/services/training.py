@@ -58,6 +58,7 @@ from app.services.ensembles import (
 )
 from app.services.preprocessing import clean_for_classical
 from app.services.roberta_service import xlm_roberta_service
+from app.services.minilm_service import minilm_service
 from app.services.xgboost_service import CLASS_ORDER, XGBoostService, xgboost_service
 from app.utils.logger import logger
 
@@ -425,14 +426,18 @@ def _split_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Dat
 # so old ``training_history`` rows and historical Colab exports remain
 # readable / importable — they are simply no longer produced by new runs.
 APPROACH_TO_ALGORITHM = {
+    # Active singles (4).
     "XGBoost (TF-IDF)": TrainingAlgorithm.XGBOOST_TFDF,
     "mDeBERTa": TrainingAlgorithm.MDEBERTA,
     "XLM-RoBERTa": TrainingAlgorithm.XLM_ROBERTA,
+    "Multilingual MiniLM": TrainingAlgorithm.MINILM,
+    # Active ensemble: mDeBERTa + XLM-RoBERTa (weighted soft vote).
+    "mDeBERTa + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
+    # Legacy approach names — kept importable so historical Colab exports and
+    # old training_history rows remain readable; no longer produced by new runs.
     "XGBoost (TF-IDF) + mDeBERTa": TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA,
     "XGBoost (TF-IDF) + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_TFIDF_XLM,
     "Average (All Models)": TrainingAlgorithm.ENSEMBLE_AVERAGE_ALL,
-    # Legacy (historical) ensembles — retained for readability of old rows.
-    "mDeBERTa + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
     "XLM-RoBERTa + XGBoost (TF-IDF)": TrainingAlgorithm.ENSEMBLE_XLM_TFDF,
     "XGBoost (TF-IDF) + mDeBERTa + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA_XLM,
 }
@@ -471,6 +476,8 @@ def colab_key_to_approach(key: Any) -> str | None:
         return "mDeBERTa + XLM-RoBERTa"
     if canonical in ("xgboost", "xgb"):
         return "XGBoost (TF-IDF)"
+    if "minilm" in canonical:
+        return "Multilingual MiniLM"
     if canonical.startswith("mdeberta") or canonical in ("deberta", "debertabase"):
         return "mDeBERTa"
     if canonical.startswith("xlmroberta") or canonical in ("roberta", "robertabase"):
@@ -486,6 +493,7 @@ COLAB_KEY_TO_APPROACH = {
     "xgboost": "XGBoost (TF-IDF)",
     "deberta": "mDeBERTa",
     "roberta": "XLM-RoBERTa",
+    "minilm": "Multilingual MiniLM",
 }
 
 
@@ -766,7 +774,7 @@ def register_hub_models(db: Session, production: str) -> dict:
 
     registered: list[str] = []
     # Ensure a row exists for each of the three individual approved models.
-    for approach in ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa"):
+    for approach in ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa", "Multilingual MiniLM"):
         algorithm = APPROACH_TO_ALGORITHM[approach]
         exists = db.query(TrainingHistory).filter(TrainingHistory.algorithm == algorithm).first()
         if exists is None:
@@ -835,8 +843,8 @@ def run_full_training(
 
     run_id = str(time.time_ns())
     results: dict[str, dict] = {}
-    test_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-IDF)": [], "mDeBERTa": [], "XLM-RoBERTa": []}
-    val_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-IDF)": [], "mDeBERTa": [], "XLM-RoBERTa": []}
+    test_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-IDF)": [], "mDeBERTa": [], "XLM-RoBERTa": [], "Multilingual MiniLM": []}
+    val_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-IDF)": [], "mDeBERTa": [], "XLM-RoBERTa": [], "Multilingual MiniLM": []}
 
     xgb_history = TrainingHistory(
         algorithm=TrainingAlgorithm.XGBOOST_TFDF,
@@ -949,15 +957,64 @@ def run_full_training(
         logger.exception(f"RoBERTa training failed: {exc}")
         roberta_history.status = TrainingStatus.FAILED; roberta_history.notes = str(exc); db.commit()
 
-    if not test_model_probabilities["XGBoost (TF-IDF)"] or not test_model_probabilities["mDeBERTa"] or not test_model_probabilities["XLM-RoBERTa"]:
-        raise RuntimeError("The active research pipeline requires successful XGBoost (TF-IDF), mDeBERTa, and XLM-RoBERTa training to complete.")
+    minilm_history = TrainingHistory(
+        algorithm=TrainingAlgorithm.MINILM,
+        status=TrainingStatus.RUNNING,
+        dataset_filename=csv_path.name,
+        dataset_size=len(df),
+    )
+    db.add(minilm_history); db.commit(); db.refresh(minilm_history)
+    try:
+        metrics = minilm_service.fine_tune(
+            train_texts=train_texts,
+            train_labels=train_labels,
+            val_texts=val_texts,
+            val_labels=val_labels,
+            output_dir=settings.MINILM_MODEL_PATH / f"run_{run_id}",
+            epochs=settings.MDEBERTA_EPOCHS,
+            learning_rate=settings.MDEBERTA_LEARNING_RATE,
+            batch_size=settings.MDEBERTA_BATCH_SIZE,
+            max_length=settings.MINILM_MAX_SEQ_LENGTH,
+            seed=settings.RANDOM_STATE,
+        )
+        y_pred = []
+        for text in test_texts:
+            label, _, probs = minilm_service.predict(text)
+            y_pred.append(label)
+            test_model_probabilities["Multilingual MiniLM"].append(np.asarray(probs, dtype=float))
+        for text in val_texts:
+            _, _, probs = minilm_service.predict(text)
+            val_model_probabilities["Multilingual MiniLM"].append(np.asarray(probs, dtype=float))
+        minilm_metrics = _metrics_for_labels(test_labels, y_pred)
+        minilm_metrics["training_time_seconds"] = float(metrics.get("training_time_seconds", 0.0))
+        minilm_metrics["inference_time_ms"] = float(metrics.get("inference_time_ms", 0.0))
+        minilm_metrics["memory_usage_mb"] = float(metrics.get("memory_usage_mb", 0.0))
+        minilm_metrics["dataset_size"] = len(df)
+        minilm_metrics["split_sizes"] = {"train": len(train_texts), "validation": len(val_texts), "test": len(test_texts)}
+        minilm_metrics["validation"] = _metrics_for_labels(val_labels, [minilm_service.predict(text)[0] for text in val_texts])
+        minilm_metrics["hyperparameters"] = {"epochs": settings.MDEBERTA_EPOCHS, "learning_rate": settings.MDEBERTA_LEARNING_RATE, "batch_size": settings.MDEBERTA_BATCH_SIZE, "max_seq_length": settings.MINILM_MAX_SEQ_LENGTH, "seed": settings.RANDOM_STATE, "checkpoint": settings.MINILM_MODEL_NAME}
+        _persist_history(db, minilm_history, minilm_metrics, TrainingStatus.COMPLETED)
+        results["Multilingual MiniLM"] = minilm_metrics
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(f"MiniLM training failed: {exc}")
+        minilm_history.status = TrainingStatus.FAILED; minilm_history.notes = str(exc); db.commit()
 
-    # Build all approved ensembles. Pair-ensemble member weights are selected
-    # on the untouched validation split; the all-model "Average (All Models)"
-    # ensemble uses a plain equal-weight average. Final metrics are computed
-    # on the untouched test set so no test observation influences selection.
+    if (
+        not test_model_probabilities["XGBoost (TF-IDF)"]
+        or not test_model_probabilities["mDeBERTa"]
+        or not test_model_probabilities["XLM-RoBERTa"]
+        or not test_model_probabilities["Multilingual MiniLM"]
+    ):
+        raise RuntimeError(
+            "The active research pipeline requires successful XGBoost (TF-IDF), mDeBERTa, "
+            "XLM-RoBERTa, and Multilingual MiniLM training to complete."
+        )
+
+    # Build the approved ensembles. Ensemble member weights are selected on
+    # the untouched validation split. Final metrics are computed on the
+    # untouched test set so no test observation influences selection.
     available_members: set[str] = set()
-    for name in ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa"):
+    for name in ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa", "Multilingual MiniLM"):
         if test_model_probabilities[name]:
             available_members.add(name)
 

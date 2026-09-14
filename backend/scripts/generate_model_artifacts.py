@@ -13,7 +13,7 @@ Usage:
     python scripts/generate_model_artifacts.py "path/to/dashboard_export.json" [production_name]
         production_name defaults to the export's recommended model.
         Accepted values (must equal an approach exactly): XGBoost (TF-IDF),
-        mDeBERTa, XLM-RoBERTa, mDeBERTa + XLM-RoBERTa.
+        mDeBERTa, XLM-RoBERTa, Multilingual MiniLM, mDeBERTa + XLM-RoBERTa.
 """
 from __future__ import annotations
 
@@ -41,6 +41,8 @@ def colab_key_to_approach(key) -> str | None:
         return "mDeBERTa + XLM-RoBERTa"
     if canonical in ("xgboost", "xgb"):
         return "XGBoost (TF-IDF)"
+    if "minilm" in canonical:
+        return "Multilingual MiniLM"
     if canonical.startswith("mdeberta") or canonical in ("deberta", "debertabase"):
         return "mDeBERTa"
     if canonical.startswith("xlmroberta") or canonical in ("roberta", "robertabase"):
@@ -48,15 +50,13 @@ def colab_key_to_approach(key) -> str | None:
     if canonical == "xlmr":
         return "XLM-RoBERTa"
     if canonical == "ensemble":
-        return "Average (All Models)"
+        return "mDeBERTa + XLM-RoBERTa"
     return None
 
 
 # Approved ensemble member sets (mirrors app/services/ensembles.py).
 ENSEMBLES = {
-    "XGBoost (TF-IDF) + mDeBERTa": ["XGBoost (TF-IDF)", "mDeBERTa"],
-    "XGBoost (TF-IDF) + XLM-RoBERTa": ["XGBoost (TF-IDF)", "XLM-RoBERTa"],
-    "Average (All Models)": ["XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa"],
+    "mDeBERTa + XLM-RoBERTa": ["mDeBERTa", "XLM-RoBERTa"],
 }
 
 
