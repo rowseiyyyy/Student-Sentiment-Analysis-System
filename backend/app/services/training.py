@@ -516,6 +516,21 @@ def normalize_metrics_payload(payload: Any) -> tuple[dict[str, dict], str | None
     """
     if not isinstance(payload, dict):
         raise DatasetValidationError("Metrics JSON must be an object.")
+
+    # Colab notebook dashboard export shape: ``{"best_model": str, "rows": {approach: metrics}}``.
+    # ``rows`` holds the flat approach -> metrics mapping and ``best_model`` is the
+    # recommended production approach. Unwrap it into the flat shape that
+    # ``import_training_results`` consumes (exact-match on APPROACH_TO_ALGORITHM).
+    if isinstance(payload.get("rows"), dict) and not isinstance(payload.get("models"), dict):
+        # Pass through unchanged (like the legacy flat shape) so non-model
+        # entries — e.g. a metadata string nested inside ``rows`` — still reach
+        # ``import_training_results`` and surface as "Ignored non-model keys".
+        flattened = dict(payload["rows"])
+        recommended = payload.get("best_model")
+        if not isinstance(recommended, str):
+            recommended = None
+        return flattened, recommended
+
     if not isinstance(payload.get("models"), dict):
         return payload, None
 

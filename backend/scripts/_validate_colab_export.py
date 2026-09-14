@@ -10,7 +10,7 @@ the human names (Negative/Neutral/Positive) so the confusion-matrix and
 per-class report are not blank/wrong. It does NOT write to the DB or to
 app/ml artifacts.
 
-Usage:
+Usag
     python scripts/_validate_colab_export.py "path/to/dashboard_export.json"
 """
 from __future__ import annotations
