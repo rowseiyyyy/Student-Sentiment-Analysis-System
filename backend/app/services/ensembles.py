@@ -7,17 +7,16 @@ assembled, combined and reported.
 
 Approved models / ensembles
 ---------------------------
-Single models:  XGBoost (TF-DF), mDeBERTa, XLM-RoBERTa
-Ensembles (weighted soft voting):
-    * XGBoost + DeBERTa
-    * DeBERTa + RoBERTa
-    * RoBERTa + XGBoost
-    * XGBoost + DeBERTa + RoBERTa
+Single models:  XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa
+Ensembles:
+    * XGBoost (TF-IDF) + mDeBERTa          (weighted soft voting)
+    * XGBoost (TF-IDF) + XLM-RoBERTa       (weighted soft voting)
+    * Average (All Models)                 (plain equal-weight average)
 
-No ensemble weight value in this module is claimed to be optimal; weights
-are selected during training against a validation split and persisted so
-runtime inference uses the *trained* values rather than configuration
-defaults.
+The two-member ensembles use weights selected on a validation split and
+persisted so runtime inference uses the *trained* values. The all-model
+ensemble is deliberately a plain average: every member vote counts equally
+regardless of validation-tuning (see ``EQUAL_WEIGHT_ENSEMBLES``).
 """
 from __future__ import annotations
 
@@ -27,16 +26,19 @@ from app.services.xgboost_service import CLASS_ORDER
 
 # Canonical ordered mapping of ensemble name -> participating model keys.
 ENSEMBLES: dict[str, list[str]] = {
-    "XGBoost (TF-DF) + mDeBERTa": ["XGBoost (TF-DF)", "mDeBERTa"],
-    "mDeBERTa + XLM-RoBERTa": ["mDeBERTa", "XLM-RoBERTa"],
-    "XLM-RoBERTa + XGBoost (TF-DF)": ["XLM-RoBERTa", "XGBoost (TF-DF)"],
-    "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa": ["XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa"],
+    "XGBoost (TF-IDF) + mDeBERTa": ["XGBoost (TF-IDF)", "mDeBERTa"],
+    "XGBoost (TF-IDF) + XLM-RoBERTa": ["XGBoost (TF-IDF)", "XLM-RoBERTa"],
+    "Average (All Models)": ["XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa"],
 }
 
-# Approved single-model approaches.
-SINGLE_MODELS: tuple[str, ...] = ("XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa")
+# Ensembles that are combined with a plain equal-weight average (each member
+# vote counts the same) instead of validation-tuned weights.
+EQUAL_WEIGHT_ENSEMBLES: frozenset[str] = frozenset({"Average (All Models)"})
 
-# Complete approved approach set (individual models + all four ensembles).
+# Approved single-model approaches.
+SINGLE_MODELS: tuple[str, ...] = ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa")
+
+# Complete approved approach set (individual models + all approved ensembles).
 APPROVED_APPROACHES: tuple[str, ...] = SINGLE_MODELS + tuple(ENSEMBLES.keys())
 
 # Resolution used while searching the weight simplex on the validation split.

@@ -6,7 +6,7 @@ Laguna, Philippines Using Machine Learning Algorithms**
 A production-ready FastAPI backend that classifies open-ended student
 evaluation comments (Faculty, Staff, Payment, Facilities) into
 **Positive / Neutral / Negative** sentiment, comparing three algorithms —
-**XGBoost (TF-DF)**, **mDeBERTa**, and **XLM-RoBERTa** — and automatically promoting the
+**XGBoost (TF-IDF)**, **mDeBERTa**, and **XLM-RoBERTa** — and automatically promoting the
 best-performing model (or ensemble) to production.
 
 ## Quick Start (Windows)

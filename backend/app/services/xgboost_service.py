@@ -1,4 +1,4 @@
-"""Leakage-safe XGBoost (TF-DF) text classifier."""
+"""Leakage-safe XGBoost (TF-IDF) text classifier."""
 from __future__ import annotations
 
 import json

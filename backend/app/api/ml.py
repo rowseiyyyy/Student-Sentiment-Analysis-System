@@ -79,20 +79,23 @@ async def upload_dataset(
 
 # Approved active approaches: 3 individual models + 3 approved ensembles.
 # This is the strict, system-wide whitelist. The LIVE production ensemble is
-# the 2-model "XGBoost (TF-DF) + mDeBERTa" — XLM-RoBERTa is excluded from the
+# the 2-model "XGBoost (TF-IDF) + mDeBERTa" — XLM-RoBERTa is excluded from the
 # real-time prediction path (free-tier RAM budget) but its model and the
 # XLM-involving ensembles remain approved for offline evaluation, reporting,
 # and rollback of historical training runs.
-# Legacy models (SVM / Random Forest / Naive Bayes / BERT) are retained only
-# as historical training_history rows and are excluded from performance,
-# rollback, confusion-matrix, and download.
+# Legacy models (SVM / Random Forest / Naive Bayes / BERT) and the superseded
+# ensemble composites are retained only as historical training_history rows
+# and are excluded from performance, rollback, confusion-matrix, and download.
 APPROVED_ALGORITHMS = (
     TrainingAlgorithm.XGBOOST_TFDF,
     TrainingAlgorithm.MDEBERTA,
     TrainingAlgorithm.XLM_ROBERTA,
+    # XGBoost (TF-IDF) + mDeBERTa
     TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA,
-    TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
-    TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA_XLM,
+    # XGBoost (TF-IDF) + XLM-RoBERTa
+    TrainingAlgorithm.ENSEMBLE_TFIDF_XLM,
+    # Average (All Models) — equal-weight average of all three models
+    TrainingAlgorithm.ENSEMBLE_AVERAGE_ALL,
 )
 
 # Multipart uploads are read into memory, so an unbounded model upload will
@@ -172,7 +175,7 @@ async def import_results(
             )
         except DatasetValidationError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-        artifacts_updated.append("XGBoost (TF-DF)")
+        artifacts_updated.append("XGBoost (TF-IDF)")
     if deberta_archive:
         try:
             replace_transformer_artifacts(

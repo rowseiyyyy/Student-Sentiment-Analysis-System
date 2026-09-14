@@ -37,13 +37,13 @@ from app.utils.logger import logger
 deberta_service = mdeberta_service
 roberta_service = xlm_roberta_service
 
-_MODEL_KEYS = ("XGBoost (TF-DF)",)
+_MODEL_KEYS = ("XGBoost (TF-IDF)",)
 # Live inference model. Both transformer models (mDeBERTa and XLM-RoBERTa) are
 # excluded from the real-time path to respect the free-host RAM budget; they
 # remain fully trained/registered and are used only for offline evaluation and
 # reporting (see deberta_service / roberta_service / training.py).
 # Legacy "ensemble" aliases resolve to the live single model.
-_ENSEMBLE_NAME = "XGBoost (TF-DF)"
+_ENSEMBLE_NAME = "XGBoost (TF-IDF)"
 _XGB_COMPAT_NAME = "XGBoost"
 
 
@@ -169,10 +169,10 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
     # /ml/train still use both transformer services.
 
     active_probs = {
-        "XGBoost (TF-DF)": xgb_probs,
+        "XGBoost (TF-IDF)": xgb_probs,
     }
     active_candidates = {
-        "XGBoost (TF-DF)": (xgb_label, xgb_conf),
+        "XGBoost (TF-IDF)": (xgb_label, xgb_conf),
     }
 
     # Backward-compat "ensemble" report: with a single live member the soft
@@ -212,7 +212,7 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
         else:
             production_algo = None  # selected ensemble not reconstructable
     elif cfg["approach_type"] == "single":
-        lookup_name = "XGBoost (TF-DF)" if production_algo == _XGB_COMPAT_NAME else production_algo
+        lookup_name = "XGBoost (TF-IDF)" if production_algo == _XGB_COMPAT_NAME else production_algo
         official_label, official_conf = active_candidates.get(lookup_name, (None, None))
 
     # Fallbacks: the live model's output, then the backward-compat ensemble

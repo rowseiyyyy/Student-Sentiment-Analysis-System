@@ -1021,12 +1021,12 @@ var ADMIN = {
             var pred = item.prediction || null;
             var missingModelCount = pred ? [pred.xgb_prediction].filter(function(p) { return !p; }).length : 1;
             if (pred) {
-                // Live model: XGBoost (TF-DF) only. Both transformer models are
+                // Live model: XGBoost (TF-IDF) only. Both transformer models are
                 // excluded from live inference (free-tier RAM budget); their
                 // rows are shown only for historical submissions that still
                 // carry a stored prediction.
                 var modelRows = [
-                    { label: 'XGBoost (TF-DF)', pred: pred.xgb_prediction, conf: pred.xgb_confidence }
+                    { label: 'XGBoost (TF-IDF)', pred: pred.xgb_prediction, conf: pred.xgb_confidence }
                 ];
                 if (pred.deberta_prediction) {
                     modelRows.push({ label: 'mDeBERTa (historical)', pred: pred.deberta_prediction, conf: pred.deberta_confidence });
@@ -1039,7 +1039,7 @@ var ADMIN = {
                 }
                 modelRows = modelRows.map(function(m) {
                     var isOfficial = m.isEnsemble
-                        ? pred.algorithm_used === 'XGBoost (TF-DF) + mDeBERTa' || pred.algorithm_used === 'mDeBERTa + XLM-RoBERTa' || pred.algorithm_used === 'XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa'
+                        ? pred.algorithm_used === 'XGBoost (TF-IDF) + mDeBERTa' || pred.algorithm_used === 'mDeBERTa + XLM-RoBERTa' || pred.algorithm_used === 'XGBoost (TF-IDF) + mDeBERTa + XLM-RoBERTa'
                         : pred.algorithm_used === m.label;
                     var predCell = m.pred
                         ? sentimentBadge(m.pred)
@@ -1061,9 +1061,9 @@ var ADMIN = {
                     '<h4 style="margin-bottom:0.5rem;">Text Sentiment â€” Model Breakdown</h4>' +
                     '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody>' + modelRows + '</tbody></table></div>' +
                     (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> ' + missingModelCount + ' model(s) show "Not deployed" — the live model (XGBoost, TF-DF) has no weights loaded on this server. Its weights are fetched from the private Hugging Face repo at startup or uploaded via Model Result &gt; Import. mDeBERTa and XLM-RoBERTa are excluded from live inference by design (free-tier RAM budget).</p>' : '') +
-                    (pred.algorithm_used === 'XGBoost (TF-DF)' && pred.ensemble_prediction
-                        ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result comes from the single live model, XGBoost (TF-DF) (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence). The transformer models are kept offline for the free-tier RAM budget and appear only for older submissions.</p>'
-                        : (pred.algorithm_used === 'XGBoost (TF-DF) + mDeBERTa' && pred.ensemble_prediction
+                    (pred.algorithm_used === 'XGBoost (TF-IDF)' && pred.ensemble_prediction
+                        ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result comes from the single live model, XGBoost (TF-IDF) (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence). The transformer models are kept offline for the free-tier RAM budget and appear only for older submissions.</p>'
+                        : (pred.algorithm_used === 'XGBoost (TF-IDF) + mDeBERTa' && pred.ensemble_prediction
                             ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result is the weighted ensemble used at the time of this submission (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence).</p>'
                             : '')) +
                 '</div>';
@@ -1323,17 +1323,17 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa in Colab, upload the <strong>metrics JSON</strong> here to record the results. XGBoost (TF-DF) is the only live inference model — it runs on the free tier within the RAM budget; both transformer models are excluded from real-time prediction and used for offline evaluation and reporting only. The file fields below are optional &mdash; in most cases just import the metrics (weights come from the private Hugging Face repos).</p>' +
+                '<p class="form-desc">After training XGBoost (TF-IDF), mDeBERTa, and XLM-RoBERTa in Colab, upload the <strong>metrics JSON</strong> here to record the results. XGBoost (TF-IDF) is the only live inference model — it runs on the free tier within the RAM budget; both transformer models are excluded from real-time prediction and used for offline evaluation and reporting only. The file fields below are optional &mdash; in most cases just import the metrics (weights come from the private Hugging Face repos).</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
                 '</div>' +
-                '<div class="form-group"><label>XGBoost (TF-DF) model (.pkl/.joblib/.zip)</label><input type="file" class="form-control" id="import-xgb-model" accept=".pkl,.joblib,.zip" /></div>' +
+                '<div class="form-group"><label>XGBoost (TF-IDF) model (.pkl/.joblib/.zip)</label><input type="file" class="form-control" id="import-xgb-model" accept=".pkl,.joblib,.zip" /></div>' +
                 '<div class="form-group"><label>XGBoost TF-IDF vectorizer (.pkl / .joblib)</label><input type="file" class="form-control" id="import-xgb-vectorizer" accept=".pkl,.joblib" /></div>' +
                 '<div class="form-group"><label>Set as production model (optional)</label>' +
                     '<select class="form-control" id="import-set-production">' +
                         '<option value="">Auto (best weighted F1 among imported)</option>' +
-                        '<option value="XGBoost (TF-DF)">XGBoost (TF-DF)</option>' +
+                        '<option value="XGBoost (TF-IDF)">XGBoost (TF-IDF)</option>' +
                     '</select>' +
                 '</div>' +
                 '<button class="btn btn-primary btn-lg" onclick="ADMIN.submitImportResults()"><i class="fas fa-upload"></i> Import Results</button>' +
@@ -1383,7 +1383,7 @@ predictionHtml +
                 xgbVectorizer: document.getElementById('import-xgb-vectorizer').files[0],
                 setProduction: document.getElementById('import-set-production').value || null
             });
-            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '. XGBoost (TF-DF) is the only live inference model — restart the API server if its weights changed.' : 'No model files were uploaded â€” only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';
+            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '. XGBoost (TF-IDF) is the only live inference model — restart the API server if its weights changed.' : 'No model files were uploaded â€” only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';
             showToast('Model results imported!', 'success');
         } catch (error) {
             resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--neg);"><h4 style="color:var(--neg);"><i class="fas fa-times-circle"></i> Import Failed</h4><p>' + error.message + '</p></div>';

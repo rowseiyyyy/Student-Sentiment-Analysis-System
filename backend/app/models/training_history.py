@@ -18,7 +18,7 @@ class TrainingAlgorithm(str, enum.Enum):
 
     # Approved active research models.
     XGBOOST = "XGBoost"
-    XGBOOST_TFDF = "XGBoost (TF-DF)"
+    XGBOOST_TFDF = "XGBoost (TF-IDF)"
     MDEBERTA = "mDeBERTa"
     XLM_ROBERTA = "XLM-RoBERTa"
     # Historical values remain readable but are not active approaches.
@@ -34,10 +34,12 @@ class TrainingAlgorithm(str, enum.Enum):
     ENSEMBLE_DEBERTA_ROBERTA = "DeBERTa + RoBERTa"
     ENSEMBLE_ROBERTA_XGB = "RoBERTa + XGBoost"
     ENSEMBLE_XGB_DEBERTA_ROBERTA = "XGBoost + DeBERTa + RoBERTa"
-    ENSEMBLE_TFDF_MDEBERTA = "XGBoost (TF-DF) + mDeBERTa"
+    ENSEMBLE_TFDF_MDEBERTA = "XGBoost (TF-IDF) + mDeBERTa"
     ENSEMBLE_MDEBERTA_XLM = "mDeBERTa + XLM-RoBERTa"
-    ENSEMBLE_XLM_TFDF = "XLM-RoBERTa + XGBoost (TF-DF)"
-    ENSEMBLE_TFDF_MDEBERTA_XLM = "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa"
+    ENSEMBLE_XLM_TFDF = "XLM-RoBERTa + XGBoost (TF-IDF)"
+    ENSEMBLE_TFDF_MDEBERTA_XLM = "XGBoost (TF-IDF) + mDeBERTa + XLM-RoBERTa"
+    ENSEMBLE_TFIDF_XLM = "XGBoost (TF-IDF) + XLM-RoBERTa"
+    ENSEMBLE_AVERAGE_ALL = "Average (All Models)"
 
 
 class TrainingStatus(str, enum.Enum):

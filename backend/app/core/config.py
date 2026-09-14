@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Asiatech Sentiment Analysis API"
     PROJECT_DESCRIPTION: str = (
         "Sentiment Analysis of Student Feedback from Asiatech College of "
-        "Sta. Rosa, Laguna using XGBoost (TF-DF), mDeBERTa and XLM-RoBERTa."
+        "Sta. Rosa, Laguna using XGBoost (TF-IDF), mDeBERTa and XLM-RoBERTa."
     )
     VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
@@ -326,7 +326,7 @@ class Settings(BaseSettings):
     # approach name (see training.APPROACH_TO_ALGORITHM). Defaults to the
     # mDeBERTa + XGBoost ensemble — the live production model set (XLM-RoBERTa
     # stays available for offline/reporting only).
-    HF_PRODUCTION_MODEL: str = "XGBoost (TF-DF)"
+    HF_PRODUCTION_MODEL: str = "XGBoost (TF-IDF)"
 
     # Quantized PyTorch state_dict filenames in the private hub repos. The repos
     # still carry config.json + tokenizer files (only the weight files were
@@ -353,7 +353,7 @@ class Settings(BaseSettings):
     ENSEMBLE_WEIGHTS: dict[str, float] = {
         "mDeBERTa": 0.4,
         "XLM-RoBERTa": 0.4,
-        "XGBoost (TF-DF)": 0.2,
+        "XGBoost (TF-IDF)": 0.2,
     }
     BOOTSTRAP_N_ITER: int = 1000
     BOOTSTRAP_ALPHA: float = 0.05

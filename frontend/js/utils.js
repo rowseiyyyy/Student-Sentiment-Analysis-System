@@ -158,12 +158,11 @@ function selectField(name, label, options, placeholder = '') {
 // Model Performance Comparison helpers (frontend-only filter)
 // ============================================================
 // The backend /api/v1/ml/performance may still return other models/ensembles.
-// The comparison UI displays ONLY these approved models. "DeBERTa +
-// RoBERTa" is the stored backend label for the same two-member ensemble that
-// is displayed to the user as "RoBERTa + DeBERTa". "XGBoost (TF-DF) + mDeBERTa"
-// is the live production ensemble; XLM-RoBERTa entries remain as historical
-// training/reporting data.
-const MODEL_PERFORMANCE_ALLOWED = ['XGBoost (TF-DF)', 'mDeBERTa', 'XLM-RoBERTa', 'mDeBERTa + XLM-RoBERTa', 'XGBoost (TF-DF) + mDeBERTa'];
+// The comparison UI displays ONLY these approved models. The two real-time
+// pair ensembles are "XGBoost (TF-IDF) + mDeBERTa" and "XGBoost (TF-IDF) +
+// XLM-RoBERTa"; "Average (All Models)" is the plain equal-weight average of
+// all three models. XLM-RoBERTa entries remain as historical/reporting data.
+const MODEL_PERFORMANCE_ALLOWED = ['XGBoost (TF-IDF)', 'mDeBERTa', 'XLM-RoBERTa', 'XGBoost (TF-IDF) + mDeBERTa', 'XGBoost (TF-IDF) + XLM-RoBERTa', 'Average (All Models)'];
 
 function filterModelPerfRows(rows) {
     if (!Array.isArray(rows)) return [];
@@ -173,11 +172,18 @@ function filterModelPerfRows(rows) {
 }
 
 function modelPerfDisplayName(algorithm) {
+    if (algorithm === 'XGBoost (TF-IDF) + mDeBERTa' || algorithm === 'mDeBERTa + XGBoost (TF-IDF)') {
+        return 'mDeBERTa + XGBoost (TF-IDF)';
+    }
+    if (algorithm === 'XGBoost (TF-IDF) + XLM-RoBERTa') {
+        return 'XLM-RoBERTa + XGBoost (TF-IDF)';
+    }
+    if (algorithm === 'Average (All Models)') {
+        return 'Average (All Models)';
+    }
+    // Legacy 'mDeBERTa + XLM-RoBERTa' / 'XLM-RoBERTa + mDeBERTa' display.
     if (algorithm === 'mDeBERTa + XLM-RoBERTa' || algorithm === 'XLM-RoBERTa + mDeBERTa') {
         return 'XLM-RoBERTa + mDeBERTa';
-    }
-    if (algorithm === 'XGBoost (TF-DF) + mDeBERTa' || algorithm === 'mDeBERTa + XGBoost (TF-DF)') {
-        return 'mDeBERTa + XGBoost';
     }
     return algorithm;
 }

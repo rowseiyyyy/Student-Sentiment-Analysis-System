@@ -50,6 +50,7 @@ from app.models.training_history import TrainingAlgorithm, TrainingHistory, Trai
 from app.services.deberta_service import mdeberta_service
 from app.services.ensembles import (
     ENSEMBLES,
+    EQUAL_WEIGHT_ENSEMBLES,
     ensemble_prediction,
     members_of,
     normalize_weights,
@@ -418,14 +419,22 @@ def _split_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Dat
 
 # Map an approved approach name (individual model or ensemble) to the
 # TrainingAlgorithm enum value used for persistence / rollback.
+#
+# Only the active ensembles (see ``ensembles.ENSEMBLES``) are rebuilt during
+# training. The legacy two/three-member composites are kept in this mapping
+# so old ``training_history`` rows and historical Colab exports remain
+# readable / importable — they are simply no longer produced by new runs.
 APPROACH_TO_ALGORITHM = {
-    "XGBoost (TF-DF)": TrainingAlgorithm.XGBOOST_TFDF,
+    "XGBoost (TF-IDF)": TrainingAlgorithm.XGBOOST_TFDF,
     "mDeBERTa": TrainingAlgorithm.MDEBERTA,
     "XLM-RoBERTa": TrainingAlgorithm.XLM_ROBERTA,
-    "XGBoost (TF-DF) + mDeBERTa": TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA,
+    "XGBoost (TF-IDF) + mDeBERTa": TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA,
+    "XGBoost (TF-IDF) + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_TFIDF_XLM,
+    "Average (All Models)": TrainingAlgorithm.ENSEMBLE_AVERAGE_ALL,
+    # Legacy (historical) ensembles — retained for readability of old rows.
     "mDeBERTa + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
-    "XLM-RoBERTa + XGBoost (TF-DF)": TrainingAlgorithm.ENSEMBLE_XLM_TFDF,
-    "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA_XLM,
+    "XLM-RoBERTa + XGBoost (TF-IDF)": TrainingAlgorithm.ENSEMBLE_XLM_TFDF,
+    "XGBoost (TF-IDF) + mDeBERTa + XLM-RoBERTa": TrainingAlgorithm.ENSEMBLE_TFDF_MDEBERTA_XLM,
 }
 
 # Key names used by the Colab dashboard export's ``models`` object, mapped to
@@ -461,7 +470,7 @@ def colab_key_to_approach(key: Any) -> str | None:
     if "xlmroberta" in canonical and "mdeberta" in canonical:
         return "mDeBERTa + XLM-RoBERTa"
     if canonical in ("xgboost", "xgb"):
-        return "XGBoost (TF-DF)"
+        return "XGBoost (TF-IDF)"
     if canonical.startswith("mdeberta") or canonical in ("deberta", "debertabase"):
         return "mDeBERTa"
     if canonical.startswith("xlmroberta") or canonical in ("roberta", "robertabase"):
@@ -469,12 +478,12 @@ def colab_key_to_approach(key: Any) -> str | None:
     if canonical == "xlmr":
         return "XLM-RoBERTa"
     if canonical == "ensemble":
-        return "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa"
+        return "XGBoost (TF-IDF) + mDeBERTa + XLM-RoBERTa"
     return None
 
 
 COLAB_KEY_TO_APPROACH = {
-    "xgboost": "XGBoost (TF-DF)",
+    "xgboost": "XGBoost (TF-IDF)",
     "deberta": "mDeBERTa",
     "roberta": "XLM-RoBERTa",
 }
@@ -742,7 +751,7 @@ def register_hub_models(db: Session, production: str) -> dict:
 
     registered: list[str] = []
     # Ensure a row exists for each of the three individual approved models.
-    for approach in ("XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa"):
+    for approach in ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa"):
         algorithm = APPROACH_TO_ALGORITHM[approach]
         exists = db.query(TrainingHistory).filter(TrainingHistory.algorithm == algorithm).first()
         if exists is None:
@@ -811,8 +820,8 @@ def run_full_training(
 
     run_id = str(time.time_ns())
     results: dict[str, dict] = {}
-    test_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-DF)": [], "mDeBERTa": [], "XLM-RoBERTa": []}
-    val_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-DF)": [], "mDeBERTa": [], "XLM-RoBERTa": []}
+    test_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-IDF)": [], "mDeBERTa": [], "XLM-RoBERTa": []}
+    val_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-IDF)": [], "mDeBERTa": [], "XLM-RoBERTa": []}
 
     xgb_history = TrainingHistory(
         algorithm=TrainingAlgorithm.XGBOOST_TFDF,
@@ -830,13 +839,13 @@ def run_full_training(
         xgb_metrics["split_sizes"] = {"train": len(train_texts), "validation": len(val_texts), "test": len(test_texts)}
         xgb_metrics["hyperparameters"] = {"n_estimators": settings.XGB_N_ESTIMATORS, "max_depth": settings.XGB_MAX_DEPTH, "learning_rate": settings.XGB_LEARNING_RATE}
         _persist_history(db, xgb_history, xgb_metrics, TrainingStatus.COMPLETED)
-        results["XGBoost (TF-DF)"] = xgb_metrics
+        results["XGBoost (TF-IDF)"] = xgb_metrics
         for text in test_texts:
             _, _, probs = xgboost_service.predict(text)
-            test_model_probabilities["XGBoost (TF-DF)"].append(np.asarray(probs, dtype=float))
+            test_model_probabilities["XGBoost (TF-IDF)"].append(np.asarray(probs, dtype=float))
         for text in val_texts:
             _, _, probs = xgboost_service.predict(text)
-            val_model_probabilities["XGBoost (TF-DF)"].append(np.asarray(probs, dtype=float))
+            val_model_probabilities["XGBoost (TF-IDF)"].append(np.asarray(probs, dtype=float))
     except Exception as exc:  # noqa: BLE001
         logger.warning("XGBoost training failed: %s", exc)
         xgb_history.status = TrainingStatus.FAILED; xgb_history.notes = str(exc); db.commit()
@@ -925,14 +934,15 @@ def run_full_training(
         logger.exception(f"RoBERTa training failed: {exc}")
         roberta_history.status = TrainingStatus.FAILED; roberta_history.notes = str(exc); db.commit()
 
-    if not test_model_probabilities["XGBoost (TF-DF)"] or not test_model_probabilities["mDeBERTa"] or not test_model_probabilities["XLM-RoBERTa"]:
-        raise RuntimeError("The active research pipeline requires successful XGBoost (TF-DF), mDeBERTa, and XLM-RoBERTa training to complete.")
+    if not test_model_probabilities["XGBoost (TF-IDF)"] or not test_model_probabilities["mDeBERTa"] or not test_model_probabilities["XLM-RoBERTa"]:
+        raise RuntimeError("The active research pipeline requires successful XGBoost (TF-IDF), mDeBERTa, and XLM-RoBERTa training to complete.")
 
-    # Build all four approved ensembles. Member weights are selected on the
-    # untouched validation split; final metrics are computed on the untouched
-    # test set so no test observation influences selection.
+    # Build all approved ensembles. Pair-ensemble member weights are selected
+    # on the untouched validation split; the all-model "Average (All Models)"
+    # ensemble uses a plain equal-weight average. Final metrics are computed
+    # on the untouched test set so no test observation influences selection.
     available_members: set[str] = set()
-    for name in ("XGBoost (TF-DF)", "mDeBERTa", "XLM-RoBERTa"):
+    for name in ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa"):
         if test_model_probabilities[name]:
             available_members.add(name)
 
@@ -941,8 +951,12 @@ def run_full_training(
             logger.warning("Skipping ensemble %s: not all member models are available.", ensemble_name)
             continue
 
-        weights = select_weights(ensemble_name, val_model_probabilities, val_labels)
-        weights = normalize_weights(members, weights)
+        if ensemble_name in EQUAL_WEIGHT_ENSEMBLES:
+            # Plain average: every member vote contributes equally.
+            weights = normalize_weights(members, {})
+        else:
+            weights = select_weights(ensemble_name, val_model_probabilities, val_labels)
+            weights = normalize_weights(members, weights)
 
         ensemble_labels = ensemble_prediction(ensemble_name, test_model_probabilities, weights)
         if len(ensemble_labels) != len(test_labels):

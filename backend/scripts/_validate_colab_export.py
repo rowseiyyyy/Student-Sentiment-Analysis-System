@@ -39,7 +39,7 @@ def colab_key_to_approach(key) -> str | None:
     if "xlmroberta" in canonical and "mdeberta" in canonical:
         return "mDeBERTa + XLM-RoBERTa"
     if canonical in ("xgboost", "xgb"):
-        return "XGBoost (TF-DF)"
+        return "XGBoost (TF-IDF)"
     if canonical.startswith("mdeberta") or canonical in ("deberta", "debertabase"):
         return "mDeBERTa"
     if canonical.startswith("xlmroberta") or canonical in ("roberta", "robertabase"):
@@ -47,16 +47,18 @@ def colab_key_to_approach(key) -> str | None:
     if canonical == "xlmr":
         return "XLM-RoBERTa"
     if canonical == "ensemble":
-        return "XGBoost (TF-DF) + mDeBERTa + XLM-RoBERTa"
+        return "Average (All Models)"
     return None
 # ---------------------------------------------------------------------------
 
 
 APPROACH_TO_ALGORITHM = {
-    "XGBoost (TF-DF)": "XGBOOST_TFDF",
+    "XGBoost (TF-IDF)": "XGBOOST_TFDF",
     "mDeBERTa": "MDEBERTA",
     "XLM-RoBERTa": "XLM_ROBERTA",
-    "mDeBERTa + XLM-RoBERTa": "ENSEMBLE_MDEBERTA_XLM",
+    "XGBoost (TF-IDF) + mDeBERTa": "ENSEMBLE_TFDF_MDEBERTA",
+    "XGBoost (TF-IDF) + XLM-RoBERTa": "ENSEMBLE_TFIDF_XLM",
+    "Average (All Models)": "ENSEMBLE_AVERAGE_ALL",
 }
 APPROVED = set(APPROACH_TO_ALGORITHM)
 
