@@ -103,13 +103,31 @@ function debounce(fn, delay = 300) {
 }
 
 // Get API base URL
-// Detects environment and returns appropriate backend URL
+// Detection order:
+//   1. An explicit override — set window.ASIATECH_API_BASE (in index.html or a
+//      deployment-injected config snippet) to point at any backend. Escape hatch
+//      for forks, custom domains and preview deployments.
+//   2. Local pages (localhost / 127.0.0.1 / file://) -> the local dev backend.
+//   3. Every other (deployed) host -> the production backend.
+// Previously anything that was not *.vercel.app fell through to localhost:8000,
+// so a frontend served from a custom domain, a Render static site, Netlify or a
+// Vercel *preview* URL silently called the visitor's own machine and every
+// request failed with "Unable to connect to the server".
 function getApiBase() {
-    const hostname = window.location.hostname;
-    if (hostname.includes('vercel.app')) {
-        return 'https://student-sentiment-analysis-system.onrender.com/api/v1';
+    if (window.ASIATECH_API_BASE) {
+        return window.ASIATECH_API_BASE;
     }
-    return 'http://localhost:8000/api/v1';
+    const hostname = window.location.hostname;
+    const isLocalPage =
+        hostname === '' ||            // file:// (opened straight from disk)
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '[::1]' ||
+        hostname.endsWith('.localhost');
+    if (isLocalPage) {
+        return 'http://localhost:8000/api/v1';
+    }
+    return 'https://student-sentiment-analysis-system.onrender.com/api/v1';
 }
 
 // Likert scale labels

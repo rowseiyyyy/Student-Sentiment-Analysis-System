@@ -351,6 +351,25 @@ class Settings(BaseSettings):
     MINILM_MODEL_PATH: Path = ML_DIR / "minilm_sentiment"
     MINILM_MAX_SEQ_LENGTH: int = 128
 
+    # Live inference for MiniLM is memory-gated. Measured footprint of this
+    # ONNX path (app baseline + fast tokenizer + the 119 MB quantized session)
+    # is ~570-640 MB RSS, so a 512 MB instance (e.g. Render's free tier) cannot
+    # host it: the worker gets OOM-killed mid-request and the browser reports
+    # "Unable to connect to the server. Please ensure the backend is running."
+    # When the host reports less than MINILM_MIN_RAM_MB of memory, live
+    # inference silently uses XGBoost (TF-IDF) instead — the same graceful
+    # fallback the pipeline already applies when artifacts are missing.
+    # ENABLE_MINILM_INFERENCE=false forces XGBoost everywhere; set
+    # MINILM_MIN_RAM_MB=0 to disable the memory guard entirely.
+    ENABLE_MINILM_INFERENCE: bool = True
+    MINILM_MIN_RAM_MB: int = 900
+
+    # Optional override of the host memory limit the guard above compares
+    # against. Platforms that expose no usable cgroup limit can set this to
+    # make the decision deterministic (e.g. MINILM_HOST_RAM_MB=512 on a 512 MB
+    # instance). Unset -> the limit is auto-detected; 0 -> unlimited.
+    MINILM_HOST_RAM_MB: int | None = None
+
     TRANSFORMER_DEVICE: str = "cpu"
 
     RANDOM_STATE: int = 42

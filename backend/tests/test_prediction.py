@@ -32,7 +32,7 @@ def test_run_prediction_pipeline_uses_live_minilm_model(db_session):
     # Multilingual MiniLM is the live production model and produces the
     # official result; XGBoost (TF-IDF) is only reported in the per-model
     # breakdown. Both transformers stay offline for the RAM budget.
-    with patch("app.services.prediction.minilm_service.is_ready", return_value=True), \
+    with patch("app.services.prediction.minilm_service.can_run_live_inference", return_value=True), \
          patch("app.services.prediction.minilm_service.predict", return_value=("Positive", 0.88, [0.05, 0.07, 0.88])), \
          patch("app.services.prediction.xgboost_service.is_ready", return_value=True), \
          patch("app.services.prediction.xgboost_service.predict", return_value=("Neutral", 0.6, [0.1, 0.6, 0.3])):
@@ -50,9 +50,10 @@ def test_run_prediction_pipeline_uses_live_minilm_model(db_session):
 
 
 def test_run_prediction_pipeline_falls_back_to_xgboost_without_minilm(db_session):
-    # When MiniLM artifacts are missing/failing, submissions must not
-    # hard-fail: the ready XGBoost (TF-IDF) model serves the official result.
-    with patch("app.services.prediction.minilm_service.is_ready", return_value=False), \
+    # When MiniLM is unavailable — artifacts missing, prediction failing, or a
+    # host too small to load the ONNX session — submissions must not hard-fail:
+    # the ready XGBoost (TF-IDF) model serves the official result.
+    with patch("app.services.prediction.minilm_service.can_run_live_inference", return_value=False), \
          patch("app.services.prediction.xgboost_service.is_ready", return_value=True), \
          patch("app.services.prediction.xgboost_service.predict", return_value=("Positive", 0.81, [0.1, 0.1, 0.8])):
         result = run_prediction_pipeline(db_session, "The professor is very helpful.")

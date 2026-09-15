@@ -85,3 +85,109 @@ def test_feed_rejects_unknown_graph_inputs():
 
     with pytest.raises(ValueError, match="Unexpected ONNX model input 'pixel_values'"):
         _build_onnx_feed(session, _tokenizer_output())
+
+
+# ---------------------------------------------------------------------------
+# Memory guard
+#
+# The ONNX path needs ~570-640 MB RSS (app baseline + fast tokenizer + the
+# 119 MB quantized session). On a 512 MB instance (Render free tier) loading it
+# got the worker OOM-killed mid-request, which reaches the browser as
+# "Unable to connect to the server. Please ensure the backend is running."
+# Live inference therefore falls back to XGBoost (TF-IDF) when the host cannot
+# hold the model.
+# ---------------------------------------------------------------------------
+
+def _service(monkeypatch, *, ready: bool, enabled: bool = True, host_mb=None, min_ram_mb: int = 900):
+    from app.services import minilm_service as module
+
+    monkeypatch.setattr(module.settings, "ENABLE_MINILM_INFERENCE", enabled, raising=False)
+    monkeypatch.setattr(module.settings, "MINILM_MIN_RAM_MB", min_ram_mb, raising=False)
+    monkeypatch.setattr(module, "_host_memory_limit_mb", lambda: host_mb, raising=False)
+    service = module.MiniLMService()
+    monkeypatch.setattr(service, "is_ready", lambda: ready, raising=False)
+    return service
+
+
+def test_live_inference_allowed_when_host_has_enough_memory(monkeypatch):
+    assert _service(monkeypatch, ready=True, host_mb=1024).can_run_live_inference() is True
+
+
+def test_live_inference_skipped_on_a_512mb_host(monkeypatch):
+    # The free-tier case: artifacts are present, but the instance is too small.
+    assert _service(monkeypatch, ready=True, host_mb=512).can_run_live_inference() is False
+
+
+def test_live_inference_skipped_when_explicitly_disabled(monkeypatch):
+    assert _service(monkeypatch, ready=True, enabled=False, host_mb=8192).can_run_live_inference() is False
+
+
+def test_live_inference_skipped_when_artifacts_are_missing(monkeypatch):
+    assert _service(monkeypatch, ready=False, host_mb=8192).can_run_live_inference() is False
+
+
+def test_memory_guard_can_be_disabled_with_zero_budget(monkeypatch):
+    # MINILM_MIN_RAM_MB=0 turns the guard off entirely (opt out on big hosts,
+    # or when the operator knows the container has more RAM than reported).
+    assert _service(monkeypatch, ready=True, host_mb=512, min_ram_mb=0).can_run_live_inference() is True
+
+
+def test_unknown_host_memory_is_treated_as_unconstrained(monkeypatch):
+    # Plain VMs / developer machines expose no cgroup limit (None) -> allowed.
+    assert _service(monkeypatch, ready=True, host_mb=None).can_run_live_inference() is True
+
+
+def test_host_memory_override_is_honoured(monkeypatch):
+    from app.services import minilm_service as module
+
+    monkeypatch.setattr(module.settings, "MINILM_HOST_RAM_MB", 512, raising=False)
+    assert module._host_memory_limit_mb() == 512
+
+    monkeypatch.setattr(module.settings, "MINILM_HOST_RAM_MB", 0, raising=False)
+    assert module._host_memory_limit_mb() == 0  # 0 == unlimited, guard is skipped
+
+    monkeypatch.setattr(module.settings, "MINILM_HOST_RAM_MB", None, raising=False)
+    # No override -> falls back to detection, which is None on hosts without
+    # cgroup / sysconf support (e.g. Windows developers).
+    assert module._host_memory_limit_mb() in (None,) or isinstance(module._host_memory_limit_mb(), int)
+
+
+# ---------------------------------------------------------------------------
+# Lazy singletons
+#
+# Both the tokenizer and the ONNX session used to be rebuilt for every
+# prediction: ~2 s and a fresh ~120 MB allocation per row, which made bulk
+# imports (one pipeline call per row) unusable on a small instance.
+# ---------------------------------------------------------------------------
+
+def test_tokenizer_and_session_are_built_once(monkeypatch):
+    from app.services import minilm_service as module
+
+    built = {"tokenizer": 0, "session": 0}
+
+    class _FakeTokenizer:
+        @classmethod
+        def from_file(cls, _path):
+            built["tokenizer"] += 1
+            return cls()
+
+        def enable_truncation(self, max_length):
+            self.max_length = max_length
+
+    class _FakeSession:
+        def __init__(self, *_args, **_kwargs):
+            built["session"] += 1
+
+    monkeypatch.setattr(module.settings, "ENABLE_MINILM_INFERENCE", True, raising=False)
+    monkeypatch.setattr(module.settings, "MINILM_MIN_RAM_MB", 0, raising=False)
+    service = module.MiniLMService()
+
+    import onnxruntime
+    import tokenizers
+
+    monkeypatch.setattr(tokenizers, "Tokenizer", _FakeTokenizer, raising=False)
+    monkeypatch.setattr(onnxruntime, "InferenceSession", _FakeSession, raising=False)
+
+    assert service._load_tokenizer() is service._load_tokenizer()
+    assert service._onnx_session() is service._onnx_session()
+    assert built == {"tokenizer": 1, "session": 1}

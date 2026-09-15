@@ -174,14 +174,15 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
     # historical/compat reporting. Offline evaluation and /ml/train still use
     # both transformer services.
 
-    # LIVE production model: Multilingual MiniLM (quantized, per-prediction
-    # build/unload). Falls back to XGBoost (TF-IDF) when its artifacts are
-    # missing or a prediction fails, so submissions never hard-fail.
+    # LIVE production model: Multilingual MiniLM (quantized ONNX). Falls back to
+    # XGBoost (TF-IDF) when its artifacts are missing, when a prediction fails,
+    # or when this host lacks the RAM the ONNX path needs (see
+    # MiniLMService.can_run_live_inference), so submissions never hard-fail.
     minilm_label: Optional[str] = None
     minilm_conf: Optional[float] = None
     minilm_probs: Optional[list[float]] = None
 
-    if minilm_service.is_ready():
+    if minilm_service.can_run_live_inference():
         try:
             minilm_label, minilm_conf, minilm_probs = minilm_service.predict(text)
         except Exception as exc:  # noqa: BLE001
@@ -191,7 +192,7 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
             logger.warning("MiniLM returned an unusable output (NaN/invalid) — excluded.")
             minilm_label, minilm_conf, minilm_probs = None, None, None
     else:
-        logger.warning("MiniLM artifacts not ready — falling back to XGBoost (TF-IDF) for live inference.")
+        logger.warning("MiniLM not serving live inference — falling back to XGBoost (TF-IDF).")
 
     active_probs = {
         "Multilingual MiniLM": minilm_probs,
