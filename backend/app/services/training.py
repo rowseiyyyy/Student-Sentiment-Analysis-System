@@ -45,7 +45,15 @@ from app.core.config import settings
 from app.models.training_history import TrainingAlgorithm, TrainingHistory, TrainingStatus
 from app.services.preprocessing import clean_for_classical
 from app.services.minilm_service import minilm_service
-from app.services.ensembles import CLASS_ORDER, ENSEMBLES, EQUAL_WEIGHT_ENSEMBLES, members_of
+from app.services.ensembles import (
+    CLASS_ORDER,
+    ENSEMBLES,
+    EQUAL_WEIGHT_ENSEMBLES,
+    members_of,
+    normalize_weights,
+    select_weights,
+    ensemble_prediction,
+)
 from app.utils.logger import logger
 
 # The retired models (XGBoost / mDeBERTa / XLM-RoBERTa) are no longer loaded at

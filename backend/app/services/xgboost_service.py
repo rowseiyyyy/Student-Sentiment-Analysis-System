@@ -6,10 +6,6 @@ from pathlib import Path
 
 import joblib
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, precision_score, recall_score
-from sklearn.model_selection import train_test_split
 from app.core.config import settings
 from app.services.ensembles import CLASS_ORDER
 from app.services.preprocessing import clean_for_classical
@@ -70,6 +66,8 @@ class XGBoostService:
 
     @staticmethod
     def _metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+        from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, precision_score, recall_score
+
         return {
             "accuracy": float(accuracy_score(y_true, y_pred)),
             "precision": float(precision_score(y_true, y_pred, average="weighted", zero_division=0)),
@@ -85,6 +83,8 @@ class XGBoostService:
     def train(self, texts: list[str], labels: list[str]) -> dict:
         if set(labels) - set(CLASS_ORDER):
             raise ValueError("Labels must be Negative, Neutral, or Positive.")
+        from sklearn.model_selection import train_test_split
+
         try:
             x_train_all, x_test, y_train_all, y_test = train_test_split(texts, labels, test_size=settings.TEST_SIZE, random_state=settings.RANDOM_STATE, stratify=labels)
             val_fraction = settings.TEST_SIZE / (1 - settings.TEST_SIZE)
@@ -104,6 +104,9 @@ class XGBoostService:
     ) -> dict:
         if set(train_labels) - set(CLASS_ORDER):
             raise ValueError("Labels must be Negative, Neutral, or Positive.")
+
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.feature_extraction.text import TfidfVectorizer
 
         self.vectorizer = TfidfVectorizer(max_features=10_000, ngram_range=(1, 2), min_df=1, sublinear_tf=True)
         x_train_vec = self.vectorizer.fit_transform([clean_for_classical(text) for text in train_texts])
