@@ -1,5 +1,6 @@
 import os
 import threading
+import psutil
 from pathlib import Path
 
 import numpy as np
@@ -105,6 +106,9 @@ class MiniLMService(TransformerSentimentService):
     """
 
     def __init__(self) -> None:
+        _rss_start = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+        logger.info(f"[MEM CHECKPOINT] MiniLMService.__init__ start: {_rss_start:.1f} MB")
+
         super().__init__(
             settings.MINILM_MODEL_NAME,
             settings.MINILM_MODEL_PATH,
@@ -120,6 +124,9 @@ class MiniLMService(TransformerSentimentService):
         # host's limit cannot change while the process runs, so the warning is
         # logged once instead of on every prediction.
         self._memory_ok: bool | None = None
+
+        _rss_end = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+        logger.info(f"[MEM CHECKPOINT] MiniLMService.__init__ end: {_rss_end:.1f} MB")
 
     # -- artifact readiness -------------------------------------------------
     def _onnx_path(self) -> Path:
