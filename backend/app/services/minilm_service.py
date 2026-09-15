@@ -197,29 +197,28 @@ class MiniLMService(TransformerSentimentService):
         return self.tokenizer
 
     def _onnx_session(self):
-        """Return the shared ONNX Runtime session, created on first use.
-
-        The session (and its ~119 MB of INT8 weights) used to be rebuilt and
-        dropped for *every* prediction. Bulk imports score one row at a time —
-        ``import_service.process_imported_evaluations`` calls
-        ``run_prediction_pipeline`` per row — so on Render's 512 MB free tier
-        that meant ~2 s and a fresh ~120 MB allocation per row: a few hundred
-        rows ran for many minutes and left the instance thrashing until the
-        request was dropped mid-flight, which the browser reports as
-        "Unable to connect to the server. Please ensure the backend is running."
-        Building it once keeps the same peak footprint without paying for it on
-        every prediction.
-        """
         if self._session is None:
             with self._lock:
                 if self._session is None:
                     import onnxruntime as ort
+                    import psutil
+                    import os
 
-                    self._session = ort.InferenceSession(
-                        str(self._onnx_path()),
-                        providers=["CPUExecutionProvider"],
-                    )
-        return self._session
+                sess_options = ort.SessionOptions()
+                sess_options.intra_op_num_threads = 1
+                sess_options.inter_op_num_threads = 1
+                sess_options.enable_cpu_mem_arena = False
+                sess_options.enable_mem_pattern = False
+
+                self._session = ort.InferenceSession(
+                    str(self._onnx_path()),
+                    sess_options=sess_options,
+                    providers=["CPUExecutionProvider"],
+                )
+
+                rss_mb = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+                logger.info(f"RSS after ONNX session build: {rss_mb:.1f} MB")
+                return self._session
 
     def predict(self, text: str) -> tuple[str, float, list[float]]:
         """ONNX Runtime inference. Logits index order follows the fine-tuned
