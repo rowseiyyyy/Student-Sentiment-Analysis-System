@@ -34,17 +34,13 @@ from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (
-    accuracy_score,
-    classification_report,
-    confusion_matrix,
-    f1_score,
-    precision_score,
-    recall_score,
-)
-from sklearn.model_selection import train_test_split
 from sqlalchemy.orm import Session
 
+# sklearn is only used by the retired-model training/evaluation paths
+# (XGBoost, mDeBERTa, XLM-RoBERTa). It is imported lazily inside the
+# functions that need it so it is never pulled into the startup import
+# chain as a hard dependency — Multilingual MiniLM (ONNX) is the only
+# live model and does not depend on sklearn.
 from app.core.config import settings
 from app.models.training_history import TrainingAlgorithm, TrainingHistory, TrainingStatus
 from app.services.preprocessing import clean_for_classical
@@ -364,6 +360,15 @@ def load_and_validate_dataset(
 
 
 def _metrics_for_labels(y_true: Iterable[str], y_pred: Iterable[str]) -> dict:
+    from sklearn.metrics import (  # lazy: only imported inside this offline-only helper
+        accuracy_score,
+        classification_report,
+        confusion_matrix,
+        f1_score,
+        precision_score,
+        recall_score,
+    )
+
     y_true_arr = np.asarray(list(y_true), dtype=object)
     y_pred_arr = np.asarray(list(y_pred), dtype=object)
     labels = list(CLASS_ORDER)
@@ -398,6 +403,8 @@ def _metrics_for_labels(y_true: Iterable[str], y_pred: Iterable[str]) -> dict:
 
 
 def _split_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    from sklearn.model_selection import train_test_split  # lazy: only in this offline-only helper
+
     labels = df["sentiment"].tolist()
     idx = np.arange(len(df))
     idx_train_dev, idx_test = train_test_split(

@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from fastapi import HTTPException
 
-from app.api.ml import MAX_CLASSICAL_ARTIFACT_BYTES, _read_limited_size
+from app.api.ml import MAX_UPLOAD_BYTES, _read_limited_size
 
 
 class _FakeUpload:
@@ -33,13 +33,13 @@ class _FakeUpload:
 
 def test_read_limited_under_cap_returns_bytes():
     blob = b"x" * 1000
-    out = asyncio.run(_read_limited_size(_FakeUpload(len(blob), blob[:1]), 2048))
+    out = asyncio.run(_read_limited_size(_FakeUpload(len(blob), blob[:1]), MAX_UPLOAD_BYTES))
     assert out == blob
 
 
 def test_read_limited_over_cap_raises_413_and_closes():
-    upload = _FakeUpload(MAX_CLASSICAL_ARTIFACT_BYTES + 1)
+    upload = _FakeUpload(MAX_UPLOAD_BYTES + 1)
     with pytest.raises(HTTPException) as excinfo:
-        asyncio.run(_read_limited_size(upload, MAX_CLASSICAL_ARTIFACT_BYTES))
+        asyncio.run(_read_limited_size(upload, MAX_UPLOAD_BYTES))
     assert excinfo.value.status_code == 413
     assert upload.closed is True

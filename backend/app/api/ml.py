@@ -1,4 +1,4 @@
-import uuid
+﻿import uuid
 import csv
 import io
 import zipfile
@@ -7,10 +7,7 @@ from pathlib import Path
 import json
 
 from app.services.training import (
-    
     import_training_results,
-    replace_transformer_artifacts,
-    replace_xgboost_artifacts,
 )
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -38,6 +35,7 @@ from app.services.training import (
     run_full_training,
     sync_deployment_metadata,
 )
+import zipfile
 
 router = APIRouter(prefix="/ml", tags=["Machine Learning"])
 
@@ -77,27 +75,23 @@ async def upload_dataset(
 
     return {"rows": len(rows), "columns": reader.fieldnames, "message": "Dataset uploaded successfully."}
 
-# Approved active approaches: 4 individual models + 1 approved ensemble.
-# This is the strict, system-wide whitelist. The LIVE production model is the
-# single XGBoost (TF-IDF) — the transformers (mDeBERTa, XLM-RoBERTa,
-# Multilingual MiniLM) are excluded from the real-time prediction path
-# (free-tier RAM budget) but remain approved for offline evaluation, reporting,
-# and rollback of historical training runs.
-# Legacy models (SVM / Random Forest / Naive Bayes / BERT) and the superseded
-# ensemble composites are retained only as historical training_history rows
-# and are excluded from performance, rollback, confusion-matrix, and download.
+# Approved active approaches: Multilingual MiniLM is the ONLY live model.
+# Legacy models (XGBoost, mDeBERTa, XLM-RoBERTa, SVM/RF/NB/BERT) are retained
+# only as historical training_history rows and are excluded from performance,
+# rollback, confusion-matrix, and download endpoints.
 APPROVED_ALGORITHMS = (
     TrainingAlgorithm.MINILM,
 )
 
 
-# Multipart uploads are read into memory, so an unbounded model upload will
-# OOM the (free-tier, ~512 MB) Render instance long before any request-size
-# limit is enforced. Model weight archives are OPTIONAL — only the metrics
-# JSON is required — so cap them and return a clear, actionable message
-# instead of crashing the process.
-MAX_CLASSICAL_ARTIFACT_BYTES = 64 * 1024 * 1024  # XGBoost model / vectorizer
-MAX_TRANSFORMER_ARCHIVE_BYTES = 128 * 1024 * 1024  # DeBERTa / XLM-RoBERTa .zip
+
+
+
+# Multipart uploads are read into memory, so an unbounded upload will OOM the
+# (free-tier, ~512 MB) instance long before any request-size limit is
+# enforced. Cap uploads and return a clear, actionable message instead of
+# crashing the process.
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB hard cap for metrics JSON
 
 
 async def _read_limited_size(upload: UploadFile, max_bytes: int) -> bytes:
@@ -118,7 +112,7 @@ async def _read_limited_size(upload: UploadFile, max_bytes: int) -> bytes:
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=(
                     f"Uploaded file exceeds the {max_bytes // (1024 * 1024)} MB limit. "
-                    "Model weight archives are optional — import the metrics JSON only "
+                    "Model weight archives are optional â€” import the metrics JSON only "
                     "(the free-tier server cannot load these weights anyway)."
                 ),
             )
@@ -130,16 +124,17 @@ async def _read_limited_size(upload: UploadFile, max_bytes: int) -> bytes:
 @router.post("/import-results", response_model=ImportResultsResponse)
 async def import_results(
     metrics_json: UploadFile = File(...),
-    xgb_model: UploadFile | None = File(None),
-    xgb_vectorizer: UploadFile | None = File(None),
-    deberta_archive: UploadFile | None = File(None),
-    roberta_archive: UploadFile | None = File(None),
     set_production: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Import metrics (and optionally model weights) produced by a Colab
-    training run, in place of local /ml/train."""
+    """Import metrics produced by a Colab training run.
+
+    Only the metrics JSON is accepted; model weight archives for the retired
+    models (XGBoost, mDeBERTa, XLM-RoBERTa) are no longer supported, since
+    Multilingual MiniLM is the only live model and its weights are fetched
+        directly from the private Hugging Face Hub repo at startup.
+    """
     try:
         raw = await metrics_json.read()
         payload = json.loads(raw)
@@ -159,40 +154,11 @@ async def import_results(
     except DatasetValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
-    artifacts_updated: list[str] = []
-    if xgb_model and xgb_vectorizer:
-        try:
-            replace_xgboost_artifacts(
-                await _read_limited_size(xgb_model, MAX_CLASSICAL_ARTIFACT_BYTES),
-                await _read_limited_size(xgb_vectorizer, MAX_CLASSICAL_ARTIFACT_BYTES),
-            )
-        except DatasetValidationError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-        artifacts_updated.append("XGBoost (TF-IDF)")
-    if deberta_archive:
-        try:
-            replace_transformer_artifacts(
-                await _read_limited_size(deberta_archive, MAX_TRANSFORMER_ARCHIVE_BYTES),
-                Path(settings.MDEBERTA_MODEL_PATH),
-            )
-        except (DatasetValidationError, zipfile.BadZipFile) as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid DeBERTa archive: {exc}") from exc
-        artifacts_updated.append("mDeBERTa")
-    if roberta_archive:
-        try:
-            replace_transformer_artifacts(
-                await _read_limited_size(roberta_archive, MAX_TRANSFORMER_ARCHIVE_BYTES),
-                Path(settings.XLM_ROBERTA_MODEL_PATH),
-            )
-        except (DatasetValidationError, zipfile.BadZipFile) as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid RoBERTa archive: {exc}") from exc
-        artifacts_updated.append("XLM-RoBERTa")
-
     return ImportResultsResponse(
         message="Import complete.",
         imported_algorithms=outcome["imported_algorithms"],
         production_model=outcome["production_model"],
-        artifacts_updated=artifacts_updated,
+        artifacts_updated=[],
     )
 
 

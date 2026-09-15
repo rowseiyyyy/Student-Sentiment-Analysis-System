@@ -1323,25 +1323,19 @@ predictionHtml +
         }
     },
 
-    renderMLImport: async function(container) {
+        renderMLImport: async function(container) {
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa, and Multilingual MiniLM in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the live inference model — its small quantized footprint runs on the free tier within the RAM budget, and it is the ONLY live model (no fallback). mDeBERTa and XLM-RoBERTa are excluded from real-time prediction and used for offline evaluation and reporting only. The only approved ensemble is mDeBERTa + XLM-RoBERTa. The file fields below are optional &mdash; in most cases just import the metrics (weights come from the private Hugging Face repos).</p>' +
+                '<p class="form-desc">After training Multilingual MiniLM in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the ONLY live inference model — its small quantized ONNX footprint runs on the free tier within the RAM budget. mDeBERTa / XLM-RoBERTa / XGBoost are retired from the live system and appear only as historical training rows. Weights are fetched from the private Hugging Face Hub repo at startup, so you do not upload model files here.</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
                 '</div>' +
-                '<div class="form-group"><label>XGBoost (TF-IDF) model (.pkl/.joblib/.zip)</label><input type="file" class="form-control" id="import-xgb-model" accept=".pkl,.joblib,.zip" /></div>' +
-                '<div class="form-group"><label>XGBoost TF-IDF vectorizer (.pkl / .joblib)</label><input type="file" class="form-control" id="import-xgb-vectorizer" accept=".pkl,.joblib" /></div>' +
                 '<div class="form-group"><label>Set as production model (optional)</label>' +
                     '<select class="form-control" id="import-set-production">' +
                         '<option value="">Auto (best weighted F1 among imported)</option>' +
-                        '<option value="XGBoost (TF-IDF)">XGBoost (TF-IDF)</option>' +
-                        '<option value="mDeBERTa">mDeBERTa</option>' +
-                        '<option value="XLM-RoBERTa">XLM-RoBERTa</option>' +
                         '<option value="Multilingual MiniLM">Multilingual MiniLM</option>' +
-                        '<option value="mDeBERTa + XLM-RoBERTa">mDeBERTa + XLM-RoBERTa</option>' +
                     '</select>' +
                 '</div>' +
                 '<button class="btn btn-primary btn-lg" onclick="ADMIN.submitImportResults()"><i class="fas fa-upload"></i> Import Results</button>' +
@@ -1385,10 +1379,8 @@ predictionHtml +
         var resultDiv = document.getElementById('import-ml-result');
         showLoading('Importing model results...');
         try {
-            var result = await API.importModelResults({
+                        result = await API.importModelResults({
                 metrics: metricsFile,
-                xgbModel: document.getElementById('import-xgb-model').files[0],
-                xgbVectorizer: document.getElementById('import-xgb-vectorizer').files[0],
                 setProduction: document.getElementById('import-set-production').value || null
             });
             resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '. XGBoost (TF-IDF) is the only live inference model — restart the API server if its weights changed.' : 'No model files were uploaded â€” only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';

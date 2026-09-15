@@ -7,7 +7,6 @@ from pathlib import Path
 from time import perf_counter
 
 import numpy as np
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, precision_score, recall_score
 
 from app.services.preprocessing import clean_for_transformer
 
@@ -266,4 +265,31 @@ class TransformerSentimentService:
 
     @staticmethod
     def metrics(y_true: list[str], y_pred: list[str]) -> dict:
-        return {"accuracy": float(accuracy_score(y_true, y_pred)), "precision": float(precision_score(y_true, y_pred, average="weighted", zero_division=0)), "recall": float(recall_score(y_true, y_pred, average="weighted", zero_division=0)), "f1_score": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)), "macro_f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)), "weighted_f1": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)), "labels": list(CLASS_ORDER), "confusion_matrix": confusion_matrix(y_true, y_pred, labels=list(CLASS_ORDER)).tolist(), "classification_report": classification_report(y_true, y_pred, labels=list(CLASS_ORDER), target_names=list(CLASS_ORDER), output_dict=True, zero_division=0)}
+        """Compute common classification metrics (used only during training
+        and evaluation — not at inference time). Imported lazily so the app
+        can start without scikit-learn installed; it is only loaded when
+        training/evaluation actually runs.
+        """
+        from sklearn import metrics
+
+        accuracy = metrics.accuracy_score(y_true, y_pred)
+        precision = metrics.precision_score(y_true, y_pred, average="weighted", zero_division=0)
+        recall = metrics.recall_score(y_true, y_pred, average="weighted", zero_division=0)
+        f1 = metrics.f1_score(y_true, y_pred, average="weighted", zero_division=0)
+        f1_macro = metrics.f1_score(y_true, y_pred, average="macro", zero_division=0)
+        confusion = metrics.confusion_matrix(y_true, y_pred, labels=list(CLASS_ORDER))
+        report = metrics.classification_report(
+            y_true, y_pred, labels=list(CLASS_ORDER), zero_division=0
+        )
+
+        return {
+            "accuracy": float(accuracy),
+            "precision": float(precision),
+            "recall": float(recall),
+            "f1_score": float(f1),
+            "macro_f1": float(f1_macro),
+            "weighted_f1": float(f1),
+            "labels": list(CLASS_ORDER),
+            "confusion_matrix": confusion.tolist(),
+            "classification_report": report,
+        }

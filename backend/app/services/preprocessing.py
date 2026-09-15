@@ -30,13 +30,10 @@ from typing import Iterable
 import emoji
 
 # NLTK is only used for stopword support (opt-in). The classical
-# tokenizer is a regex tokenizer that does not require NLTK.
-try:
-    from nltk.corpus import stopwords as _nltk_stopwords  # type: ignore
-
-    _NLTK_OK = True
-except Exception:  # pragma: no cover - environment fallback
-    _NLTK_OK = False
+# tokenizer is a regex tokenizer that does not require NLTK. NLTK is
+# intentionally NOT imported here so it is never a startup-time dependency;
+# stopwords fall back to a built-in set.
+_NLTK_OK = False
 
 # Minimal English stopword fallback in case NLTK corpora are unavailable.
 _FALLBACK_STOPWORDS: set[str] = {
