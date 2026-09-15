@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 import streamlit as st
 
-MODEL_REPO = os.environ.get("MODEL_REPO", "rowseiyyyy/minilm-sentiment")
+MODEL_REPO = os.environ.get("MODEL_REPO", "rowseiy/minilm-sentiment")
 DEFAULT_LOCAL_DIR = Path(__file__).resolve().parent / "backend" / "app" / "ml" / "minilm_sentiment"
 MAX_INPUT_CHARS = 2000
 MAX_SEQ_LENGTH = 128
