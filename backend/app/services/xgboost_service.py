@@ -11,9 +11,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from app.core.config import settings
+from app.services.ensembles import CLASS_ORDER
 from app.services.preprocessing import clean_for_classical
-
-CLASS_ORDER = ("Negative", "Neutral", "Positive")
 
 
 class XGBoostService:

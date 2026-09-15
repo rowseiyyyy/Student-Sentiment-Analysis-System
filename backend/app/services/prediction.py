@@ -7,9 +7,10 @@ weights are the values selected during training and persisted in
 ``model_metadata.json`` — they are never silently replaced by configuration
 defaults.
 
-The LIVE production sentiment model is Multilingual MiniLM, with XGBoost
-(TF-IDF) as a ready fallback; both transformers remain offline for the
-free-tier RAM budget.
+The LIVE production sentiment model is Multilingual MiniLM — the only live
+model. There is no inference fallback: if MiniLM cannot serve, the pipeline
+raises and the API returns a clean 503. The transformers remain offline for
+the free-tier RAM budget, and XGBoost is no longer run in the request path.
 """
 from __future__ import annotations
 
@@ -22,8 +23,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.training_history import TrainingHistory
-from app.services.deberta_service import mdeberta_service
 from app.services.ensembles import (
+    CLASS_ORDER,
     APPROVED_APPROACHES,
     ENSEMBLES,
     members_of,
@@ -31,23 +32,20 @@ from app.services.ensembles import (
     soft_vote,
 )
 from app.services.minilm_service import minilm_service
-from app.services.roberta_service import xlm_roberta_service
-from app.services.xgboost_service import CLASS_ORDER, xgboost_service
 from app.utils.logger import logger
 
-# Compatibility names for integrations and tests that monkeypatch the former
-# service attributes; both point to the new multilingual services.
-deberta_service = mdeberta_service
-roberta_service = xlm_roberta_service
+# Multilingual MiniLM is the ONLY live model. The retired services (XGBoost,
+# mDeBERTa, XLM-RoBERTa) are intentionally NOT imported here — importing their
+# modules constructs singletons that load model weights at startup. They are
+# only imported lazily by the offline training paths in training.py.
 
 # LIVE inference model: Multilingual MiniLM (small quantized footprint fits the
-# free-tier RAM budget). XGBoost (TF-IDF) is kept as a ready fallback so a
-# missing/failed MiniLM artifact never takes the submission endpoint down, and
-# its output is still reported in the admin per-model breakdown.
-# Legacy "ensemble" aliases resolve to the live single model.
+# free-tier RAM budget) — the ONLY live model. There is deliberately no
+# fallback: if its artifacts are missing or a prediction fails, the pipeline
+# raises and the API surfaces a clean 503 instead of silently serving a
+# different model. Legacy "ensemble" aliases resolve to the live single model.
 _MODEL_KEYS = ("Multilingual MiniLM",)
 _ENSEMBLE_NAME = "Multilingual MiniLM"
-_LIVE_FALLBACK = "XGBoost (TF-IDF)"
 _XGB_COMPAT_NAME = "XGBoost"
 
 
@@ -148,6 +146,9 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
     """
     start = time.perf_counter()
 
+    # Backward-compat report fields: the legacy per-model outputs are None in
+    # the live path (XGBoost is no longer run per-request; the transformers
+    # stay offline for the RAM budget).
     xgb_label: Optional[str] = None
     xgb_conf: Optional[float] = None
     xgb_probs: Optional[list[float]] = None
@@ -158,26 +159,11 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
     roberta_conf: Optional[float] = None
     roberta_probs: Optional[list[float]] = None
 
-    if xgboost_service.is_ready():
-        try:
-            xgb_label, xgb_conf, xgb_probs = xgboost_service.predict(text)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"XGBoost prediction failed: {exc}")
-            xgb_label, xgb_conf, xgb_probs = None, None, None
-        if not _usable(xgb_label, xgb_conf, xgb_probs):
-            logger.warning("XGBoost returned an unusable output (NaN/invalid) — excluded.")
-            xgb_label, xgb_conf, xgb_probs = None, None, None
-
-    # mDeBERTa and XLM-RoBERTa are intentionally NOT run in the live request
-    # path (RAM budget — they previously OOM-crashed Render's 512 MB free
-    # tier); the deberta_*/roberta_* fields remain None and are kept only for
-    # historical/compat reporting. Offline evaluation and /ml/train still use
-    # both transformer services.
-
-    # LIVE production model: Multilingual MiniLM (quantized ONNX). Falls back to
-    # XGBoost (TF-IDF) when its artifacts are missing, when a prediction fails,
-    # or when this host lacks the RAM the ONNX path needs (see
-    # MiniLMService.can_run_live_inference), so submissions never hard-fail.
+    # LIVE production model: Multilingual MiniLM (quantized ONNX) — the only
+    # live model. If its artifacts are missing, a prediction fails, or this
+    # host lacks the RAM the ONNX path needs (see
+    # MiniLMService.can_run_live_inference), the pipeline raises and the API
+    # returns a clean 503. No silent fallback to another model.
     minilm_label: Optional[str] = None
     minilm_conf: Optional[float] = None
     minilm_probs: Optional[list[float]] = None
@@ -186,20 +172,18 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
         try:
             minilm_label, minilm_conf, minilm_probs = minilm_service.predict(text)
         except Exception as exc:  # noqa: BLE001
-            logger.warning(f"MiniLM prediction failed: {exc}")
-            minilm_label, minilm_conf, minilm_probs = None, None, None
-        if not _usable(minilm_label, minilm_conf, minilm_probs):
-            logger.warning("MiniLM returned an unusable output (NaN/invalid) — excluded.")
+            logger.error(f"MiniLM prediction failed: {exc}")
+        if minilm_label is not None and not _usable(minilm_label, minilm_conf, minilm_probs):
+            logger.error("MiniLM returned an unusable output (NaN/invalid).")
             minilm_label, minilm_conf, minilm_probs = None, None, None
     else:
-        logger.warning("MiniLM not serving live inference — falling back to XGBoost (TF-IDF).")
+        logger.error("MiniLM not serving live inference on this host.")
 
     active_probs = {
         "Multilingual MiniLM": minilm_probs,
     }
     active_candidates = {
         "Multilingual MiniLM": (minilm_label, minilm_conf),
-        "XGBoost (TF-IDF)": (xgb_label, xgb_conf),
     }
 
     # Backward-compat "ensemble" report: with a single live member the soft
@@ -240,21 +224,15 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
             production_algo = None  # selected ensemble not reconstructable
     elif cfg["approach_type"] == "single":
         lookup_name = (
-            "XGBoost (TF-IDF)"
-            if production_algo == _XGB_COMPAT_NAME or production_algo == _LIVE_FALLBACK
+            "Multilingual MiniLM"
+            if production_algo == _XGB_COMPAT_NAME
             else production_algo
         )
         official_label, official_conf = active_candidates.get(lookup_name, (None, None))
 
-    # Fallbacks: the live model's output, then the ready XGBoost model, then
-    # the backward-compat ensemble field (degenerates to the same single-model
-    # result).
-    if official_label is None:
-        for algo in (*_MODEL_KEYS, _LIVE_FALLBACK):
-            label, conf = active_candidates.get(algo, (None, None))
-            if label is not None:
-                official_label, official_conf, production_algo = label, conf, algo
-                break
+    # No fallback chain: MiniLM is the only live model. If its output is
+    # missing, fall through to the compat ensemble field (degenerates to the
+    # same single-model result) and then a clean 503.
 
     if official_label is None and ensemble_label is not None:
         official_label = ensemble_label

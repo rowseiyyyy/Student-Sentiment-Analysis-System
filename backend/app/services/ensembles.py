@@ -18,7 +18,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from app.services.xgboost_service import CLASS_ORDER
+# Canonical label ordering shared by every model service, the ensemble
+# registry, training and the prediction pipeline. Defined here (not in
+# xgboost_service) so importing it never constructs/loads a retired model
+# singleton at app startup.
+CLASS_ORDER = ("Negative", "Neutral", "Positive")
 
 # Canonical ordered mapping of ensemble name -> participating model keys.
 ENSEMBLES: dict[str, list[str]] = {

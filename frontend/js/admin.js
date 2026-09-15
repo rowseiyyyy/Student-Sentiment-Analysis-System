@@ -1021,14 +1021,14 @@ var ADMIN = {
             var pred = item.prediction || null;
             var missingModelCount = pred ? [pred.minilm_prediction || pred.xgb_prediction].filter(function(p) { return !p; }).length : 1;
             if (pred) {
-                // Live model: Multilingual MiniLM. XGBoost (TF-IDF) is the
-                // fallback. mDeBERTa / XLM-RoBERTa are excluded from live
+                // Live model: Multilingual MiniLM — the ONLY live model.
+                // mDeBERTa / XLM-RoBERTa are excluded from live
                 // inference (free-tier RAM budget); their rows are shown only
                 // for historical submissions that still carry a stored
                 // prediction.
                 var modelRows = [
                     { label: 'Multilingual MiniLM', pred: pred.minilm_prediction, conf: pred.minilm_confidence },
-                    { label: 'XGBoost (TF-IDF) (fallback)', pred: pred.xgb_prediction, conf: pred.xgb_confidence }
+                    { label: 'XGBoost (TF-IDF) (historical)', pred: pred.xgb_prediction, conf: pred.xgb_confidence }
                 ];
                 if (pred.deberta_prediction) {
                     modelRows.push({ label: 'mDeBERTa (historical)', pred: pred.deberta_prediction, conf: pred.deberta_confidence });
@@ -1066,7 +1066,7 @@ var ADMIN = {
                     (pred.algorithm_used === 'Multilingual MiniLM' && pred.ensemble_prediction
                         ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result comes from the live production model, Multilingual MiniLM (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence). The other transformers are kept offline for the free-tier RAM budget and appear only for older submissions.</p>'
                         : (pred.algorithm_used === 'XGBoost (TF-IDF)' && pred.ensemble_prediction
-                            ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result comes from XGBoost (TF-IDF) (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence) — the fallback model. Multilingual MiniLM weights are not deployed on this server yet.</p>'
+                            ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result comes from XGBoost (TF-IDF) (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence) — recorded before Multilingual MiniLM became the only live model.</p>'
                             : (pred.algorithm_used === 'mDeBERTa + XLM-RoBERTa' && pred.ensemble_prediction
                                 ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result is the weighted mDeBERTa + XLM-RoBERTa ensemble used at the time of this submission (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence).</p>'
                                 : ''))) +
@@ -1327,7 +1327,7 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa, and Multilingual MiniLM in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the live inference model — its small quantized footprint runs on the free tier within the RAM budget; XGBoost (TF-IDF) is the ready fallback. mDeBERTa and XLM-RoBERTa are excluded from real-time prediction and used for offline evaluation and reporting only. The only approved ensemble is mDeBERTa + XLM-RoBERTa. The file fields below are optional &mdash; in most cases just import the metrics (weights come from the private Hugging Face repos).</p>' +
+                '<p class="form-desc">After training XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa, and Multilingual MiniLM in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the live inference model — its small quantized footprint runs on the free tier within the RAM budget, and it is the ONLY live model (no fallback). mDeBERTa and XLM-RoBERTa are excluded from real-time prediction and used for offline evaluation and reporting only. The only approved ensemble is mDeBERTa + XLM-RoBERTa. The file fields below are optional &mdash; in most cases just import the metrics (weights come from the private Hugging Face repos).</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +

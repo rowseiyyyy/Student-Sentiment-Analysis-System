@@ -357,10 +357,11 @@ class Settings(BaseSettings):
     # host it: the worker gets OOM-killed mid-request and the browser reports
     # "Unable to connect to the server. Please ensure the backend is running."
     # When the host reports less than MINILM_MIN_RAM_MB of memory, live
-    # inference silently uses XGBoost (TF-IDF) instead — the same graceful
-    # fallback the pipeline already applies when artifacts are missing.
-    # ENABLE_MINILM_INFERENCE=false forces XGBoost everywhere; set
-    # MINILM_MIN_RAM_MB=0 to disable the memory guard entirely.
+    # inference is refused — MiniLM is the ONLY live model, so prediction
+    # requests then fail with a clean 503 instead of silently serving a
+    # different model.
+    # ENABLE_MINILM_INFERENCE=false disables MiniLM everywhere (also 503);
+    # set MINILM_MIN_RAM_MB=0 to disable the memory guard entirely.
     ENABLE_MINILM_INFERENCE: bool = True
     MINILM_MIN_RAM_MB: int = 900
 

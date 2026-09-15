@@ -82,32 +82,21 @@ assert_production_readiness()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup hook: ensure the private HF artifacts exist before serving traffic.
+    """Startup hook: ensure the MiniLM artifacts exist before serving traffic.
 
-    Pulls the private mDeBERTa / XLM-RoBERTa / XGBoost+TF-IDF repositories into
-    the local ``app/ml/`` paths when they are missing (no-op when already present,
-    which is the case for the pre-committed artifacts in this repo). This keeps
-    everything in place on first boot for fresh deployments.
-
-    This layer only guarantees the files exist on disk. Actually loading them into
-    memory stays with the existing service singletons — the transformers load
-    lazily via ``TransformerSentimentService._load()`` on first predict, and
-    XGBoost loads on construction. For a fresh deployment where XGBoost was
-    constructed before its files existed, we retrigger its load here using the
-    same in-place reload pattern the training pipeline uses.
+    Multilingual MiniLM is the ONLY live model. On first boot for a fresh
+    deployment, pull its private HF repository into the local ``app/ml/``
+    path when missing (no-op when already present, which is the case for the
+    pre-committed artifacts in this repo). The XGBoost and transformer
+    (mDeBERTa / XLM-RoBERTa) artifacts are no longer fetched or loaded at
+    startup — those models are retired from the live system.
     """
     from app.services.hub_downloader import ensure_hub_artifacts
 
-    downloaded = ensure_hub_artifacts()
-    if downloaded:
-        from app.services.xgboost_service import xgboost_service
-
-        if xgboost_service.model is None:
-            logger.info("Reloading XGBoost service after hub download.")
-            xgboost_service._try_load()
+    ensure_hub_artifacts()
 
     # Bootstrap the model registry on a fresh database so the admin panel and the
-    # production-model selection reflect the hub-hosted models without a manual
+    # production-model selection reflect the hub-hosted MiniLM without a manual
     # /ml/import-results. Idempotent + best-effort: it never overwrites an existing
     # row or a selected production model, and a DB hiccup here must not block boot.
     try:
@@ -290,12 +279,9 @@ def _database_is_ready() -> bool:
 
 def _models_are_ready() -> bool:
     required_paths = [
-        # XGBoost (TF-IDF) — fallback live model
-        settings.XGB_MODEL_PATH,
-        settings.XGB_TFIDF_VECTORIZER_PATH,
-        settings.XGB_LABEL_ENCODER_PATH,
-        # Multilingual MiniLM — the live production sentiment model
+        # Multilingual MiniLM - the ONLY live production sentiment model
         # (config.json + INT8-quantized ONNX graph, downloaded at startup).
+        # The retired XGBoost/TF-IDF artifacts are no longer required.
         settings.MINILM_MODEL_PATH / "config.json",
         settings.MINILM_MODEL_PATH / settings.MINILM_ONNX_FILE,
     ]

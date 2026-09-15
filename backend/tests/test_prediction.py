@@ -29,19 +29,17 @@ def _register_and_login(client, email="predictuser@example.com", role="student")
 
 
 def test_run_prediction_pipeline_uses_live_minilm_model(db_session):
-    # Multilingual MiniLM is the live production model and produces the
-    # official result; XGBoost (TF-IDF) is only reported in the per-model
-    # breakdown. Both transformers stay offline for the RAM budget.
+    # Multilingual MiniLM is the ONLY live model and produces the official
+    # result. XGBoost and the transformers are not run in the request path.
     with patch("app.services.prediction.minilm_service.can_run_live_inference", return_value=True), \
-         patch("app.services.prediction.minilm_service.predict", return_value=("Positive", 0.88, [0.05, 0.07, 0.88])), \
-         patch("app.services.prediction.xgboost_service.is_ready", return_value=True), \
-         patch("app.services.prediction.xgboost_service.predict", return_value=("Neutral", 0.6, [0.1, 0.6, 0.3])):
+         patch("app.services.prediction.minilm_service.predict", return_value=("Positive", 0.88, [0.05, 0.07, 0.88])):
         result = run_prediction_pipeline(db_session, "The professor is very helpful.")
 
     assert result["official_prediction"] == "Positive"
     assert result["algorithm_used"] == "Multilingual MiniLM"
     assert result["minilm_prediction"] == "Positive"
-    assert result["xgb_prediction"] == "Neutral"
+    # XGBoost is no longer part of the live request path.
+    assert result["xgb_prediction"] is None
     # Transformers are not part of the live request path anymore.
     assert result["deberta_prediction"] is None
     assert result["roberta_prediction"] is None
@@ -49,21 +47,18 @@ def test_run_prediction_pipeline_uses_live_minilm_model(db_session):
     assert result["ensemble_prediction"] == "Positive"
 
 
-def test_run_prediction_pipeline_falls_back_to_xgboost_without_minilm(db_session):
-    # When MiniLM is unavailable — artifacts missing, prediction failing, or a
-    # host too small to load the ONNX session — submissions must not hard-fail:
-    # the ready XGBoost (TF-IDF) model serves the official result.
-    with patch("app.services.prediction.minilm_service.can_run_live_inference", return_value=False), \
-         patch("app.services.prediction.xgboost_service.is_ready", return_value=True), \
-         patch("app.services.prediction.xgboost_service.predict", return_value=("Positive", 0.81, [0.1, 0.1, 0.8])):
-        result = run_prediction_pipeline(db_session, "The professor is very helpful.")
-
-    assert result["official_prediction"] == "Positive"
-    assert result["algorithm_used"] == "XGBoost (TF-IDF)"
-    assert result["minilm_prediction"] is None
-    assert result["xgb_prediction"] == "Positive"
-    # No live member left to report in the backward-compat ensemble field.
-    assert result["ensemble_prediction"] is None
+def test_run_prediction_pipeline_raises_without_minilm(db_session):
+    # MiniLM is the only live model: when it is unavailable — artifacts
+    # missing, prediction failing, or a host too small to load the ONNX
+    # session — the pipeline raises and the API surfaces a clean 503. There
+    # is no silent fallback to another model.
+    with patch("app.services.prediction.minilm_service.can_run_live_inference", return_value=False):
+        try:
+            run_prediction_pipeline(db_session, "The professor is very helpful.")
+        except RuntimeError as exc:
+            assert "No sentiment model" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError when MiniLM cannot serve")
 
 
 @patch("app.api.prediction.run_prediction_pipeline")

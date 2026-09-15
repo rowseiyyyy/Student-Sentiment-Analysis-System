@@ -47,20 +47,16 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.training_history import TrainingAlgorithm, TrainingHistory, TrainingStatus
-from app.services.deberta_service import mdeberta_service
-from app.services.ensembles import (
-    ENSEMBLES,
-    EQUAL_WEIGHT_ENSEMBLES,
-    ensemble_prediction,
-    members_of,
-    normalize_weights,
-    select_weights,
-)
 from app.services.preprocessing import clean_for_classical
-from app.services.roberta_service import xlm_roberta_service
 from app.services.minilm_service import minilm_service
-from app.services.xgboost_service import CLASS_ORDER, XGBoostService, xgboost_service
+from app.services.ensembles import CLASS_ORDER
 from app.utils.logger import logger
+
+# The retired models (XGBoost / mDeBERTa / XLM-RoBERTa) are no longer loaded at
+# startup — Multilingual MiniLM is the only live model. Their service modules
+# are imported lazily inside the training/registration functions that still
+# need them, so importing this module (and therefore booting the app) never
+# constructs or loads a retired model.
 
 REQUIRED_COLUMNS = {"comment", "sentiment"}
 VALID_SENTIMENTS = {"Positive", "Neutral", "Negative"}
@@ -151,6 +147,8 @@ def replace_xgboost_artifacts(model_bytes: bytes, vectorizer_bytes: bytes) -> No
     exports; a Joblib classifier is the preferred interchange format.
     """
     settings.ML_DIR.mkdir(parents=True, exist_ok=True)
+    from app.services.xgboost_service import xgboost_service  # lazy: retired model
+
     model_path = Path(settings.XGB_MODEL_PATH)
     model = None
     native_model = None
@@ -278,8 +276,12 @@ def replace_transformer_artifacts(zip_bytes: bytes, target_dir: Path) -> None:
 
     target_resolved = target_dir.resolve()
     if target_resolved == Path(settings.MDEBERTA_MODEL_PATH).resolve():
+        from app.services.deberta_service import mdeberta_service  # lazy: retired model
+
         mdeberta_service.reload()
     elif target_resolved == Path(settings.XLM_ROBERTA_MODEL_PATH).resolve():
+        from app.services.roberta_service import xlm_roberta_service  # lazy: retired model
+
         xlm_roberta_service.reload()
 
 
@@ -773,8 +775,8 @@ def register_hub_models(db: Session, production: str) -> dict:
         raise DatasetValidationError(f"'{production}' is not an approved approach.")
 
     registered: list[str] = []
-    # Ensure a row exists for each of the three individual approved models.
-    for approach in ("XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa", "Multilingual MiniLM"):
+    # Multilingual MiniLM is the only live model — only its row is bootstrapped.
+    for approach in ("Multilingual MiniLM",):
         algorithm = APPROACH_TO_ALGORITHM[approach]
         exists = db.query(TrainingHistory).filter(TrainingHistory.algorithm == algorithm).first()
         if exists is None:
@@ -845,6 +847,12 @@ def run_full_training(
     results: dict[str, dict] = {}
     test_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-IDF)": [], "mDeBERTa": [], "XLM-RoBERTa": [], "Multilingual MiniLM": []}
     val_model_probabilities: dict[str, list[np.ndarray]] = {"XGBoost (TF-IDF)": [], "mDeBERTa": [], "XLM-RoBERTa": [], "Multilingual MiniLM": []}
+
+    # Lazy imports: the retired models' services are only constructed when an
+    # explicit training run needs them — never at app startup.
+    from app.services.deberta_service import mdeberta_service
+    from app.services.roberta_service import xlm_roberta_service
+    from app.services.xgboost_service import xgboost_service
 
     xgb_history = TrainingHistory(
         algorithm=TrainingAlgorithm.XGBOOST_TFDF,

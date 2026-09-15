@@ -139,7 +139,7 @@ class MiniLMService(TransformerSentimentService):
             if not settings.ENABLE_MINILM_INFERENCE:
                 logger.warning(
                     "MiniLM live inference disabled by ENABLE_MINILM_INFERENCE=false — "
-                    "XGBoost (TF-IDF) will serve live predictions."
+                    "no live model remains, prediction requests will return 503."
                 )
                 self._memory_ok = False
             else:
@@ -150,8 +150,8 @@ class MiniLMService(TransformerSentimentService):
                     logger.warning(
                         f"MiniLM live inference skipped: this host has {limit_mb} MB "
                         f"but the ONNX path needs ~{budget} MB (MINILM_MIN_RAM_MB). "
-                        "Falling back to XGBoost (TF-IDF) so requests are not "
-                        "OOM-killed mid-flight."
+                        "MiniLM is the only live model, so prediction requests "
+                        "will return 503 rather than risk being OOM-killed."
                     )
                     self._memory_ok = False
                 else:

@@ -87,14 +87,9 @@ async def upload_dataset(
 # ensemble composites are retained only as historical training_history rows
 # and are excluded from performance, rollback, confusion-matrix, and download.
 APPROVED_ALGORITHMS = (
-    TrainingAlgorithm.XGBOOST_TFDF,
-    TrainingAlgorithm.MDEBERTA,
-    TrainingAlgorithm.XLM_ROBERTA,
-    # Multilingual MiniLM
     TrainingAlgorithm.MINILM,
-    # mDeBERTa + XLM-RoBERTa — the only approved ensemble
-    TrainingAlgorithm.ENSEMBLE_MDEBERTA_XLM,
 )
+
 
 # Multipart uploads are read into memory, so an unbounded model upload will
 # OOM the (free-tier, ~512 MB) Render instance long before any request-size

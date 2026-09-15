@@ -2,6 +2,7 @@
 # Backend / API
 # ==============================
 fastapi==0.115.0
+starlette==0.38.6  # pin: fastapi 0.115 requires <0.39; a stray upgrade breaks APIRouter
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
 pydantic-settings==2.5.2
@@ -28,31 +29,11 @@ slowapi==0.1.9
 # ==============================
 # Machine Learning / NLP
 # ==============================
-# The default Colab export is a pickled xgboost.XGBClassifier (joblib) or a
-# native Booster; both require the xgboost package to deserialize. The TF-DF
-# SavedModel path uses TensorFlow Decision Forests.
-# TF-DF 1.8.1 currently requires TensorFlow 2.15 and Python 3.9-3.11.
-tensorflow==2.15.0
-tensorflow-decision-forests==1.8.1
-xgboost==3.0.2
 huggingface_hub==0.25.0
-
-# The TF-IDF vectorizer is pickled; models were (re)generated with 1.6.1.
-scikit-learn==1.6.1
-transformers==4.44.2
-datasets==5.0.1
-sentencepiece==0.2.2
-torch==2.4.1
-# ONNX Runtime serves the live Multilingual MiniLM model (quantized model.onnx)
-# ``tokenizers`` is imported directly to load that repo's tokenizer.json: the
-# Rust tokenizer is byte-identical to AutoTokenizer here and saves ~200 MB.
 onnxruntime==1.19.2
 tokenizers==0.19.1
 pandas==2.2.3
 numpy==1.26.4
-joblib==1.4.2
-nltk==3.9.1
-spacy==3.7.6
 emoji==2.13.2
 
 # ==============================
