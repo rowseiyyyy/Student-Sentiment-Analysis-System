@@ -15,8 +15,11 @@ def test_missing_required_env_fields_fail_fast(monkeypatch):
     monkeypatch.delenv("DB_PASSWORD", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)
 
+    # _env_file=None ignores backend/.env so the assertion below holds on a
+    # developer machine that has a populated dotenv file (CI has none) — the
+    # point being tested is that *environment* values are mandatory.
     with pytest.raises(ValidationError):
-        Settings()
+        Settings(_env_file=None)
 
 
 def test_assert_production_readiness_rejects_debug_true(monkeypatch):

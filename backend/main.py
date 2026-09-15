@@ -295,9 +295,9 @@ def _models_are_ready() -> bool:
         settings.XGB_TFIDF_VECTORIZER_PATH,
         settings.XGB_LABEL_ENCODER_PATH,
         # Multilingual MiniLM — the live production sentiment model
-        # (config.json + quantized state_dict, downloaded at startup).
+        # (config.json + INT8-quantized ONNX graph, downloaded at startup).
         settings.MINILM_MODEL_PATH / "config.json",
-        settings.MINILM_MODEL_PATH / settings.MINILM_QUANTIZED_FILE,
+        settings.MINILM_MODEL_PATH / settings.MINILM_ONNX_FILE,
     ]
     for path in required_paths:
         if not path.exists():

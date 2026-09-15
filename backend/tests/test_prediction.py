@@ -28,22 +28,41 @@ def _register_and_login(client, email="predictuser@example.com", role="student")
     return login.json()["access_token"]
 
 
-def test_run_prediction_pipeline_uses_approved_research_models(db_session):
-    # Live pipeline runs XGBoost (TF-DF) only; both transformer models are
-    # excluded for RAM and are used solely for offline evaluation/reporting,
-    # so neither is patched here.
-    with patch("app.services.prediction.xgboost_service.is_ready", return_value=True), \
+def test_run_prediction_pipeline_uses_live_minilm_model(db_session):
+    # Multilingual MiniLM is the live production model and produces the
+    # official result; XGBoost (TF-IDF) is only reported in the per-model
+    # breakdown. Both transformers stay offline for the RAM budget.
+    with patch("app.services.prediction.minilm_service.is_ready", return_value=True), \
+         patch("app.services.prediction.minilm_service.predict", return_value=("Positive", 0.88, [0.05, 0.07, 0.88])), \
+         patch("app.services.prediction.xgboost_service.is_ready", return_value=True), \
+         patch("app.services.prediction.xgboost_service.predict", return_value=("Neutral", 0.6, [0.1, 0.6, 0.3])):
+        result = run_prediction_pipeline(db_session, "The professor is very helpful.")
+
+    assert result["official_prediction"] == "Positive"
+    assert result["algorithm_used"] == "Multilingual MiniLM"
+    assert result["minilm_prediction"] == "Positive"
+    assert result["xgb_prediction"] == "Neutral"
+    # Transformers are not part of the live request path anymore.
+    assert result["deberta_prediction"] is None
+    assert result["roberta_prediction"] is None
+    # Single-member "ensemble" report degenerates to the live model's result.
+    assert result["ensemble_prediction"] == "Positive"
+
+
+def test_run_prediction_pipeline_falls_back_to_xgboost_without_minilm(db_session):
+    # When MiniLM artifacts are missing/failing, submissions must not
+    # hard-fail: the ready XGBoost (TF-IDF) model serves the official result.
+    with patch("app.services.prediction.minilm_service.is_ready", return_value=False), \
+         patch("app.services.prediction.xgboost_service.is_ready", return_value=True), \
          patch("app.services.prediction.xgboost_service.predict", return_value=("Positive", 0.81, [0.1, 0.1, 0.8])):
         result = run_prediction_pipeline(db_session, "The professor is very helpful.")
 
     assert result["official_prediction"] == "Positive"
-    assert result["algorithm_used"] == "XGBoost"
+    assert result["algorithm_used"] == "XGBoost (TF-IDF)"
+    assert result["minilm_prediction"] is None
     assert result["xgb_prediction"] == "Positive"
-    # Transformers are not part of the live request path anymore.
-    assert result["deberta_prediction"] is None
-    assert result["roberta_prediction"] is None
-    # Single-member "ensemble" degenerates to the XGBoost result.
-    assert result["ensemble_prediction"] == "Positive"
+    # No live member left to report in the backward-compat ensemble field.
+    assert result["ensemble_prediction"] is None
 
 
 @patch("app.api.prediction.run_prediction_pipeline")

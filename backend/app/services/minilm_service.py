@@ -9,6 +9,49 @@ from app.services.transformer_service import (
 )
 
 
+_ONNX_INPUT_DTYPES: dict[str, type] = {
+    "tensor(float)": np.float32,
+    "tensor(float16)": np.float16,
+    "tensor(double)": np.float64,
+    "tensor(int64)": np.int64,
+    "tensor(int32)": np.int32,
+    "tensor(int16)": np.int16,
+    "tensor(int8)": np.int8,
+    "tensor(uint8)": np.uint8,
+    "tensor(bool)": np.bool_,
+}
+
+
+def _build_onnx_feed(session, inputs) -> dict:
+    """Build the input feed the exported ONNX graph actually declares.
+
+    Two mismatches between the HF tokenizer output and the traced graph are
+    handled here, both of which otherwise made every prediction fail with an
+    ``InvalidArgument`` error (and silently fall back to XGBoost):
+
+    * the export traced ``token_type_ids`` as a *required* input while the
+      sentencepiece tokenizer used by this checkpoint does not emit it — it is
+      synthesized as all-zeros, the correct value for a single un-paired
+      sequence;
+    * the graph declares ``int64`` inputs while ``return_tensors="np"`` yields
+      ``int32`` — each tensor is cast to the declared element type.
+    """
+    feed: dict = {}
+    for spec in session.get_inputs():
+        name = spec.name
+        if name in inputs:
+            value = inputs[name]
+        elif name == "token_type_ids":
+            value = np.zeros_like(inputs["input_ids"])
+        else:
+            raise ValueError(f"Unexpected ONNX model input {name!r}.")
+        expected_dtype = _ONNX_INPUT_DTYPES.get(spec.type)
+        if expected_dtype is not None:
+            value = np.asarray(value, dtype=expected_dtype)
+        feed[name] = value
+    return feed
+
+
 class MiniLMService(TransformerSentimentService):
     """Multilingual MiniLM served from an INT8-quantized ONNX artifact.
 
@@ -67,10 +110,7 @@ class MiniLMService(TransformerSentimentService):
             truncation=True,
             max_length=settings.MINILM_MAX_SEQ_LENGTH,
         )
-        feed = {name: inputs[name] for name in (
-            "input_ids", "attention_mask",
-            *(["token_type_ids"] if "token_type_ids" in inputs else []),
-        )}
+        feed = _build_onnx_feed(session, inputs)
         logits = session.run(None, feed)[0][0]
         probabilities = np.exp(logits - logits.max())
         probabilities = probabilities / probabilities.sum()
