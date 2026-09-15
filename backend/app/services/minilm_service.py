@@ -204,21 +204,24 @@ class MiniLMService(TransformerSentimentService):
                     import psutil
                     import os
 
-                sess_options = ort.SessionOptions()
-                sess_options.intra_op_num_threads = 1
-                sess_options.inter_op_num_threads = 1
-                sess_options.enable_cpu_mem_arena = False
-                sess_options.enable_mem_pattern = False
+                    rss_before = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+                    logger.info(f"RSS before ONNX session build: {rss_before:.1f} MB")
 
-                self._session = ort.InferenceSession(
-                    str(self._onnx_path()),
-                    sess_options=sess_options,
-                    providers=["CPUExecutionProvider"],
-                )
+                    sess_options = ort.SessionOptions()
+                    sess_options.intra_op_num_threads = 1
+                    sess_options.inter_op_num_threads = 1
+                    sess_options.enable_cpu_mem_arena = False
+                    sess_options.enable_mem_pattern = False
 
-                rss_mb = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
-                logger.info(f"RSS after ONNX session build: {rss_mb:.1f} MB")
-                return self._session
+                    self._session = ort.InferenceSession(
+                        str(self._onnx_path()),
+                        sess_options=sess_options,
+                        providers=["CPUExecutionProvider"],
+                    )
+
+                    rss_after = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+                    logger.info(f"RSS after ONNX session build: {rss_after:.1f} MB")
+        return self._session
 
     def predict(self, text: str) -> tuple[str, float, list[float]]:
         """ONNX Runtime inference. Logits index order follows the fine-tuned
