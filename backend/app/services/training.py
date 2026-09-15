@@ -27,7 +27,7 @@ import time
 
 import zipfile
 import shutil
-import joblib
+
 
 from pathlib import Path
 from typing import Any, Iterable
@@ -140,8 +140,9 @@ def replace_xgboost_artifacts(model_bytes: bytes, vectorizer_bytes: bytes) -> No
     """Replace a Joblib XGBoost model and its TF-IDF vectorizer.
 
     A zipped TF-DF SavedModel is still accepted for compatibility with older
-    exports; a Joblib classifier is the preferred interchange format.
-    """
+    exports; a Joblib classifier is the preferred interchange format."""
+    
+    import joblib
     settings.ML_DIR.mkdir(parents=True, exist_ok=True)
     from app.services.xgboost_service import xgboost_service  # lazy: retired model
 
