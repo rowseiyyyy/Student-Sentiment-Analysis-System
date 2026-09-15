@@ -18,14 +18,7 @@ _backend_dir = str(Path(__file__).resolve().parent)
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
-import psutil, os
-from app.utils.logger import logger
-
-def _log_rss(label: str) -> None:
-    rss_mb = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
-    logger.info(f"[MEM CHECKPOINT] {label}: {rss_mb:.1f} MB")
-
-_log_rss("process start, before app imports")
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -131,8 +124,6 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
-
-_log_rss("after FastAPI app created")
 
 
 def custom_openapi():
