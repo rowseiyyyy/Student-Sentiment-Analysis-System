@@ -14,7 +14,11 @@ class TrainRequest(BaseModel):
 class ImportResultsResponse(BaseModel):
     message: str
     imported_algorithms: list[str]
+    # Always the live production model (Multilingual MiniLM) — imported
+    # approaches are research results only.
     production_model: str
+    # The Colab export's best-performing approach (report only; never live).
+    recommended_model: str | None = None
     artifacts_updated: list[str]
     
 class TrainingHistoryOut(BaseModel):

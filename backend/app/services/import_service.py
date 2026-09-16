@@ -19,7 +19,7 @@ normal student submission through the live form:
     per category (Faculty/Staff/Facilities/Payment each have a
     different question set).
   - Sentiment is ALWAYS computed here via run_prediction_pipeline
-    (XGBoost + DeBERTa + RoBERTa ensemble) — a Sentiment column in the
+    (live production model: Multilingual MiniLM) — a Sentiment column in the
     uploaded file, if present, is intentionally ignored.
 
 One file = one category. The admin selects the category (Faculty /

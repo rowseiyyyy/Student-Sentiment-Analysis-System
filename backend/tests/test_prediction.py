@@ -4,17 +4,11 @@ from app.models.training_history import TrainingHistory
 from app.services.prediction import run_prediction_pipeline
 
 PREDICTION_RESULT = {
-    "xgb_prediction": "Positive",
-    "xgb_confidence": 0.91,
-    "deberta_prediction": "Positive",
-    "deberta_confidence": 0.90,
-    "roberta_prediction": "Positive",
-    "roberta_confidence": 0.90,
-    "ensemble_prediction": "Positive",
-    "ensemble_confidence": 0.90,
+    "minilm_prediction": "Positive",
+    "minilm_confidence": 0.88,
     "official_prediction": "Positive",
-    "algorithm_used": "XGBoost",
-    "confidence_score": 0.91,
+    "algorithm_used": "Multilingual MiniLM",
+    "confidence_score": 0.88,
     "processing_time_ms": 12.5,
 }
 
@@ -73,11 +67,15 @@ def test_predict_sentiment(mock_pipeline, client):
     assert response.status_code == 200
     data = response.json()
     assert data["official_prediction"] == "Positive"
-    assert data["algorithm_used"] == "XGBoost"
-    assert data["xgb"]["prediction"] == "Positive"
-    assert data["deberta"]["prediction"] == "Positive"
-    assert data["roberta"]["prediction"] == "Positive"
-    assert data["confidence_score"] == 0.91
+    assert data["algorithm_used"] == "Multilingual MiniLM"
+    # Only the live MiniLM result is exposed — legacy per-model fields
+    # (XGBoost / mDeBERTa / XLM-RoBERTa / ensemble) are not part of the
+    # live response.
+    assert data["minilm"]["prediction"] == "Positive"
+    assert data["minilm"]["confidence"] == 0.88
+    for legacy in ("xgb", "deberta", "roberta", "xgboost_tfdf", "mdeberta", "xlm_roberta", "ensemble"):
+        assert legacy not in data
+    assert data["confidence_score"] == 0.88
 
 
 @patch("app.api.prediction.run_prediction_pipeline")

@@ -110,6 +110,72 @@ def test_confusion_matrix_requires_trained_model(client, db_session):
     assert response.status_code == 404
 
 
+def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(client, tmp_path, monkeypatch):
+    """Importing the Colab metrics JSON records XGBoost (TF-IDF), mDeBERTa,
+    XLM-RoBERTa and the mDeBERTa + XLM-RoBERTa ensemble as research results.
+    They must appear in /ml/performance, but the production model must remain
+    Multilingual MiniLM — the only live sentiment model."""
+    token = _register_admin_and_login(client, email="importperf@example.com")
+
+    # Keep comparison/deployment artifacts out of the real app/ml directory —
+    # redirect them to a temp dir so the test cannot pollute tracked files.
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "MODEL_METADATA_PATH", tmp_path / "model_metadata.json")
+    monkeypatch.setattr(settings, "COMPARISON_RESULTS_PATH", tmp_path / "comparison_results.json")
+
+    metrics_payload = {
+        "rows": {
+            "XGBoost (TF-IDF)": {
+                "accuracy": 0.90, "precision": 0.90, "recall": 0.90,
+                "f1_score": 0.90, "macro_f1": 0.89, "weighted_f1": 0.90,
+            },
+            "mDeBERTa": {
+                "accuracy": 0.92, "precision": 0.92, "recall": 0.92,
+                "f1_score": 0.92, "macro_f1": 0.91, "weighted_f1": 0.92,
+            },
+            "XLM-RoBERTa": {
+                "accuracy": 0.91, "precision": 0.91, "recall": 0.91,
+                "f1_score": 0.91, "macro_f1": 0.90, "weighted_f1": 0.91,
+            },
+            "mDeBERTa + XLM-RoBERTa": {
+                "accuracy": 0.93, "precision": 0.93, "recall": 0.93,
+                "f1_score": 0.93, "macro_f1": 0.92, "weighted_f1": 0.93,
+            },
+            "Multilingual MiniLM": {
+                "accuracy": 0.88, "precision": 0.88, "recall": 0.88,
+                "f1_score": 0.88, "macro_f1": 0.87, "weighted_f1": 0.88,
+            },
+        },
+        "best_model": "mDeBERTa + XLM-RoBERTa",
+    }
+
+    import_response = client.post(
+        "/api/v1/ml/import-results",
+        files={"metrics_json": ("dashboard_export.json", json.dumps(metrics_payload).encode("utf-8"), "application/json")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert import_response.status_code == 200
+    outcome = import_response.json()
+    assert set(outcome["imported_algorithms"]) == {
+        "XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa", "mDeBERTa + XLM-RoBERTa", "Multilingual MiniLM"
+    }
+    # Production is pinned to the live model, never the best-imported one.
+    assert outcome["production_model"] == "Multilingual MiniLM"
+    assert outcome["recommended_model"] == "mDeBERTa + XLM-RoBERTa"
+
+    performance = client.get(
+        "/api/v1/ml/performance", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert performance.status_code == 200
+    perf_data = performance.json()
+    algorithms = {row["algorithm"] for row in perf_data["rows"]}
+    assert {"XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa", "mDeBERTa + XLM-RoBERTa", "Multilingual MiniLM"} <= algorithms
+    assert perf_data["best_model"] == "Multilingual MiniLM"
+    production_rows = [row for row in perf_data["rows"] if row["is_production_model"]]
+    assert len(production_rows) == 1
+    assert production_rows[0]["algorithm"] == "Multilingual MiniLM"
+
+
 def test_xgboost_train_save_load_predict_is_leakage_safe(tmp_path, monkeypatch):
     from app.core.config import settings
 

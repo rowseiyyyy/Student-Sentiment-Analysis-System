@@ -67,6 +67,11 @@ VALID_CATEGORIES = {"Faculty", "Staff", "Payment", "Facilities"}
 RESPONSE_COLUMN_ALIASES = ("comment", "comments", "feedback", "response", "responses", "remarks", "review", "text")
 LABEL_COLUMN_ALIASES = ("sentiment", "label")
 
+# The ONLY model allowed to serve live production inference. Everything else
+# in TrainingHistory (XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa, ensembles) is
+# research data imported from Colab metrics and is display-only.
+LIVE_MODEL_NAME = "Multilingual MiniLM"
+
 def import_training_results(
     db: Session,
     metrics_by_algorithm: dict[str, dict],
@@ -113,30 +118,50 @@ def import_training_results(
     if not imported:
         raise DatasetValidationError("Metrics JSON did not contain any recognized approaches.")
 
-    if set_production:
-        if set_production not in imported:
-            raise DatasetValidationError(
-                f"'{set_production}' was requested as production but wasn't in the imported metrics."
-            )
-        best_algorithm = set_production
-    else:
-        best_algorithm = max(
-            imported,
-            key=lambda name: float(metrics_by_algorithm[name].get("weighted_f1", -1.0)),
-        )
+    # Best-performing imported approach — used ONLY for the research
+    # comparison report (comparison_results.json / the "recommended" entry).
+    best_algorithm = max(
+        imported,
+        key=lambda name: float(metrics_by_algorithm[name].get("weighted_f1", -1.0)),
+    )
 
-    _mark_production_model(db, APPROACH_TO_ALGORITHM[best_algorithm], commit=False)
+    # Multilingual MiniLM is the ONLY live production model. Imported legacy
+    # approaches (XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa and the approved
+    # mDeBERTa + XLM-RoBERTa ensemble) are persisted as TrainingHistory rows
+    # so their metrics appear in the model comparison, but they must never be
+    # promoted to production or reconstructed at inference time.
+    if set_production and set_production != LIVE_MODEL_NAME:
+        logger.warning(
+            "'%s' was requested as production, but only '%s' can serve live "
+            "inference — imported approaches are recorded as research results only.",
+            set_production,
+            LIVE_MODEL_NAME,
+        )
+    minilm_row = (
+        db.query(TrainingHistory)
+        .filter(TrainingHistory.algorithm == TrainingAlgorithm.MINILM)
+        .first()
+    )
+    if minilm_row is not None:
+        _mark_production_model(db, TrainingAlgorithm.MINILM, commit=False)
+
     serializable = {
         name: {k: v for k, v in metrics_by_algorithm[name].items() if k not in ("validation", "weights")}
         for name in imported
     }
     _write_comparison_artifacts(serializable, best_algorithm)
-    sync_deployment_metadata(db, best_algorithm)
+    # The deployment metadata governs which approach the prediction pipeline
+    # reconstructs — pin it to the live model regardless of what scored best
+    # in the imported metrics.
+    sync_deployment_metadata(db, LIVE_MODEL_NAME)
     db.commit()
 
     return {
         "imported_algorithms": imported,
-        "production_model": best_algorithm,
+        "production_model": LIVE_MODEL_NAME,
+        # Surfaced so the admin UI/log can show which imported approach was
+        # merely *recommended* by the Colab export (never live).
+        "recommended_model": best_algorithm,
         # Surfaced so the admin UI/log can show if part of the export (e.g.
         # an unrecognized model key like "mdeberta") was skipped.
         "ignored_keys": unknown_keys,

@@ -75,10 +75,10 @@ async def upload_dataset(
 
     return {"rows": len(rows), "columns": reader.fieldnames, "message": "Dataset uploaded successfully."}
 
-# Approved active approaches: Multilingual MiniLM is the ONLY live model.
-# Legacy models (XGBoost, mDeBERTa, XLM-RoBERTa, SVM/RF/NB/BERT) are retained
-# only as historical training_history rows and are excluded from performance,
-# rollback, confusion-matrix, and download endpoints.
+# The ONLY live production model. Imported Colab approaches (XGBoost (TF-IDF),
+# mDeBERTa, XLM-RoBERTa, mDeBERTa + XLM-RoBERTa ensemble) are retained as
+# historical TrainingHistory rows — they appear in the model comparison but
+# are excluded from production rollback and live inference.
 APPROVED_ALGORITHMS = (
     TrainingAlgorithm.MINILM,
 )
@@ -158,6 +158,7 @@ async def import_results(
         message="Import complete.",
         imported_algorithms=outcome["imported_algorithms"],
         production_model=outcome["production_model"],
+        recommended_model=outcome.get("recommended_model"),
         artifacts_updated=[],
     )
 
@@ -176,21 +177,36 @@ def list_models(
 
 @router.get("/performance", response_model=ModelComparisonResponse)
 def get_model_performance(db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
-    """Latest run per approved approach, i.e. the Admin Panel comparison
-    table. Only approved models and ensembles are compared; legacy rows are
-    excluded from the active comparison."""
+    """Latest run per approach that has training-history rows — the Admin
+    Panel comparison table.
+
+    Approaches imported from a Colab metrics JSON (XGBoost (TF-IDF), mDeBERTa,
+    XLM-RoBERTa and the mDeBERTa + XLM-RoBERTa ensemble) appear here as
+    research results alongside Multilingual MiniLM. ``best_model`` is always
+    the LIVE production model (Multilingual MiniLM) — legacy/imported rows are
+    display-only and can never serve live inference.
+    """
     rows = []
-    best_model = None
-    for algo in APPROVED_ALGORITHMS:
+    production_row = (
+        db.query(TrainingHistory)
+        .filter(TrainingHistory.is_production_model.is_(True))
+        .first()
+    )
+    # Distinct persisted algorithm values (latest run of each), so imported
+    # Colab metrics show up even though they are not live models.
+    algorithm_values = [
+        row[0] for row in db.query(TrainingHistory.algorithm).distinct().all()
+    ]
+    for value in algorithm_values:
         latest = (
             db.query(TrainingHistory)
-            .filter(TrainingHistory.algorithm == algo)
+            .filter(TrainingHistory.algorithm == value)
             .order_by(TrainingHistory.created_at.desc())
             .first()
         )
         if latest:
             rows.append(ModelComparisonRow(
-                algorithm=algo.value,
+                algorithm=latest.algorithm.value,
                 accuracy=latest.accuracy,
                 precision=latest.precision,
                 recall=latest.recall,
@@ -199,10 +215,11 @@ def get_model_performance(db: Session = Depends(get_db), current_user: User = De
                 inference_time_ms=latest.inference_time_ms,
                 is_production_model=latest.is_production_model,
             ))
-            if latest.is_production_model:
-                best_model = algo.value
 
-    return ModelComparisonResponse(best_model=best_model, rows=rows)
+    return ModelComparisonResponse(
+        best_model=production_row.algorithm.value if production_row else None,
+        rows=rows,
+    )
 
 
 @router.get("/confusion-matrix", response_model=ConfusionMatrixResponse)
@@ -251,9 +268,10 @@ def rollback_production_model(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Rolls back the production approach to a previous approved training
-    run (XGBoost / DeBERTa / RoBERTa or one of the four approved ensembles).
-    Legacy approaches are no longer eligible for active rollback."""
+    """Rolls back production to a previous Multilingual MiniLM training run.
+    Imported legacy approaches (XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa and
+    the approved ensembles) are research results only and are NOT eligible
+    for live production."""
     target = db.query(TrainingHistory).filter(TrainingHistory.id == training_history_id).first()
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training history record not found.")
@@ -261,7 +279,7 @@ def rollback_production_model(
     if target.algorithm not in APPROVED_ALGORITHMS:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Rollback is only available for approved approaches (XGBoost, DeBERTa, RoBERTa, and the approved ensembles).",
+            detail="Rollback is only available for Multilingual MiniLM — the only live production model.",
         )
 
     db.query(TrainingHistory).update({TrainingHistory.is_production_model: False})

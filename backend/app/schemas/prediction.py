@@ -40,14 +40,13 @@ class PredictionOut(BaseModel):
 
 
 class PredictionResponse(BaseModel):
+    """Live ad-hoc prediction result. Multilingual MiniLM is the ONLY live
+    model, so the response carries its result plus the official (production)
+    prediction — no legacy per-model fields (XGBoost / mDeBERTa / XLM-RoBERTa
+    / ensembles) are included."""
+
     text: str
-    xgboost_tfdf: SingleModelResult | None = None
-    mdeberta: SingleModelResult | None = None
-    xlm_roberta: SingleModelResult | None = None
-    xgb: SingleModelResult | None = None
-    deberta: SingleModelResult | None = None
-    roberta: SingleModelResult | None = None
-    ensemble: SingleModelResult | None = None
+    minilm: SingleModelResult | None = None
     official_prediction: SentimentLabel
     algorithm_used: str
     confidence_score: float
