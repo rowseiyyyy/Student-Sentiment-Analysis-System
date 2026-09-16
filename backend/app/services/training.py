@@ -33,7 +33,6 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
-import pandas as pd
 from sqlalchemy.orm import Session
 
 # sklearn is only used by the retired-model training/evaluation paths
@@ -340,6 +339,8 @@ def load_and_validate_dataset(
     response_column: str | None = None,
     label_column: str | None = None,
 ) -> pd.DataFrame:
+    import pandas as pd
+
     df = pd.read_csv(csv_path)
     original_columns = [str(column) for column in df.columns]
     response_source = _resolve_dataset_column(original_columns, response_column, RESPONSE_COLUMN_ALIASES, "response")
@@ -412,6 +413,7 @@ def _metrics_for_labels(y_true: Iterable[str], y_pred: Iterable[str]) -> dict:
 
 
 def _split_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    import pandas as pd
     from sklearn.model_selection import train_test_split  # lazy: only in this offline-only helper
 
     labels = df["sentiment"].tolist()

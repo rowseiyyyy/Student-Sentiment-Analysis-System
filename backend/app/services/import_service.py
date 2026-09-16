@@ -46,7 +46,6 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-import openpyxl
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -510,6 +509,8 @@ def _read_csv_rows(file_path: Path) -> list[list[str]]:
 
 
 def _read_excel_rows(file_path: Path) -> list[list[str]]:
+    import openpyxl  # lazy: only needed when an Excel file is uploaded
+
     wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
     ws = wb.active
     rows: list[list[str]] = []
