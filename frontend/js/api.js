@@ -379,4 +379,36 @@ async getEvaluations(params = {}) {
     async getPublicConfig() {
         return this.request('GET', '/evaluation/public/config');
     },
+
+    // ============================================================
+    // VOICE IN A BOX — anonymous open-ended feedback stream.
+    // Deliberately separate from the evaluation endpoints: the
+    // submission carries no student identity of any kind, and these
+    // entries never enter the evaluation analytics/KPI aggregates.
+    // ============================================================
+
+    // Anonymous submission — no auth token is attached (the request
+    // helper only adds Authorization when a token exists in storage,
+    // so a student browsing the landing page stays unauthenticated).
+    async createVoiceNote(message) {
+        return this.request('POST', '/voice-notes', { message });
+    },
+
+    // Admin/faculty feed for the Responses tab.
+    async getVoiceNotes({ sentiment, page, page_size } = {}) {
+        const params = new URLSearchParams();
+        if (sentiment) params.append('sentiment', sentiment);
+        if (page) params.append('page', page);
+        if (page_size) params.append('page_size', page_size);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        return this.get(`/voice-notes${qs}`);
+    },
+
+    async getVoiceNoteStats() {
+        return this.get('/voice-notes/stats');
+    },
+
+    async deleteVoiceNote(id) {
+        return this.del(`/voice-notes/${encodeURIComponent(id)}`);
+    },
 };

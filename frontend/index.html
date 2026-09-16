@@ -50,6 +50,19 @@
                     </button>
                 </form>
 
+                <!-- Voice in a Box — a separate, open-ended feedback
+                     channel. Visually distinct from the structured
+                     "Open evaluation" button: it is a drop-box card,
+                     not a form entry point. Fully anonymous — no
+                     student ID, no login, nothing captured but the
+                     message itself. -->
+                <button type="button" class="voice-box-card" id="voice-box-card" onclick="APP.openVoiceBox(event)">
+                    <span class="voice-box-kicker"><i class="fas fa-inbox"></i> ANONYMOUS DROP BOX</span>
+                    <span class="voice-box-title">Voice in a Box</span>
+                    <span class="voice-box-desc">Thoughts, suggestions, or feedback about your overall school experience — no form, no student ID, just your voice.</span>
+                    <span class="voice-box-cta"><i class="fas fa-feather-alt"></i> Drop a message</span>
+                </button>
+
                 <!-- Credential Login (Admin/Faculty) -->
                 <form id="login-form-credential" class="hidden" onsubmit="return false;">
                     
@@ -292,6 +305,40 @@
                 <button class="modal-close" onclick="APP.closeModal()" aria-label="Close"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- VOICE IN A BOX MODAL — anonymous open-ended feedback           -->
+    <!-- ============================================================ -->
+    <div class="modal-backdrop" id="modal-voice-box">
+        <div class="modal voice-box-modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-inbox"></i> Voice in a Box</h3>
+                <button class="modal-close" onclick="APP.closeVoiceBox()" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <span class="voice-box-note-kicker">NOT TIED TO A COURSE OR INSTRUCTOR</span>
+                <p class="voice-box-note">
+                    Anything you write here goes straight into the anonymous drop box —
+                    separate from the evaluation form. No student ID, no login, no name:
+                    nothing about you is captured or stored.
+                </p>
+                <form id="voice-box-form" onsubmit="APP.submitVoiceNote(event)">
+                    <div class="form-group">
+                        <label for="voice-box-message"><i class="fas fa-pen"></i> Your message <span title="Required" class="note-badge" style="margin-bottom:0;">i</span></label>
+                        <textarea id="voice-box-message" class="form-control" rows="5" maxlength="5000"
+                            placeholder="How's your overall school experience? What's working, what could be better?"
+                            required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-paper-plane"></i> Drop it in the box →
+                    </button>
+                    <p class="form-footer">
+                        <i class="fas fa-user-secret"></i> Submitted fully anonymously
+                    </p>
+                </form>
+            </div>
         </div>
     </div>
 

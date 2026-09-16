@@ -2253,3 +2253,199 @@ tbody tr:last-child td {
 .step-navigation .btn { min-width: 120px; }
 .hidden { display: none !important; }
 @media (max-width: 600px) { .stepper { flex-direction: column; gap: 1rem; } .stepper::before { display: none; } .step-item { flex-direction: row; gap: .75rem; width: 100%; } .step-circle { width: 36px; height: 36px; font-size: .8rem; } .step-label { margin-top: 0; text-align: left; } }
+
+/* ============================================================
+   VOICE IN A BOX — anonymous open-ended feedback stream
+   Landing-page drop box card, submission modal, and the
+   Responses-tab card feed. Same navy/cream paper theme, but
+   deliberately a different shape from the structured
+   "Open evaluation" button: dashed drop-box styling.
+   ============================================================ */
+.voice-box-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--brand-soft);
+  border: 1.5px dashed var(--brand);
+  border-radius: 10px;
+  padding: 0.9rem 1.05rem;
+  margin-top: 0.9rem;
+  cursor: pointer;
+  font-family: var(--font);
+  color: var(--ink);
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.voice-box-card:hover {
+  border-style: solid;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(43, 58, 103, 0.14);
+}
+.voice-box-kicker {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand);
+  margin-bottom: 0.25rem;
+}
+.voice-box-kicker i {
+  margin-right: 0.3rem;
+}
+.voice-box-title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  font-weight: 600;
+  color: var(--brand-deep);
+}
+.voice-box-desc {
+  display: block;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  margin: 0.25rem 0 0.6rem;
+}
+.voice-box-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  padding: 0.3rem 0.65rem;
+  background: var(--paper-raised);
+}
+.voice-box-cta i {
+  font-size: 0.75rem;
+}
+
+/* Submission modal */
+.voice-box-modal .modal-body {
+  padding-top: 0.75rem;
+}
+.voice-box-note-kicker {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.3rem;
+}
+.voice-box-note {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--paper-line);
+  border-left: 3px solid var(--brand);
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+/* ============================================================
+   VOICE IN A BOX FEED (admin Responses tab)
+   Card feed — separate from the evaluation table, with its own
+   lightweight sentiment filter and its own empty state.
+   ============================================================ */
+.voice-feed-section {
+  margin-top: 2rem;
+}
+.voice-feed-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.2rem;
+}
+.voice-feed-head .voice-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: block;
+  margin-bottom: 0.35rem;
+}
+.voice-feed-head h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+.voice-feed-head h2 i {
+  color: var(--brand);
+  font-size: 1rem;
+  margin-right: 0.4rem;
+}
+.voice-feed-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+}
+.voice-feed-note {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.7rem;
+}
+.voice-feed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.75rem;
+}
+.voice-feed-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--paper-line);
+  border-left: 4px solid var(--ink-faint);
+  border-radius: 6px;
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.voice-feed-card.sentiment-positive { border-left-color: var(--pos); }
+.voice-feed-card.sentiment-neutral { border-left-color: var(--neu); }
+.voice-feed-card.sentiment-negative { border-left-color: var(--neg); }
+.voice-feed-msg {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-line;
+  word-break: break-word;
+  margin: 0;
+}
+.voice-feed-meta {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.voice-feed-conf {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+.voice-feed-date {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  margin-left: auto;
+}
+.voice-feed-delete {
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0.1rem 0.25rem;
+}
+.voice-feed-delete:hover {
+  color: var(--neg);
+}
+

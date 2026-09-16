@@ -195,6 +195,62 @@ showRegForm() {
         this.goToPage('page-login');
     },
 
+    // ============================================================
+    // VOICE IN A BOX — anonymous open-ended feedback (landing page)
+    // ============================================================
+    openVoiceBox(e) {
+        if (e) e.preventDefault();
+        // Start each visit to the drop box with a clean slate.
+        var form = document.getElementById('voice-box-form');
+        if (form) form.reset();
+        var msg = document.getElementById('voice-box-message');
+        if (msg) msg.value = '';
+        var modal = document.getElementById('modal-voice-box');
+        if (modal) modal.classList.add('show');
+        // Focus without scrolling the page behind the modal.
+        setTimeout(function() { if (msg) msg.focus({ preventScroll: true }); }, 60);
+    },
+
+    closeVoiceBox() {
+        var modal = document.getElementById('modal-voice-box');
+        if (modal) modal.classList.remove('show');
+    },
+
+    async submitVoiceNote(e) {
+        e.preventDefault();
+        var msgEl = document.getElementById('voice-box-message');
+        var message = msgEl ? msgEl.value.trim() : '';
+        if (!message) {
+            showToast('Please write a message before submitting.', 'warning');
+            return;
+        }
+
+        var submitBtn = document.querySelector('#voice-box-form button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+        showLoading('Sealing your message in the box...');
+
+        try {
+            // Fully anonymous: this request carries no auth token and no
+            // student identifier — only the free-text message.
+            await API.createVoiceNote(message);
+            this.closeVoiceBox();
+            if (msgEl) msgEl.value = '';
+            APP.openModal(
+                "<div style=\"text-align:center;padding:1rem;\">" +
+                "<i class=\"fas fa-check-circle\" style=\"font-size:3rem;color:var(--pos);\"></i>" +
+                "<h3 style=\"font-family:var(--font-display);margin:0.5rem 0;\">Message dropped</h3>" +
+                "<p style=\"color:var(--ink-soft);max-width:38ch;margin:0 auto;\">Thank you — your voice is in the box. It was analyzed anonymously and will be reviewed alongside other voices.</p>" +
+                "<button class=\"btn btn-primary\" style=\"margin-top:1rem;\" onclick=\"APP.closeModal()\">Done</button>" +
+                "</div>"
+            );
+        } catch (error) {
+            showToast(error.message || 'Could not submit your message. Please try again.', 'error');
+        } finally {
+            hideLoading();
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    },
+
 setupNavListeners() {
         // Student nav tabs (form / submissions)
         document.querySelectorAll('#nav-student .nav-links li button').forEach(btn => {
@@ -254,10 +310,10 @@ setupNavListeners() {
     }
 };
 
-// Close modal on backdrop click
+// Close modals on backdrop click
 document.addEventListener('click', (e) => {
-    const modal = document.getElementById('modal-eval');
-    if (e.target === modal) APP.closeModal();
+    if (e.target === document.getElementById('modal-eval')) APP.closeModal();
+    if (e.target === document.getElementById('modal-voice-box')) APP.closeVoiceBox();
 });
 
 // ============================================================

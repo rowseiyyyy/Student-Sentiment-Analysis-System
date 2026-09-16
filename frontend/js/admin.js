@@ -855,7 +855,7 @@ var ADMIN = {
                 '<label style="display:flex;align-items:center;gap:.4rem;font-size:.82rem;white-space:nowrap;flex-shrink:0;">' +
                     '<input type="checkbox" id="filter-needs-review" /> Needs Review only' +
                 '</label>' +
-                '<input type="text" class="form-control" id="filter-search" placeholder="Search by student ID, course, strengths..." style="flex:1;min-width:200px;" />' +
+                '<input type="text" class="form-control" id="filter-search" placeholder="Search by course, year level, sentiment..." style="flex:1;min-width:200px;" />' +
                 '<button class="btn btn-primary" onclick="ADMIN.loadResponses()"><i class="fas fa-search"></i> Search</button>' +
                 '<button class="btn btn-secondary" onclick="ADMIN.resetFilters()"><i class="fas fa-undo"></i> Reset</button>' +
             '</div>' +
@@ -866,12 +866,18 @@ var ADMIN = {
             '</div>' +
             '<div id="responses-loading" class="text-center mt-3 hidden"><div class="spinner"></div><p>Loading responses...</p></div>' +
             '<div id="responses-table-container"></div>' +
-            '<div id="responses-pagination" class="pagination"></div>';
+            '<div id="responses-pagination" class="pagination"></div>' +
+            // Voice in a Box — a separate anonymous feedback stream.
+            // Rendered below the evaluation table as a card feed with
+            // its own lightweight sentiment filter. Deliberately NOT a
+            // table and deliberately NOT part of the evaluation data.
+            '<div id="voice-feed-section" class="voice-feed-section"></div>';
 
         document.getElementById('filter-category').addEventListener('change', function() { ADMIN.currentPage = 1; ADMIN.loadResponses(); });
         document.getElementById('filter-search').addEventListener('input', debounce(function() { ADMIN.currentPage = 1; ADMIN.loadResponses(); }, 500));
         document.getElementById('filter-needs-review').addEventListener('change', function() { ADMIN.currentPage = 1; ADMIN.loadResponses(); });
         this.loadResponses();
+        this.loadVoiceFeed();
     },
     getCategoryDisplayName: function(category) {
         if (!category) return 'N/A';
@@ -1241,6 +1247,97 @@ var ADMIN = {
             if (tableContainer) tableContainer.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div><h3>Error Loading Responses</h3><p>' + escapeHtml(error.message) + '</p></div>';
         } finally {
             if (loading) loading.classList.add('hidden');
+        }
+    },
+
+    // ============================================================
+    // VOICE IN A BOX FEED — separate anonymous stream (Responses tab)
+    // Card feed below the evaluation table with its own lightweight
+    // sentiment filter. Deliberately a separate dataset: it never
+    // mixes into the evaluation table, the summary cards, analytics,
+    // or any existing KPI.
+    // ============================================================
+
+    async loadVoiceFeed() {
+        var section = document.getElementById('voice-feed-section');
+        if (!section) return;
+
+        var filter = document.getElementById('voice-feed-filter');
+        var sentiment = filter ? filter.value : '';
+
+        section.innerHTML =
+            '<div class="voice-feed-head">' +
+                '<div>' +
+                    '<span class="voice-kicker"><i class="fas fa-inbox"></i> Anonymous drop box · separate stream</span>' +
+                    '<h2>Voice in a Box</h2>' +
+                '</div>' +
+                '<span class="voice-feed-count" id="voice-feed-count">Loading...</span>' +
+            '</div>' +
+            '<p class="voice-feed-note">Open-ended messages about the overall school experience. Fully anonymous — no student ID is attached, and these entries are counted separately from the evaluation responses above. <span title="Submissions arrive via the \'Voice in a Box\' drop box on the landing page; no student identifier exists for them." class="note-badge">i</span></p>' +
+            '<div class="filter-bar" style="justify-content:flex-start;">' +
+                '<span class="filter-label">Filter</span>' +
+                '<select class="form-control" id="voice-feed-filter">' +
+                    '<option value="">All sentiments</option>' +
+                    '<option value="Positive"' + (sentiment === 'Positive' ? ' selected' : '') + '>Positive</option>' +
+                    '<option value="Neutral"' + (sentiment === 'Neutral' ? ' selected' : '') + '>Neutral</option>' +
+                    '<option value="Negative"' + (sentiment === 'Negative' ? ' selected' : '') + '>Negative</option>' +
+                '</select>' +
+            '</div>' +
+            '<div id="voice-feed-container" class="voice-feed-grid"><div class="text-center" style="grid-column:1/-1;"><div class="spinner"></div><p>Loading Voice in a Box submissions...</p></div></div>';
+
+        document.getElementById('voice-feed-filter').addEventListener('change', function() { ADMIN.loadVoiceFeed(); });
+
+        try {
+            var data = await API.getVoiceNotes({ sentiment: sentiment || undefined, page: 1, page_size: 100 });
+            var items = Array.isArray(data.items) ? data.items : [];
+            var countEl = document.getElementById('voice-feed-count');
+            if (countEl) countEl.textContent = (data.total || 0) + ' entr' + ((data.total === 1) ? 'y' : 'ies') + (sentiment ? ' · ' + sentiment + ' only' : '');
+
+            var feed = document.getElementById('voice-feed-container');
+            if (!feed) return;
+
+            if (items.length === 0) {
+                feed.className = '';
+                feed.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-inbox"></i></div>' +
+                    '<h3>No Voice in a Box submissions yet</h3>' +
+                    '<p>' + (sentiment ? 'No ' + sentiment.toLowerCase() + ' submissions yet — try another filter.' : 'Students haven\u2019t dropped any messages in the box yet.') + '</p></div>';
+                return;
+            }
+
+            feed.className = 'voice-feed-grid';
+            feed.innerHTML = items.map(function(item) {
+                var sentimentLabel = item.sentiment || 'Neutral';
+                var cls = sentimentLabel.toLowerCase();
+                var conf = (item.confidence_score !== null && item.confidence_score !== undefined)
+                    ? (item.confidence_score * 100).toFixed(1) + '%'
+                    : 'N/A';
+                return '<article class="voice-feed-card sentiment-' + cls + '">' +
+                    '<p class="voice-feed-msg">' + escapeHtml(item.message) + '</p>' +
+                    '<div class="voice-feed-meta">' +
+                        sentimentBadge(sentimentLabel) +
+                        '<span class="voice-feed-conf" title="Sentiment model confidence">conf ' + conf + '</span>' +
+                        '<span class="voice-feed-date" title="Submitted anonymously">' + formatDate(item.created_at) + '</span>' +
+                        '<button class="voice-feed-delete" onclick="ADMIN.deleteVoiceNote(\'' + item.id + '\')" title="Delete submission"><i class="fas fa-trash"></i></button>' +
+                    '</div>' +
+                '</article>';
+            }).join('');
+        } catch (error) {
+            var feedEl = document.getElementById('voice-feed-container');
+            if (feedEl) {
+                feedEl.className = '';
+                feedEl.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div><h3>Could not load Voice in a Box</h3><p>' + escapeHtml(error.message) + '</p></div>';
+            }
+        }
+    },
+
+    async deleteVoiceNote(id) {
+        if (!confirm('Delete this anonymous Voice in a Box submission? This cannot be undone.')) return;
+        try {
+            await API.deleteVoiceNote(id);
+            showToast('Voice in a Box submission deleted.', 'success');
+            this.loadVoiceFeed();
+        } catch (error) {
+            showToast(error.message || 'Delete failed.', 'error');
         }
     },
 
