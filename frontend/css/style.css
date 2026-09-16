@@ -1732,6 +1732,270 @@ tbody tr:last-child td {
 }
 
 /* ============================================================
+   OVERVIEW QUICK-GLANCE WIDGETS
+   (Term-over-Term / Department Leaderboard / System Health)
+   ============================================================ */
+
+/* KPI cards now carry two micro-charts: the existing 6-month line and a new
+   last-N-days bar sparkline, so they share one row and shrink slightly. */
+.spark-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem;
+  margin: .35rem 0 .1rem;
+}
+.spark-pair .sparkline {
+  width: 62px;
+  height: 20px;
+  margin: 0;
+}
+
+/* ---- Term-over-Term ---- */
+.term-cmp {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: .5rem;
+  align-items: center;
+  margin-top: .2rem;
+}
+.term-cmp-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .15rem;
+  min-width: 0;
+}
+.term-cmp-side-empty {
+  justify-content: center;
+  border: 1px dashed var(--paper-line);
+  border-radius: 8px;
+  padding: .75rem .5rem;
+  text-align: center;
+}
+.term-cmp-tag {
+  font-family: var(--font-mono);
+  font-size: .58rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.term-cmp-term {
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.term-cmp-donut {
+  position: relative;
+  width: 100%;
+  height: 104px;
+}
+.term-cmp-strip {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: .12rem;
+}
+.term-cmp-strip-row {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  font-family: var(--font-mono);
+  font-size: .62rem;
+}
+.term-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.term-dot.pos {
+  background: var(--pos);
+}
+.term-dot.neu {
+  background: var(--neu);
+}
+.term-dot.neg {
+  background: var(--neg);
+}
+.term-cmp-name {
+  flex: 1;
+  color: var(--ink-faint);
+}
+.term-cmp-pct {
+  color: var(--ink);
+  font-weight: 600;
+}
+.term-cmp-vol {
+  font-family: var(--font-mono);
+  font-size: .6rem;
+  color: var(--ink-faint);
+  margin: .2rem 0 0;
+}
+.term-cmp-delta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* The shared .trend-badge margin only suits a stacked card layout. */
+.term-cmp-delta .trend-badge {
+  margin: 0;
+}
+.term-cmp-note {
+  font-family: var(--font-mono);
+  font-style: italic;
+  font-size: .62rem;
+  line-height: 1.45;
+  color: var(--ink-faint);
+  margin: .7rem 0 0;
+  padding-top: .55rem;
+  border-top: 1px dashed var(--paper-line);
+}
+
+/* ---- Department leaderboard ---- */
+.leaderboard-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.leaderboard-header h3 {
+  margin-bottom: .2rem;
+}
+.leaderboard-actions {
+  display: inline-flex;
+  gap: .3rem;
+  flex-wrap: wrap;
+}
+.leaderboard-group + .leaderboard-group {
+  margin-top: .7rem;
+}
+.leaderboard-heading {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: .6rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: .4rem;
+}
+.leader-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--paper-line);
+  color: var(--ink-soft);
+  font-size: .56rem;
+  font-weight: 600;
+  margin-right: .15rem;
+}
+.leader-rank.top {
+  background: var(--pos-bg);
+  border-color: rgba(47, 111, 78, .35);
+  color: var(--pos);
+}
+.leader-rank.bottom {
+  background: var(--neg-bg);
+  border-color: rgba(179, 58, 58, .35);
+  color: var(--neg);
+}
+.leader-n {
+  font-size: .6rem;
+  color: var(--ink-faint);
+}
+.leaderboard-note {
+  font-family: var(--font-mono);
+  font-style: italic;
+  font-size: .6rem;
+  line-height: 1.45;
+  color: var(--ink-faint);
+  margin: .7rem 0 0;
+  padding-top: .55rem;
+  border-top: 1px dashed var(--paper-line);
+}
+
+/* ---- System health snapshot ---- */
+.health-rows {
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+}
+.health-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: .5rem;
+  padding-bottom: .55rem;
+  border-bottom: 1px dashed var(--paper-line);
+}
+.health-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.health-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .68rem;
+}
+.health-icon.good {
+  background: var(--pos-bg);
+  color: var(--pos);
+}
+.health-icon.warn {
+  background: var(--neu-bg);
+  color: var(--neu);
+}
+.health-icon.bad {
+  background: var(--neg-bg);
+  color: var(--neg);
+}
+.health-icon.neutral {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.health-label {
+  font-family: var(--font-mono);
+  font-size: .66rem;
+  color: var(--ink-soft);
+  min-width: 0;
+}
+.health-value {
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.health-value.good {
+  color: var(--pos);
+}
+.health-value.warn {
+  color: var(--neu);
+}
+.health-value.bad {
+  color: var(--neg);
+}
+.health-value.neutral {
+  color: var(--brand);
+}
+
+
+/* ============================================================
    ACTION UPDATE STATUS BADGES + PUBLIC BULLETIN
    ============================================================ */
 .badge-acknowledged,

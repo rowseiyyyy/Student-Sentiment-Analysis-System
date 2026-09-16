@@ -126,6 +126,28 @@ var ADMIN = {
         this.charts = {};
     },
 
+    // Draw a chart into the element `hostId`, or fall back to the same
+    // graceful "No data available." caption the Top Complaints /
+    // Top Appreciations lists use when there is nothing to plot. Without
+    // this, an empty dataset produces a broken axis-only canvas (and
+    // Chart.js scale errors) instead of a readable placeholder.
+    mountChart: function(hostId, hasData, draw, emptyMessage) {
+        var host = document.getElementById(hostId);
+        if (!host) return;
+        if (!hasData) {
+            host.style.display = 'flex';
+            host.style.alignItems = 'center';
+            host.style.justifyContent = 'center';
+            host.innerHTML = '<p class="text-muted text-center">' + escapeHtml(emptyMessage || 'No data available.') + '</p>';
+            return;
+        }
+        host.style.display = '';
+        host.style.alignItems = '';
+        host.style.justifyContent = '';
+        host.innerHTML = '<canvas></canvas>';
+        draw(host.querySelector('canvas'));
+    },
+
     showDashboard: function() {
         APP.goToPage('page-admin-dashboard');
         document.getElementById('nav-admin').style.display = 'flex';
@@ -268,6 +290,50 @@ var ADMIN = {
                     '" fill="none" stroke="' + color + '" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>';
             }
 
+            function barSparkline(series, color) {
+                // Bar variant of sparkline(): same 80x24 footprint, but one bar
+                // per day, so a single busy day stands out instead of being
+                // smoothed into a line. Used for the last-N-days indicator.
+                var data = series.slice(-30);
+                if (!data.length || data.every(function(v) { return v === 0; })) {
+                    return '<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none"><line x1="0" y1="22" x2="80" y2="22" stroke="' + color + '" stroke-dasharray="2,2" stroke-width="1" opacity=".45"/></svg>';
+                }
+                var max = Math.max.apply(null, data);
+                var step = 80 / data.length;
+                var barW = Math.max(1, step - 1.2);
+                var bars = data.map(function(v, i) {
+                    // Keep a 1-unit sliver for any non-zero day so "one
+                    // submission" is still visible next to a busy day.
+                    var h = v > 0 ? Math.max(1, (v / max) * 20) : 0;
+                    return '<rect x="' + (i * step).toFixed(2) + '" y="' + (22 - h).toFixed(2) + '" width="' + barW.toFixed(2) +
+                        '" height="' + h.toFixed(2) + '" fill="' + color + '" rx="0.5"/>';
+                }).join('');
+                return '<svg class="sparkline" viewBox="0 0 80 24" preserveAspectRatio="none">' + bars + '</svg>';
+            }
+
+            // Pairs the existing 6-month line sparkline with the new
+            // last-N-days bar sparkline inside a single KPI card. Each half
+            // carries its own native tooltip saying which window it covers.
+            function kpiSparkPair(monthSeries, monthColor, daySeries) {
+                return '<span class="spark-pair">' +
+                    '<span title="Monthly totals, last 6 months">' + sparkline(monthSeries, monthColor) + '</span>' +
+                    '<span title="Daily submissions, last ' + dailyWindow + ' days">' + barSparkline(daySeries, monthColor) + '</span>' +
+                '</span>';
+            }
+
+            // The same "No data available." treatment mountChart() uses, for
+            // the new widgets that are markup rather than Chart.js canvases.
+            function emptyBlock(message) {
+                return '<p class="text-muted text-center" style="padding:1.1rem 0 .6rem;font-size:.82rem;">' + escapeHtml(message) + '</p>';
+            }
+
+            // Compact mono date for the health widget: takes the date part of
+            // the server's ISO string rather than new Date(), so a naive UTC
+            // timestamp is not shifted by the browser's timezone.
+            function shortDate(iso) {
+                return iso ? iso.slice(0, 10) : '\u2014';
+            }
+
             var byPeriod = {};
             mPoints.forEach(function(p) { byPeriod[p.period] = p; });
             var nowKey = new Date().toISOString().slice(0, 7);
@@ -287,14 +353,201 @@ var ADMIN = {
                 return mPoints.slice(-6).map(function(p) { return p[key] || 0; });
             };
 
+            // ---- Recent activity window (last N days, per KPI card) ----
+            // The monthly sparkline above answers "how has this moved over the
+            // year"; this answers "what happened this week/fortnight". The
+            // window follows the global date filter when one is set (so these
+            // widgets stay in sync with the rest of the tab) and defaults to
+            // the last 14 days otherwise.
+            var dailyWindow = parseInt(f.days, 10) || 14;
+            var dailyParams = 'days=' + dailyWindow +
+                (f.category ? '&category=' + encodeURIComponent(f.category) : '');
+            var daily = await API.getDailyTrend(dailyParams).catch(function() { return { points: [] }; });
+            var dailyByDay = {};
+            ((daily && daily.points) || []).forEach(function(p) { dailyByDay[p.period] = p; });
+            // GET /analytics/daily only returns days that have submissions, so
+            // the window is zero-filled here: a zero day is real information
+            // (a quiet day), not missing data.
+            var dailyKeys = (function() {
+                var keys = [];
+                var nowMs = Date.now();
+                for (var i = dailyWindow - 1; i >= 0; i--) {
+                    keys.push(new Date(nowMs - i * 86400000).toISOString().slice(0, 10));
+                }
+                return keys;
+            })();
+            function dailySeries(key) {
+                return dailyKeys.map(function(k) {
+                    var p = dailyByDay[k];
+                    return p ? (p[key] || 0) : 0;
+                });
+            }
+
             var trendPos = trendBadge(curMonth.positive, prevMonth.positive);
             var trendNeu = trendBadge(curMonth.neutral, prevMonth.neutral);
             var trendNeg = trendBadge(curMonth.negative, prevMonth.negative, { invert: true });
             var trendTot = trendBadge(curMonth.total, prevMonth.total);
-            var sparkPos = sparkline(sparkSeries('positive'), '#2f6f4e');
-            var sparkNeu = sparkline(sparkSeries('neutral'), '#b7791f');
-            var sparkNeg = sparkline(sparkSeries('negative'), '#b33a3a');
-            var sparkTot = sparkline(sparkSeries('total'), '#2b3a67');
+            var sparkPos = kpiSparkPair(sparkSeries('positive'), '#2f6f4e', dailySeries('positive'));
+            var sparkNeu = kpiSparkPair(sparkSeries('neutral'), '#b7791f', dailySeries('neutral'));
+            var sparkNeg = kpiSparkPair(sparkSeries('negative'), '#b33a3a', dailySeries('negative'));
+            var sparkTot = kpiSparkPair(sparkSeries('total'), '#2b3a67', dailySeries('total'));
+
+            // ============================================================
+            // Quick-glance widgets (Term-over-Term / Leaderboard / Health)
+            // ============================================================
+            // ---- Term-over-term: current grading period vs the previous one ----
+            // "Current" is resolved server-side from today's month through the
+            // same _academic_term_lookup() the Analytics term chart uses, so the
+            // two can never disagree; during a break month it falls back to the
+            // most recently completed period. Rendered as a doughnut pair here
+            // so Overview reads differently from the Analytics stacked bar.
+            var termCmp = await API.getTermComparison(filterQs).catch(function() { return null; });
+
+            function termStripRow(cls, name, pct) {
+                return '<div class="term-cmp-strip-row"><span class="term-dot ' + cls + '"></span>' +
+                    '<span class="term-cmp-name">' + name + '</span>' +
+                    '<span class="term-cmp-pct">' + pct.toFixed(1) + '%</span></div>';
+            }
+
+            function termSideHtml(side, tag, tone) {
+                if (!side) {
+                    // First-term-in-history case: render this side as a plain
+                    // note instead of a broken or zeroed comparison.
+                    return '<div class="term-cmp-side term-cmp-side-empty">' +
+                        '<span class="term-cmp-tag">' + tag + '</span>' +
+                        '<p class="text-muted" style="font-size:.75rem;margin:.75rem 0;">No earlier grading period to compare against.</p>' +
+                        '</div>';
+                }
+                return '<div class="term-cmp-side">' +
+                    '<span class="term-cmp-tag">' + tag + '</span>' +
+                    '<p class="term-cmp-term" title="' + escapeHtml(side.term) + '">' + escapeHtml(side.term) + '</p>' +
+                    '<div class="term-cmp-donut"><canvas id="chart-term-cmp-' + tone + '"></canvas></div>' +
+                    '<div class="term-cmp-strip">' +
+                        termStripRow('pos', 'Positive', side.positive_pct) +
+                        termStripRow('neu', 'Neutral', side.neutral_pct) +
+                        termStripRow('neg', 'Negative', side.negative_pct) +
+                    '</div>' +
+                    '<p class="term-cmp-vol">' + side.total + ' submission' + (side.total === 1 ? '' : 's') + '</p>' +
+                    '</div>';
+            }
+
+            var hasTermCmp = !!(termCmp && ((termCmp.current && termCmp.current.total > 0) ||
+                (termCmp.previous && termCmp.previous.total > 0)));
+            var termCmpBodyHtml;
+            if (!hasTermCmp) {
+                termCmpBodyHtml = emptyBlock('No submissions in the current or preceding grading period.');
+            } else {
+                // A break month swaps what the two sides mean, so label them by
+                // what they actually are rather than "current"/"previous".
+                var prevTag = termCmp.is_break_month ? 'Earlier period' : 'Previous period';
+                var curTag = termCmp.is_break_month ? 'Latest completed' : 'Current period';
+                var deltaHtml = '';
+                if (termCmp.current && termCmp.previous) {
+                    var deltaPp = termCmp.current.positive_pct - termCmp.previous.positive_pct;
+                    var deltaCls = Math.abs(deltaPp) < 0.05 ? 'flat' : (deltaPp > 0 ? 'good' : 'bad');
+                    var deltaArrow = Math.abs(deltaPp) < 0.05 ? 'fa-minus' : (deltaPp > 0 ? 'fa-arrow-up' : 'fa-arrow-down');
+                    deltaHtml = '<div class="term-cmp-delta"><span class="trend-badge ' + deltaCls +
+                        '" title="Positive share: ' + escapeHtml(termCmp.previous.term) + ' \u2192 ' + escapeHtml(termCmp.current.term) +
+                        '"><i class="fas ' + deltaArrow + '"></i> ' + (deltaPp > 0 ? '+' : '') + deltaPp.toFixed(1) + 'pp</span></div>';
+                }
+                termCmpBodyHtml = '<div class="term-cmp">' +
+                        termSideHtml(termCmp.previous, prevTag, 'previous') +
+                        deltaHtml +
+                        termSideHtml(termCmp.current, curTag, 'current') +
+                    '</div>' +
+                    '<p class="term-cmp-note">' + escapeHtml(termCmp.note) + '</p>';
+            }
+
+            // ---- Quick department leaderboard ----
+            // Ranks the categories already fetched for the By Department card by
+            // positive share, so this adds no extra request. Top 3 / bottom 3,
+            // with anything already listed on top excluded from the bottom list
+            // so a small department count (this school has four) never lists the
+            // same department twice. Pointers lead to the fuller views.
+            var displayCategory = function(c) { return c === 'Payment' ? 'Payments' : c; };
+            var rankedDepts = ledgerRows.filter(function(r) {
+                return r.total > 0;
+            }).map(function(r) {
+                return { label: r.label, total: r.total, counts: r.counts, posPct: (r.counts.pos / r.total) * 100 };
+            }).sort(function(a, b) {
+                return b.posPct - a.posPct || b.total - a.total;
+            });
+            var topDepts = rankedDepts.slice(0, 3);
+            var topLabels = {};
+            topDepts.forEach(function(r) { topLabels[r.label] = true; });
+            var bottomDepts = rankedDepts.slice(-3).reverse().filter(function(r) { return !topLabels[r.label]; });
+
+            function leaderboardRow(r, rank, tone) {
+                var total = r.total || 1;
+                var segment = function(count, cls) {
+                    if (count <= 0) return '';
+                    return '<div class="ledger-fill ' + cls + '" style="width:' + ((count / total) * 100) + '%"></div>';
+                };
+                return '<div class="ledger-row">' +
+                    '<span class="label"><span class="leader-rank ' + tone + '">' + rank + '</span>' + displayCategory(r.label) +
+                        ' <span class="leader-n">n=' + r.total + '</span></span>' +
+                    '<div class="ledger-track">' + segment(r.counts.pos, 'pos') + segment(r.counts.neu, 'neu') + segment(r.counts.neg, 'neg') + '</div>' +
+                    '<span class="pct" title="' + r.counts.pos + ' pos \u00b7 ' + r.counts.neu + ' neu \u00b7 ' + r.counts.neg + ' neg">' +
+                        r.posPct.toFixed(0) + '%</span>' +
+                    '</div>';
+            }
+
+            var leaderboardHtml;
+            if (!rankedDepts.length) {
+                leaderboardHtml = emptyBlock('No department submissions match the current filter.');
+            } else {
+                leaderboardHtml = '<div class="leaderboard-group">' +
+                    '<span class="leaderboard-heading">Most positive</span>' +
+                    '<div class="ledger-bars">' + topDepts.map(function(r, i) { return leaderboardRow(r, i + 1, 'top'); }).join('') + '</div>' +
+                    '</div>';
+                if (bottomDepts.length) {
+                    leaderboardHtml += '<div class="leaderboard-group">' +
+                        '<span class="leaderboard-heading">Needs attention</span>' +
+                        '<div class="ledger-bars">' + bottomDepts.map(function(r) {
+                            return leaderboardRow(r, rankedDepts.length - rankedDepts.indexOf(r), 'bottom');
+                        }).join('') + '</div>' +
+                        '</div>';
+                }
+                if (rankedDepts.length < 6) {
+                    leaderboardHtml += '<p class="leaderboard-note">Showing ' +
+                        (topDepts.length + bottomDepts.length) + ' of ' + rankedDepts.length +
+                        ' departments \u2014 with fewer than six, a department would otherwise appear in both lists. ' +
+                        'The full per-department split is in By Department below.</p>';
+                }
+            }
+
+            // ---- System health snapshot ----
+            var lowPct = overall.low_confidence_pct || 0;
+            var lowCount = overall.low_confidence_count || 0;
+            var daysSince = overall.days_since_last_submission;
+            // Colour bands, mirrored in the card's (i) caption: green = healthy,
+            // amber = worth a look, red = act. Deliberately conservative - more
+            // than a quarter of predictions at coin-flip confidence, or over a
+            // week of silence, is a real signal about the data pipeline.
+            var lowTone = lowPct < 10 ? 'good' : (lowPct < 25 ? 'warn' : 'bad');
+            var idleTone = (daysSince === null || daysSince === undefined) ? 'warn'
+                : (daysSince <= 2 ? 'good' : (daysSince <= 7 ? 'warn' : 'bad'));
+            function healthRow(icon, label, value, tone, hint) {
+                return '<div class="health-row">' +
+                    '<span class="health-icon ' + tone + '"><i class="fas ' + icon + '"></i></span>' +
+                    '<span class="health-label">' + label + '</span>' +
+                    '<span class="health-value ' + tone + '" title="' + escapeHtml(hint) + '">' + value + '</span>' +
+                    '</div>';
+            }
+            var hasHealthData = (overall.evaluation_volume || 0) > 0;
+            var healthBodyHtml = !hasHealthData
+                ? emptyBlock('No submissions match the current filter.')
+                : '<div class="health-rows">' +
+                    healthRow('fa-triangle-exclamation', 'Low-confidence submissions', lowPct.toFixed(1) + '%', lowTone,
+                        lowCount + ' of ' + (overall.evaluation_volume || 0) +
+                        ' predictions scored below 50% model confidence') +
+                    healthRow('fa-clock', 'Days since last submission',
+                        (daysSince === null || daysSince === undefined) ? '\u2014' : String(daysSince), idleTone,
+                        'Time since the most recent submission in this filter scope') +
+                    healthRow('fa-calendar-check', 'Last submission',
+                        shortDate(overall.last_submission_at), 'neutral',
+                        'Date of the most recent submission in this filter scope') +
+                    '</div>';
             var trendPeriod = (byPeriod[nowKey] ? nowKey : (mPoints.length ? mPoints[mPoints.length - 1].period : '')) || 'â€”';
 
             container.innerHTML = '' +
@@ -333,6 +586,29 @@ var ADMIN = {
                     '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3>' + (overall.evaluation_volume || 0) + '</h3><p>Total Evaluations</p>' + sparkTot + trendTot + '<small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time count of submitted evaluation forms</small></div></div>' +
                     '<div class="stat-card"><div class="stat-icon purple"><i class="fas fa-chart-bar"></i></div><div class="stat-info"><h3>' + (overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A') + '</h3><p>Avg Confidence</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
                 '</div>' +
+                '<div class="chart-grid">' +
+                    '<div class="chart-card">' +
+                        '<h3><i class="fas fa-graduation-cap"></i> Term-over-Term</h3>' +
+                        '<p class="source-note">The grading period in progress versus the one immediately before it, resolved from today\'s date through the same academic calendar that drives the Analytics term chart. During a break or enrollment month there is no active period, so the two most recently completed periods are compared instead and the caption below says so.</p>' +
+                        termCmpBodyHtml +
+                    '</div>' +
+                    '<div class="chart-card">' +
+                        '<div class="leaderboard-header">' +
+                            '<h3><i class="fas fa-list-ol"></i> Department Leaderboard</h3>' +
+                            '<span class="leaderboard-actions">' +
+                                '<button class="btn btn-sm btn-outline" onclick="ADMIN.scrollToOverviewCard(\'overview-by-department\')" title="Jump to the full By Department breakdown on this tab"><i class="fas fa-arrow-down"></i> By Department</button>' +
+                                '<button class="btn btn-sm btn-outline" onclick="ADMIN.renderTab(\'analytics\')" title="Open the Analytics tab for the full breakdown"><i class="fas fa-chart-line"></i> Analytics</button>' +
+                            '</span>' +
+                        '</div>' +
+                        '<p class="source-note">Departments ranked by the positive share of their submissions: the bar shows the full positive / neutral / negative split, the right-hand figure is that department\'s positive rate and n is its submission count. A quick ranking only - the full split lives in By Department and Analytics.</p>' +
+                        leaderboardHtml +
+                    '</div>' +
+                    '<div class="chart-card">' +
+                        '<h3><i class="fas fa-heartbeat"></i> System Health</h3>' +
+                        '<p class="source-note">At-a-glance data health for the current filter scope. Green = healthy, amber = worth a look, red = act. "Low confidence" means the model scored a prediction below 50% confidence (the configurable LOW_CONFIDENCE_THRESHOLD), so those submissions are worth a human review rather than being trusted as-is.</p>' +
+                        healthBodyHtml +
+                    '</div>' +
+                '</div>' +
                 '<div class="two-col">' +
                     '<div>' +
                         '<div class="chart-card" style="margin-bottom:1.1rem;">' +
@@ -347,7 +623,7 @@ var ADMIN = {
                         '</div>' +
                     '</div>' +
                     '<div>' +
-                        '<div class="card" style="margin-bottom:1.1rem;">' +
+                        '<div class="card" id="overview-by-department" style="margin-bottom:1.1rem;">' +
                             '<div class="card-header"><h3><i class="fas fa-chart-bar"></i> By Department</h3></div>' +
                             '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, all-time, stacked by predicted sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative; hover the count for the exact split)' +
                             '<div class="ledger-bars">' + ledgerRowsHtml + '</div>' +
@@ -378,6 +654,7 @@ var ADMIN = {
             this.destroyCharts();
             this.renderSentimentChart(overall.breakdown);
             this.renderModelPerfChart(perfRows);
+            this.renderTermComparisonChart(termCmp);
         } catch (error) {
             container.innerHTML = '<div class="page-header"><h1>Dashboard Overview</h1></div><div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-database"></i></div><h3>No Data Available</h3><p>' + escapeHtml(error.message) + '</p></div></div>';
         }
@@ -454,6 +731,85 @@ var ADMIN = {
                 plugins: [centerText]
             });
         }, 100);
+    },
+
+    // Two small doughnut "rings" (deliberately not the Analytics stacked bar)
+    // showing the current and previous grading period side by side. Each ring's
+    // centre carries that period's raw submission volume, and the strip beneath
+    // it lists the positive / neutral / negative split, so Overview stays a
+    // glance while Analytics keeps the full detail.
+    renderTermComparisonChart: function(termCmp) {
+        if (!termCmp) return;
+        [
+            { id: 'chart-term-cmp-previous', side: termCmp.previous, key: 'termCmpPrevious' },
+            { id: 'chart-term-cmp-current', side: termCmp.current, key: 'termCmpCurrent' }
+        ].forEach(function(entry) {
+            var side = entry.side;
+            // A missing or empty side renders as the "no earlier period" note
+            // built by termSideHtml(), so there is no canvas to draw into.
+            if (!side || !side.total) return;
+            setTimeout(function() {
+                var canvas = document.getElementById(entry.id);
+                if (!canvas) return;
+                var centerText = {
+                    id: 'termCmpCenter',
+                    afterDraw: function(chart) {
+                        var meta = chart.getDatasetMeta(0).data[0];
+                        if (!meta) return;
+                        var g = chart.ctx;
+                        g.save();
+                        g.textAlign = 'center';
+                        g.textBaseline = 'middle';
+                        g.font = '700 1.15rem "Public Sans", sans-serif';
+                        g.fillStyle = '#1c231f';
+                        g.fillText(String(side.total), meta.x, meta.y - 6);
+                        g.font = '500 .55rem "Public Sans", sans-serif';
+                        g.fillStyle = '#8b9389';
+                        g.fillText('SUBMISSIONS', meta.x, meta.y + 12);
+                        g.restore();
+                    }
+                };
+                ADMIN.charts[entry.key] = new Chart(canvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Positive', 'Neutral', 'Negative'],
+                        datasets: [{
+                            data: [side.positive, side.neutral, side.negative],
+                            backgroundColor: ['#2f6f4e', '#b7791f', '#b33a3a'],
+                            borderWidth: 2,
+                            borderColor: '#f8f9f5',
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '66%',
+                        // Legend hidden: the strip under each ring already names
+                        // each sentiment with its percentage.
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(item) {
+                                        var total = side.total || 1;
+                                        return item.label + ': ' + item.parsed + ' (' + ((item.parsed / total) * 100).toFixed(1) + '%)';
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    plugins: [centerText]
+                });
+            }, 100);
+        });
+    },
+
+    // Jump helper for the Overview leaderboard: scrolls to a card further down
+    // the same tab instead of re-fetching or duplicating its full breakdown.
+    scrollToOverviewCard: function(id) {
+        var el = document.getElementById(id);
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     },
 
     renderModelPerfChart: function(rows) {
@@ -1200,6 +1556,18 @@ predictionHtml +
                 '<div class="chart-card"><h3><i class="fas fa-chart-line"></i> Monthly Trend</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by the month they were submitted, all-time.</p><div class="chart-container"><canvas id="chart-monthly-trend"></canvas></div></div>' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category, all-time.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
             '</div>' +
+            '<div class="chart-grid">' +
+                '<div class="chart-card"><h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Volume and sentiment for each of the eight grading periods (Term 1 Prelim to Finals, then Term 2 Prelim to Finals), from each submission\'s month. Break / enrollment months (Nov, Dec, Jan, Jun) belong to no grading period and are intentionally not plotted.</p><div class="chart-container" id="chart-host-term-sentiment"></div></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-project-diagram"></i> Sentiment Trend by Department</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Department positivity rate per month, size-normalized so trends compare fairly. Each point is tagged with that month\'s raw submission count (n=), so a swing backed by real volume can be told apart from one resting on a handful of low-traffic submissions.</p><div class="chart-container" id="chart-host-department-trend"></div></div>' +
+            '</div>' +
+            '<div class="chart-card">' +
+                '<h3><i class="fas fa-tags"></i> Word / Theme Frequency</h3>' +
+                '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Most frequent keywords in comments, split by the sentiment they came from.</p>' +
+                '<div class="two-col" style="grid-template-columns:1fr 1fr;gap:1.25rem;">' +
+                    '<div><h4 style="color:var(--neg);margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas fa-exclamation-circle"></i> Complaint Themes</h4><div class="chart-container" style="height:300px;" id="chart-host-theme-complaints"></div></div>' +
+                    '<div><h4 style="color:var(--pos);margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas fa-star"></i> Appreciation Themes</h4><div class="chart-container" style="height:300px;" id="chart-host-theme-appreciations"></div></div>' +
+                '</div>' +
+            '</div>' +
             '<div class="two-col">' +
                 '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, all-time, drawn verbatim from submitted evaluations.</p><div id="top-complaints-list"></div></div>' +
                 '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, all-time, drawn verbatim from submitted evaluations.</p><div id="top-appreciations-list"></div></div>' +
@@ -1225,6 +1593,23 @@ predictionHtml +
 
             var categories = ['Faculty', 'Staff', 'Facilities', 'Payment'];
             var catData = await Promise.all(categories.map(function(c) { return API.getCategoryAnalytics(c).catch(function() { return null; }); }));
+
+            // Extra analytics sources backing the three added charts. Each is
+            // individually guarded so a single failing endpoint degrades to
+            // that chart's "No data available." caption instead of blanking
+            // the whole tab via the catch block below.
+            var extra = await Promise.all([
+                API.getTermAnalytics().catch(function() { return null; }),
+                Promise.all(categories.map(function(c) {
+                    return API.getMonthlyTrend('category=' + encodeURIComponent(c)).catch(function() { return null; });
+                })),
+                API.getWordFrequency('Negative', 12).catch(function() { return null; }),
+                API.getWordFrequency('Positive', 12).catch(function() { return null; })
+            ]);
+            var termData = extra[0];
+            var deptTrends = extra[1];
+            var complaintWords = extra[2];
+            var appreciationWords = extra[3];
 
             setTimeout(function() {
                 var ctx = document.getElementById('chart-category-sentiment');
@@ -1259,6 +1644,172 @@ predictionHtml +
                     },
                     options: { responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' }, plugins: { legend: { position: 'bottom' } } }
                 });
+            }, 100);
+
+            // ---- Sentiment by Academic Term (volume + sentiment per grading period) ----
+            var termPoints = (termData && termData.points) ? termData.points : [];
+            var hasTermData = termPoints.some(function(p) { return (p.total || 0) > 0; });
+            setTimeout(function() {
+                ADMIN.mountChart('chart-host-term-sentiment', hasTermData, function(canvas) {
+                    ADMIN.charts.termSentiment = new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: termPoints.map(function(p) { return p.term; }),
+                            datasets: [
+                                { label: 'Positive', data: termPoints.map(function(p) { return p.positive || 0; }), backgroundColor: '#2f6f4e' },
+                                { label: 'Neutral', data: termPoints.map(function(p) { return p.neutral || 0; }), backgroundColor: '#b7791f' },
+                                { label: 'Negative', data: termPoints.map(function(p) { return p.negative || 0; }), backgroundColor: '#b33a3a' }
+                            ]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }, plugins: { legend: { position: 'bottom' } } }
+                    });
+                }, 'No academic term data available.');
+            }, 100);
+
+            // ---- Sentiment trend by department over time (one line per department) ----
+            // Departments carry very different submission volumes, so each line
+            // plots that department's POSITIVITY RATE for the month (Positive
+            // share of that month's submissions) instead of raw counts. A month
+            // with no submissions for a department stays a gap, not a fake 0%.
+            //
+            // A rate on its own cannot be read though: 100% off two submissions
+            // means something very different from 100% off forty. So each point
+            // also carries that month's raw submission volume, which this
+            // inline plugin prints as an "n=" count label beside the marker
+            // (the tooltip repeats it). A 100% spike tagged "n=1" is visibly
+            // thin data rather than a real shift. Chart.js 4 is loaded from a
+            // CDN without chartjs-plugin-datalabels, so this is a small inline
+            // plugin instead of an extra dependency.
+            var deptVolumeLabels = {
+                id: 'deptVolumeLabels',
+                afterDatasetsDraw: function(chart) {
+                    var ctx = chart.ctx;
+                    ctx.save();
+                    ctx.font = '600 9px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    chart.data.datasets.forEach(function(dataset, di) {
+                        var meta = chart.getDatasetMeta(di);
+                        if (meta.hidden || !dataset.volumes) return;
+                        meta.data.forEach(function(element, index) {
+                            var volume = dataset.volumes[index];
+                            // null = no submissions that month, so no marker and
+                            // no label either (leave the gap clean).
+                            if (volume == null) return;
+                            var text = 'n=' + volume;
+                            // White halo keeps the tiny label legible where two
+                            // departments' lines cross.
+                            ctx.lineWidth = 3;
+                            ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+                            ctx.strokeText(text, element.x, element.y - 6);
+                            ctx.fillStyle = dataset.borderColor || '#555';
+                            ctx.fillText(text, element.x, element.y - 6);
+                        });
+                    });
+                    ctx.restore();
+                }
+            };
+            var deptColors = { Faculty: '#2b3a67', Staff: '#7c5cbf', Facilities: '#2e7d8f', Payment: '#8a5a2b' };
+            var deptMonths = [];
+            (deptTrends || []).forEach(function(d) {
+                ((d && d.points) || []).forEach(function(p) {
+                    if (deptMonths.indexOf(p.period) === -1) deptMonths.push(p.period);
+                });
+            });
+            deptMonths.sort();
+            var hasDeptTrend = false;
+            var deptDatasets = categories.map(function(c, i) {
+                var points = (deptTrends && deptTrends[i] && deptTrends[i].points) ? deptTrends[i].points : [];
+                var byMonth = {};
+                points.forEach(function(p) { byMonth[p.period] = p; });
+                var series = [];
+                var volumes = [];
+                deptMonths.forEach(function(m) {
+                    var point = byMonth[m];
+                    if (!point || !point.total) {
+                        // No submissions that month: keep the gap (null), and
+                        // null the volume too so no "n=0" label is drawn.
+                        series.push(null);
+                        volumes.push(null);
+                        return;
+                    }
+                    hasDeptTrend = true;
+                    series.push(Math.round((point.positive / point.total) * 1000) / 10);
+                    volumes.push(point.total);
+                });
+                return {
+                    label: c === 'Payment' ? 'Payments' : c,
+                    data: series,
+                    // Raw submission count per month, read by the
+                    // deptVolumeLabels plugin and the tooltip callback below.
+                    volumes: volumes,
+                    borderColor: deptColors[c],
+                    backgroundColor: deptColors[c],
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    fill: false,
+                    tension: 0.35,
+                    spanGaps: true
+                };
+            });
+            setTimeout(function() {
+                ADMIN.mountChart('chart-host-department-trend', hasDeptTrend, function(canvas) {
+                    ADMIN.charts.departmentTrend = new Chart(canvas, {
+                        type: 'line',
+                        data: { labels: deptMonths, datasets: deptDatasets },
+                        // Inline plugin: "n=" volume labels beside each point.
+                        plugins: [deptVolumeLabels],
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { intersect: false, mode: 'index' },
+                            scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: '% Positive' } } },
+                            plugins: {
+                                legend: { position: 'bottom' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(ctx) {
+                                            var volume = ctx.dataset.volumes ? ctx.dataset.volumes[ctx.dataIndex] : null;
+                                            var text = ctx.dataset.label + ': ' + ctx.formattedValue + '% positive';
+                                            return volume == null ? text : text + ' \u00b7 n=' + volume;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }, 'No department trend data available.');
+            }, 100);
+
+            // ---- Word / theme frequency (aggregate view of the verbatim lists) ----
+            // indexAxis:'y' draws categories bottom-up, so the backend's
+            // most_common() ordering is reversed to put the most frequently
+            // mentioned keyword at the top of each chart.
+            var complaintTerms = (complaintWords && complaintWords.words) ? complaintWords.words.slice() : [];
+            var appreciationTerms = (appreciationWords && appreciationWords.words) ? appreciationWords.words.slice() : [];
+            complaintTerms.reverse();
+            appreciationTerms.reverse();
+            setTimeout(function() {
+                ADMIN.mountChart('chart-host-theme-complaints', complaintTerms.length > 0, function(canvas) {
+                    ADMIN.charts.complaintThemes = new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: complaintTerms.map(function(w) { return w.word; }),
+                            datasets: [{ label: 'Mentions', data: complaintTerms.map(function(w) { return w.count; }), backgroundColor: '#b33a3a' }]
+                        },
+                        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+                    });
+                }, 'No complaint themes available.');
+                ADMIN.mountChart('chart-host-theme-appreciations', appreciationTerms.length > 0, function(canvas) {
+                    ADMIN.charts.appreciationThemes = new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: appreciationTerms.map(function(w) { return w.word; }),
+                            datasets: [{ label: 'Mentions', data: appreciationTerms.map(function(w) { return w.count; }), backgroundColor: '#2f6f4e' }]
+                        },
+                        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+                    });
+                }, 'No appreciation themes available.');
             }, 100);
 
             var complaintsList = document.getElementById('top-complaints-list');

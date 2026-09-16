@@ -110,6 +110,58 @@ class Settings(BaseSettings):
     # the evaluation form.
     LIKERT_MIN_QUESTIONS: int = 5
 
+    # ------------------------------------------------------------------
+    # Analytics thresholds
+    # ------------------------------------------------------------------
+    # A prediction whose confidence is below this is counted as
+    # "low confidence" by the Overview health snapshot. 0.5 = 50%: the model
+    # was no more sure than a coin flip, so the submission is worth a human
+    # look rather than being trusted as-is. Kept configurable because the
+    # right cut-off depends on the deployed model's calibration.
+    LOW_CONFIDENCE_THRESHOLD: float = 0.5
+
+    # ------------------------------------------------------------------
+    # Academic calendar (Analytics)
+    # ------------------------------------------------------------------
+    # The evaluations table stores only the submission timestamp — it has no
+    # grading-period / academic-term column — so the "Sentiment by Academic
+    # Term" chart buckets submissions by the MONTH each was submitted in,
+    # using the calendar below.
+    #
+    # Default: the institution's real grading calendar. Each semester has
+    # four single-month grading periods, so no month is shared between two
+    # terms and the chart plots exactly the eight defined periods:
+    #   Term 1 (1st semester): Prelim = July,  Midterm = August,
+    #                          Prefinal = September, Finals = October
+    #   Term 2 (2nd semester): Prelim = February, Midterm = March,
+    #                          Prefinal = April, Finals = May
+    # November, December, January and June fall outside every grading period
+    # (semestral break / enrollment), so a submission from one of those
+    # months is deliberately excluded from the term chart rather than being
+    # guessed into the nearest period. That is also why the x-axis shows
+    # eight periods and not twelve months.
+    #
+    # Term names double as the chart's x-axis labels and bucket keys, so they
+    # must be unique: "Prelim" (etc.) repeats in both semesters, hence each
+    # entry is prefixed with the term it belongs to.
+    #
+    # Override from the environment to match a changed school calendar, e.g.
+    #   ACADEMIC_TERM_MONTHS='[{"term": "Term 1 Prelim", "months": [7]}, {"term": "Term 1 Midterm", "months": [8]}]'
+    # Month numbers are 1-12 (1 = January). List order defines the order the
+    # terms appear in on the chart (Term 1 first, then Term 2). A month may
+    # appear in only one period; any month left out simply produces no term
+    # bucket, so a submission in that month is not counted towards any term.
+    ACADEMIC_TERM_MONTHS: List[dict[str, Any]] = [
+        {"term": "Term 1 Prelim", "months": [7]},
+        {"term": "Term 1 Midterm", "months": [8]},
+        {"term": "Term 1 Prefinal", "months": [9]},
+        {"term": "Term 1 Finals", "months": [10]},
+        {"term": "Term 2 Prelim", "months": [2]},
+        {"term": "Term 2 Midterm", "months": [3]},
+        {"term": "Term 2 Prefinal", "months": [4]},
+        {"term": "Term 2 Finals", "months": [5]},
+    ]
+
     # Database connection - can be set directly via DATABASE_URL env var for production
     # (e.g., mysql+pymysql://user:pass@host:3306/dbname or sqlite:///path/to/db.sqlite)
     # If not set, falls back to individual component settings below (for local dev).

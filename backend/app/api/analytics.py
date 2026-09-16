@@ -15,6 +15,8 @@ from app.models.user import User
 from app.schemas.analytics import (
     CategoryAnalyticsResponse,
     OverallAnalyticsResponse,
+    TermAnalyticsResponse,
+    TermComparisonResponse,
     TopCommentsResponse,
     TrendResponse,
     WordFrequencyResponse,
@@ -76,6 +78,31 @@ def get_daily_trend(
     current_user: User = Depends(require_staff),
 ):
     return analytics_service.trend_analytics(db, granularity="daily", days=_days_param(days), category=category)
+
+
+@router.get("/terms", response_model=TermAnalyticsResponse)
+@retry_on_disconnect()
+def get_term_analytics(
+    days: Optional[int] = Query(None, ge=1, le=3650),
+    category: Optional[NormalizedCategory] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    return analytics_service.term_analytics(db, days=_days_param(days), category=category)
+
+
+@router.get("/term-comparison", response_model=TermComparisonResponse)
+@retry_on_disconnect()
+def get_term_comparison(
+    days: Optional[int] = Query(None, ge=1, le=3650),
+    category: Optional[NormalizedCategory] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    """Current grading period vs the one before it — backs the Overview
+    term-over-term widget. "Current" is resolved from today's month with the
+    same configured calendar the /analytics/terms chart uses."""
+    return analytics_service.term_comparison(db, days=_days_param(days), category=category)
 
 
 @router.get("/word-frequency", response_model=WordFrequencyResponse)

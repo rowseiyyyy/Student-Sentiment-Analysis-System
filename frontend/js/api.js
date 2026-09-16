@@ -255,6 +255,17 @@ async getEvaluations(params = {}) {
         return this.get('/analytics/monthly' + this._buildQuery(params));
     },
 
+    async getTermAnalytics(params) {
+        return this.get('/analytics/terms' + this._buildQuery(params));
+    },
+
+    // Overview term-over-term widget: current grading period vs the one
+    // immediately before it (the backend resolves "current" from today's
+    // month using the same configured academic calendar as /analytics/terms).
+    async getTermComparison(params) {
+        return this.get('/analytics/term-comparison' + this._buildQuery(params));
+    },
+
     async getDailyTrend(params) {
         return this.get('/analytics/daily' + this._buildQuery(params));
     },

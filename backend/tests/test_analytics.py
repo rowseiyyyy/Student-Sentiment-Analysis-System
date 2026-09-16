@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 def _register_admin_and_login(client, email="admin_analytics@example.com"):
     client.post(
         "/api/v1/auth/register",
@@ -100,3 +103,182 @@ def test_csv_export_with_data(client):
     assert "text/csv" in response.headers["content-type"]
     body = response.text
     assert "evaluation_id" in body
+
+
+# ============================================================
+# Academic-term analytics (Sentiment by Academic Term chart)
+# ============================================================
+
+def _seed_evaluation(db_session, *, evaluation_id, category, sentiment, created_at):
+    """Insert one evaluation + its prediction so analytics joins can see it."""
+    from app.models.evaluation import Evaluation, EvaluationCategory
+    from app.models.prediction import AlgorithmName, Prediction, SentimentLabel
+
+    db_session.add(
+        Evaluation(
+            id=evaluation_id,
+            category=EvaluationCategory(category),
+            comment=f"Comment for {evaluation_id}",
+            created_at=created_at,
+        )
+    )
+    db_session.add(
+        Prediction(
+            evaluation_id=evaluation_id,
+            official_prediction=SentimentLabel(sentiment),
+            algorithm_used=AlgorithmName.MINILM,
+            confidence_score=0.9,
+            processing_time_ms=12.0,
+            created_at=created_at,
+        )
+    )
+    db_session.commit()
+
+
+# The real grading calendar is eight single-month periods -- four per
+# semester -- in this order (see settings.ACADEMIC_TERM_MONTHS):
+#   Term 1 (1st sem): Prelim = Jul, Midterm = Aug, Prefinal = Sep, Finals = Oct
+#   Term 2 (2nd sem): Prelim = Feb, Midterm = Mar, Prefinal = Apr, Finals = May
+# Nov, Dec, Jan and Jun are breaks/enrollment and belong to no period.
+_TERM_ORDER = [
+    "Term 1 Prelim", "Term 1 Midterm", "Term 1 Prefinal", "Term 1 Finals",
+    "Term 2 Prelim", "Term 2 Midterm", "Term 2 Prefinal", "Term 2 Finals",
+]
+
+
+def test_term_analytics_empty_db(client):
+    token = _register_admin_and_login(client, email="terms_admin@example.com")
+    response = client.get("/api/v1/analytics/terms", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    data = response.json()
+    # All eight configured grading periods are returned, zero-filled, in
+    # calendar order so the chart keeps a stable x-axis (Term 1 first, then
+    # Term 2) even with no submissions yet. The chart shows these eight
+    # periods, not the twelve calendar months.
+    assert [p["term"] for p in data["points"]] == _TERM_ORDER
+    assert all(p["total"] == 0 for p in data["points"])
+
+
+def test_term_analytics_requires_auth(client):
+    assert client.get("/api/v1/analytics/terms").status_code == 401
+
+
+def test_term_analytics_buckets_by_submission_month(client, db_session):
+    """Prior-month submissions re-bucket correctly under the new calendar."""
+    token = _register_admin_and_login(client, email="termbucket_admin@example.com")
+    # New calendar is single-month periods: Term 1 Prelim = Jul, Term 1
+    # Midterm = Aug, Term 2 Midterm = Mar, Term 2 Finals = May.
+    _seed_evaluation(
+        db_session, evaluation_id="term-t1-prelim", category="Professors",
+        sentiment="Positive", created_at=datetime(2026, 7, 15, 9, 0, 0),
+    )
+    _seed_evaluation(
+        db_session, evaluation_id="term-t1-midterm", category="Professors",
+        sentiment="Negative", created_at=datetime(2026, 8, 15, 9, 0, 0),
+    )
+    _seed_evaluation(
+        db_session, evaluation_id="term-t2-finals", category="Staff",
+        sentiment="Neutral", created_at=datetime(2026, 5, 15, 9, 0, 0),
+    )
+
+    response = client.get("/api/v1/analytics/terms", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    data = response.json()
+    assert [p["term"] for p in data["points"]] == _TERM_ORDER
+    points = {p["term"]: p for p in data["points"]}
+
+    assert points["Term 1 Prelim"]["positive"] == 1
+    assert points["Term 1 Prelim"]["total"] == 1
+    assert points["Term 1 Midterm"]["negative"] == 1
+    assert points["Term 2 Finals"]["neutral"] == 1
+    # A period with no submissions is still present, zero-filled.
+    assert points["Term 2 Prefinal"]["total"] == 0
+
+
+def test_term_analytics_excludes_break_months(client, db_session):
+    """Nov/Dec/Jan/Jun belong to no period: skipped, never guessed or errored."""
+    token = _register_admin_and_login(client, email="termbreak_admin@example.com")
+    for month in (1, 6, 11, 12):
+        _seed_evaluation(
+            db_session, evaluation_id=f"term-break-{month}", category="Professors",
+            sentiment="Positive", created_at=datetime(2026, month, 10, 9, 0, 0),
+        )
+    # One in-calendar submission proves the endpoint still aggregates normally
+    # alongside the excluded rows.
+    _seed_evaluation(
+        db_session, evaluation_id="term-in-calendar", category="Professors",
+        sentiment="Negative", created_at=datetime(2026, 7, 10, 9, 0, 0),
+    )
+
+    response = client.get("/api/v1/analytics/terms", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    data = response.json()
+    # The x-axis still lists exactly the eight defined periods, in calendar
+    # order -- the four break months contribute no extra buckets.
+    assert [p["term"] for p in data["points"]] == _TERM_ORDER
+    # Only the in-calendar submission is counted; the break-month rows were
+    # dropped rather than folded into the nearest grading period.
+    assert sum(p["total"] for p in data["points"]) == 1
+    points = {p["term"]: p for p in data["points"]}
+    assert points["Term 1 Prelim"]["negative"] == 1
+    assert all(p["positive"] == 0 for p in data["points"])
+
+
+def test_term_analytics_rebuckets_every_month_under_new_calendar(client, db_session):
+    """One submission per calendar month proves the full 12 -> 8 remapping.
+
+    Existing submissions from prior months must land in the new single-month
+    periods (Jul-Oct, Feb-May) and the four break months must drop out, while
+    the zero-filled x-axis still shows all eight periods in calendar order.
+    """
+    token = _register_admin_and_login(client, email="termmatrix_admin@example.com")
+    for month in range(1, 13):
+        _seed_evaluation(
+            db_session, evaluation_id=f"term-matrix-{month}", category="Professors",
+            sentiment="Positive", created_at=datetime(2026, month, 5, 9, 0, 0),
+        )
+
+    response = client.get("/api/v1/analytics/terms", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    points = response.json()["points"]
+
+    # Eight defined periods in calendar order -- never all twelve months.
+    assert [p["term"] for p in points] == _TERM_ORDER
+    # Exactly one submission lands in each in-calendar period; the Jan/Jun/
+    # Nov/Dec submissions (4 of the 12) are excluded from every bucket.
+    assert [p["total"] for p in points] == [1] * 8
+    assert sum(p["total"] for p in points) == 8
+
+
+def test_term_analytics_category_filter(client, db_session):
+    token = _register_admin_and_login(client, email="termcategory_admin@example.com")
+    _seed_evaluation(
+        db_session, evaluation_id="term-professor", category="Professors",
+        sentiment="Positive", created_at=datetime(2026, 7, 15, 9, 0, 0),
+    )
+    _seed_evaluation(
+        db_session, evaluation_id="term-staff", category="Staff",
+        sentiment="Negative", created_at=datetime(2026, 7, 16, 9, 0, 0),
+    )
+
+    # "Faculty" is a legacy alias normalized onto "Professors".
+    response = client.get(
+        "/api/v1/analytics/terms",
+        params={"category": "Faculty"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    points = {p["term"]: p for p in response.json()["points"]}
+    assert points["Term 1 Prelim"]["positive"] == 1
+    assert points["Term 1 Prelim"]["negative"] == 0
+    assert points["Term 1 Prelim"]["total"] == 1
+
+
+def test_term_analytics_rejects_out_of_range_days(client):
+    token = _register_admin_and_login(client, email="termdays_admin@example.com")
+    response = client.get(
+        "/api/v1/analytics/terms",
+        params={"days": 0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
