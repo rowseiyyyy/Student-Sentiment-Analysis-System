@@ -2,7 +2,8 @@
 
 The ALL_CAPS feature token is appended after each uppercase alphabetic
 word (len >= 2) so that emphasis signals are preserved at the feature
-space level for the XGBoost/TF-IDF pipeline.
+space level for the classical TF-IDF pipeline (SVM / Naive Bayes /
+Logistic Regression).
 
 Regression test: previously, text.lower() was called BEFORE _tag_all_caps,
 so the ALL_CAPS feature was never generated. The fix moves lowercasing

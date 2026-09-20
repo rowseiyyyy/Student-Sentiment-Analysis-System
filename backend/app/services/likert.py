@@ -2,7 +2,9 @@
 
 This is intentionally NOT part of the text sentiment pipeline. Likert
 responses are numeric ratings, not free text, and must never be
-paraphrased into a sentence and run through XGBoost/DeBERTa/RoBERTa.
+paraphrased into a sentence and run through the classical models (SVM, Naive
+Bayes, Logistic Regression) and Multilingual MiniLM for text sentiment
+classification.
 Classification here is a simple, reproducible numerical aggregation so
 results are always explainable from the raw scores.
 

@@ -10,37 +10,11 @@ from app.core.time import utcnow_naive
 
 
 class TrainingAlgorithm(str, enum.Enum):
-    # Historical / legacy rows remain readable.
+    # Approved research models (the 4-model set).
     SVM = "SVM"
-    RANDOM_FOREST = "Random Forest"
     NAIVE_BAYES = "Naive Bayes"
-    BERT = "BERT"
-
-    # Approved active research models.
-    XGBOOST = "XGBoost"
-    XGBOOST_TFDF = "XGBoost (TF-IDF)"
-    MDEBERTA = "mDeBERTa"
-    XLM_ROBERTA = "XLM-RoBERTa"
+    LOGISTIC_REGRESSION = "Logistic Regression"
     MINILM = "Multilingual MiniLM"
-    # Historical values remain readable but are not active approaches.
-    LEGACY_XGBOOST = "XGBoost"
-    DEBERTA = "DeBERTa"
-    ROBERTA = "RoBERTa"
-
-    # Approved ensembles (weighted soft voting). ``ENSEMBLE`` is retained
-    # as a legacy alias for historical rows; new runs use the explicit
-    # member-based ensemble names below.
-    ENSEMBLE = "Ensemble"
-    ENSEMBLE_XGB_DEBERTA = "XGBoost + DeBERTa"
-    ENSEMBLE_DEBERTA_ROBERTA = "DeBERTa + RoBERTa"
-    ENSEMBLE_ROBERTA_XGB = "RoBERTa + XGBoost"
-    ENSEMBLE_XGB_DEBERTA_ROBERTA = "XGBoost + DeBERTa + RoBERTa"
-    ENSEMBLE_TFDF_MDEBERTA = "XGBoost (TF-IDF) + mDeBERTa"
-    ENSEMBLE_MDEBERTA_XLM = "mDeBERTa + XLM-RoBERTa"
-    ENSEMBLE_XLM_TFDF = "XLM-RoBERTa + XGBoost (TF-IDF)"
-    ENSEMBLE_TFDF_MDEBERTA_XLM = "XGBoost (TF-IDF) + mDeBERTa + XLM-RoBERTa"
-    ENSEMBLE_TFIDF_XLM = "XGBoost (TF-IDF) + XLM-RoBERTa"
-    ENSEMBLE_AVERAGE_ALL = "Average (All Models)"
 
 
 class TrainingStatus(str, enum.Enum):

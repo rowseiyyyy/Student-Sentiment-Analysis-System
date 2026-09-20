@@ -151,21 +151,21 @@ def export_evaluations_csv(db: Session = Depends(get_db), current_user: User = D
     writer = csv.writer(buffer)
     writer.writerow([
         "evaluation_id", "category", "comment", "sentiment", "official_prediction", "algorithm_used",
-        "confidence_score", "xgb_prediction", "xgb_confidence",
-        "deberta_prediction", "deberta_confidence",
-        "roberta_prediction", "roberta_confidence",
+        "confidence_score", "svm_prediction", "svm_confidence",
+        "naive_bayes_prediction", "naive_bayes_confidence",
+        "logistic_regression_prediction", "logistic_regression_confidence",
         "created_at",
     ])
     for ev, pred in rows:
         writer.writerow([
             ev.id, ev.category.value, ev.comment, ev.sentiment or "", pred.official_prediction.value,
             pred.algorithm_used.value, pred.confidence_score,
-            pred.xgb_prediction.value if pred.xgb_prediction else "",
-            pred.xgb_confidence if pred.xgb_confidence else "",
-            pred.deberta_prediction.value if pred.deberta_prediction else "",
-            pred.deberta_confidence if pred.deberta_confidence else "",
-            pred.roberta_prediction.value if pred.roberta_prediction else "",
-            pred.roberta_confidence if pred.roberta_confidence else "",
+            pred.svm_prediction.value if pred.svm_prediction else "",
+            pred.svm_confidence if pred.svm_confidence else "",
+            pred.naive_bayes_prediction.value if pred.naive_bayes_prediction else "",
+            pred.naive_bayes_confidence if pred.naive_bayes_confidence else "",
+            pred.logistic_regression_prediction.value if pred.logistic_regression_prediction else "",
+            pred.logistic_regression_confidence if pred.logistic_regression_confidence else "",
             ev.created_at.isoformat(),
         ])
     buffer.seek(0)

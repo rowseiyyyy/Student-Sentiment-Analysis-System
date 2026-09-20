@@ -104,17 +104,17 @@ def test_confusion_matrix_requires_trained_model(client, db_session):
     token = _register_admin_and_login(client, email="cmadmin@example.com")
     response = client.get(
         "/api/v1/ml/confusion-matrix",
-        params={"algorithm": "XGBoost"},
+        params={"algorithm": "SVM"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 404
 
 
 def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(client, tmp_path, monkeypatch):
-    """Importing the Colab metrics JSON records XGBoost (TF-IDF), mDeBERTa,
-    XLM-RoBERTa and the mDeBERTa + XLM-RoBERTa ensemble as research results.
-    They must appear in /ml/performance, but the production model must remain
-    Multilingual MiniLM — the only live sentiment model."""
+    """Importing the Colab metrics JSON records SVM, Naive Bayes, Logistic
+    Regression and Multilingual MiniLM as research results. They must appear
+    in /ml/performance, but the production model must remain Multilingual
+    MiniLM — the only live sentiment model."""
     token = _register_admin_and_login(client, email="importperf@example.com")
 
     # Keep comparison/deployment artifacts out of the real app/ml directory —
@@ -125,28 +125,24 @@ def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(c
 
     metrics_payload = {
         "rows": {
-            "XGBoost (TF-IDF)": {
+            "SVM": {
                 "accuracy": 0.90, "precision": 0.90, "recall": 0.90,
                 "f1_score": 0.90, "macro_f1": 0.89, "weighted_f1": 0.90,
             },
-            "mDeBERTa": {
+            "Naive Bayes": {
                 "accuracy": 0.92, "precision": 0.92, "recall": 0.92,
                 "f1_score": 0.92, "macro_f1": 0.91, "weighted_f1": 0.92,
             },
-            "XLM-RoBERTa": {
+            "Logistic Regression": {
                 "accuracy": 0.91, "precision": 0.91, "recall": 0.91,
                 "f1_score": 0.91, "macro_f1": 0.90, "weighted_f1": 0.91,
             },
-            "mDeBERTa + XLM-RoBERTa": {
-                "accuracy": 0.93, "precision": 0.93, "recall": 0.93,
-                "f1_score": 0.93, "macro_f1": 0.92, "weighted_f1": 0.93,
-            },
             "Multilingual MiniLM": {
-                "accuracy": 0.88, "precision": 0.88, "recall": 0.88,
-                "f1_score": 0.88, "macro_f1": 0.87, "weighted_f1": 0.88,
+                "accuracy": 0.95, "precision": 0.95, "recall": 0.95,
+                "f1_score": 0.95, "macro_f1": 0.94, "weighted_f1": 0.95,
             },
         },
-        "best_model": "mDeBERTa + XLM-RoBERTa",
+        "best_model": "Multilingual MiniLM",
     }
 
     import_response = client.post(
@@ -157,11 +153,11 @@ def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(c
     assert import_response.status_code == 200
     outcome = import_response.json()
     assert set(outcome["imported_algorithms"]) == {
-        "XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa", "mDeBERTa + XLM-RoBERTa", "Multilingual MiniLM"
+        "SVM", "Naive Bayes", "Logistic Regression", "Multilingual MiniLM"
     }
     # Production is pinned to the live model, never the best-imported one.
     assert outcome["production_model"] == "Multilingual MiniLM"
-    assert outcome["recommended_model"] == "mDeBERTa + XLM-RoBERTa"
+    assert outcome["recommended_model"] == "Multilingual MiniLM"
 
     performance = client.get(
         "/api/v1/ml/performance", headers={"Authorization": f"Bearer {token}"}
@@ -169,72 +165,87 @@ def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(c
     assert performance.status_code == 200
     perf_data = performance.json()
     algorithms = {row["algorithm"] for row in perf_data["rows"]}
-    assert {"XGBoost (TF-IDF)", "mDeBERTa", "XLM-RoBERTa", "mDeBERTa + XLM-RoBERTa", "Multilingual MiniLM"} <= algorithms
+    assert {"SVM", "Naive Bayes", "Logistic Regression", "Multilingual MiniLM"} <= algorithms
     assert perf_data["best_model"] == "Multilingual MiniLM"
     production_rows = [row for row in perf_data["rows"] if row["is_production_model"]]
     assert len(production_rows) == 1
     assert production_rows[0]["algorithm"] == "Multilingual MiniLM"
 
 
-def test_xgboost_train_save_load_predict_is_leakage_safe(tmp_path, monkeypatch):
+def test_svm_train_save_load_predict_is_leakage_safe(tmp_path, monkeypatch):
     from app.core.config import settings
+    from app.services.classical_service import svm_service
+    from app.services.ensembles import CLASS_ORDER
 
-    monkeypatch.setattr(settings, "XGB_MODEL_PATH", tmp_path / "xgb.pkl")
-    monkeypatch.setattr(settings, "XGB_TFIDF_VECTORIZER_PATH", tmp_path / "tfidf.pkl")
-    monkeypatch.setattr(settings, "XGB_LABEL_ENCODER_PATH", tmp_path / "labels.json")
+    monkeypatch.setattr(settings, "SVM_MODEL_PATH", tmp_path / "svm.pkl")
+    monkeypatch.setattr(settings, "SVM_VECTORIZER_PATH", tmp_path / "svm_tfidf.pkl")
     texts, labels = [], []
     for label, token in zip(CLASS_ORDER, ("awful", "ordinary", "excellent")):
         for index in range(12):
             texts.append(f"{token} classroom experience {index}")
             labels.append(label)
-    service = XGBoostService()
-    metrics = service.train(texts, labels)
+    split = int(len(texts) * 0.7)
+    metrics = svm_service.train_on_split(
+        texts[:split], labels[:split],
+        test_texts=texts[split:], test_labels=labels[split:],
+    )
     assert metrics["labels"] == list(CLASS_ORDER)
     assert len(metrics["confusion_matrix"]) == 3
-    assert (tmp_path / "xgb.pkl").exists()
-    loaded = XGBoostService()
-    label, confidence, probabilities = loaded.predict("excellent classroom experience")
+    assert (tmp_path / "svm.pkl").exists()
+    label, confidence, probabilities = svm_service.predict("excellent classroom experience")
     assert label in CLASS_ORDER
     assert 0 <= confidence <= 1
     assert len(probabilities) == 3
     assert abs(sum(probabilities) - 1) < 1e-6
-    assert "classes" in json.loads((tmp_path / "labels.json").read_text())
 
 
-def test_xgboost_tfidf_excludes_test_only_vocabulary(tmp_path, monkeypatch):
+def test_classical_tfidf_excludes_test_only_vocabulary(tmp_path, monkeypatch):
     from app.core.config import settings
+    from app.services.classical_service import naive_bayes_service
 
-    monkeypatch.setattr(settings, "XGB_MODEL_PATH", tmp_path / "xgb.pkl")
-    monkeypatch.setattr(settings, "XGB_TFIDF_VECTORIZER_PATH", tmp_path / "tfidf.pkl")
-    monkeypatch.setattr(settings, "XGB_LABEL_ENCODER_PATH", tmp_path / "labels.json")
+    monkeypatch.setattr(settings, "NAIVE_BAYES_MODEL_PATH", tmp_path / "nb.pkl")
+    monkeypatch.setattr(settings, "NAIVE_BAYES_VECTORIZER_PATH", tmp_path / "nb_tfidf.pkl")
     train_texts = ["bad train", "neutral train", "good train"] * 3
     train_labels = ["Negative", "Neutral", "Positive"] * 3
-    val_texts = ["bad validation", "neutral validation", "good validation"]
-    val_labels = ["Negative", "Neutral", "Positive"]
     test_texts = ["bad testonlytoken", "neutral testonlytoken", "good testonlytoken"]
     test_labels = ["Negative", "Neutral", "Positive"]
-    splits = iter([(train_texts + val_texts, test_texts, train_labels + val_labels, test_labels), (train_texts, val_texts, train_labels, val_labels)])
-    monkeypatch.setattr("app.services.xgboost_service.train_test_split", lambda *args, **kwargs: next(splits))
-    service = XGBoostService()
-    service.train(train_texts + val_texts + test_texts, train_labels + val_labels + test_labels)
-    assert "testonlytoken" not in service.vectorizer.vocabulary_
+    naive_bayes_service.train_on_split(
+        train_texts, train_labels,
+        test_texts=test_texts, test_labels=test_labels,
+    )
+    # Leakage-safe: the TF-IDF vectorizer is fitted on the train split only,
+    # so test-only vocabulary never enters the feature space.
+    assert "testonlytoken" not in naive_bayes_service.vectorizer.vocabulary_
+
+
+def test_logistic_regression_predict_probabilities_sum_to_one(tmp_path, monkeypatch):
+    from app.core.config import settings
+    from app.services.classical_service import logistic_regression_service
+    from app.services.ensembles import CLASS_ORDER
+
+    monkeypatch.setattr(settings, "LOGREG_MODEL_PATH", tmp_path / "logreg.pkl")
+    monkeypatch.setattr(settings, "LOGREG_VECTORIZER_PATH", tmp_path / "logreg_tfidf.pkl")
+    texts, labels = [], []
+    for label, token in zip(CLASS_ORDER, ("awful", "ordinary", "excellent")):
+        for index in range(12):
+            texts.append(f"{token} classroom experience {index}")
+            labels.append(label)
+    split = int(len(texts) * 0.7)
+    logistic_regression_service.train_on_split(
+        texts[:split], labels[:split],
+        test_texts=texts[split:], test_labels=labels[split:],
+    )
+    label, confidence, probabilities = logistic_regression_service.predict("excellent classroom experience")
+    assert label in CLASS_ORDER
+    assert 0 <= confidence <= 1
+    assert abs(sum(probabilities) - 1) < 1e-6
 import json
 
 from app.models.prediction import AlgorithmName
 from app.models.training_history import TrainingAlgorithm
-from app.services.xgboost_service import CLASS_ORDER, XGBoostService
-from app.services.transformer_service import TransformerSentimentService
-
-
-def test_transformer_probability_mapping_uses_application_order():
-    probabilities = TransformerSentimentService.align_probabilities(
-        [0.7, 0.2, 0.1], {0: "POSITIVE", 1: "NEGATIVE", 2: "NEUTRAL"}
-    )
-    assert probabilities == [0.2, 0.1, 0.7]
-    assert abs(sum(probabilities) - 1) < 1e-9
 
 
 def test_approved_active_models_are_registered():
     active = {item.value for item in TrainingAlgorithm}
-    assert {"XGBoost", "DeBERTa", "RoBERTa", "Ensemble"}.issubset(active)
-    assert {"XGBoost", "DeBERTa", "RoBERTa", "Ensemble (soft vote)"}.issubset({item.value for item in AlgorithmName})
+    assert {"SVM", "Naive Bayes", "Logistic Regression", "Multilingual MiniLM"}.issubset(active)
+    assert {"SVM", "Naive Bayes", "Logistic Regression", "Multilingual MiniLM"}.issubset({item.value for item in AlgorithmName})

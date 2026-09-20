@@ -1,16 +1,11 @@
-"""Active prediction pipeline for the approved research model set.
 
-The runtime honours the approach selected (and persisted) during training:
-either an individual approved model (XGBoost / DeBERTa / RoBERTa / MiniLM) or
-the approved weighted soft-voting ensemble (mDeBERTa + XLM-RoBERTa). Ensemble
-weights are the values selected during training and persisted in
-``model_metadata.json`` — they are never silently replaced by configuration
-defaults.
+"""Active prediction pipeline for the approved research model set.
 
 The LIVE production sentiment model is Multilingual MiniLM — the only live
 model. There is no inference fallback: if MiniLM cannot serve, the pipeline
-raises and the API returns a clean 503. The transformers remain offline for
-the free-tier RAM budget, and XGBoost is no longer run in the request path.
+raises and the API returns a clean 503. The classical research models
+(SVM, Naive Bayes, Logistic Regression) are offline-only and are never run
+in the request path.
 """
 from __future__ import annotations
 
@@ -23,46 +18,27 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.training_history import TrainingHistory
-from app.services.ensembles import (
-    CLASS_ORDER,
-    APPROVED_APPROACHES,
-    ENSEMBLES,
-    members_of,
-    normalize_weights,
-    soft_vote,
-)
+from app.services.ensembles import CLASS_ORDER, APPROVED_APPROACHES
 from app.services.minilm_service import minilm_service
 from app.utils.logger import logger
 
-# Multilingual MiniLM is the ONLY live model. The retired services (XGBoost,
-# mDeBERTa, XLM-RoBERTa) are intentionally NOT imported here — importing their
-# modules constructs singletons that load model weights at startup. They are
-# only imported lazily by the offline training paths in training.py.
-
-# LIVE inference model: Multilingual MiniLM (small quantized footprint fits the
-# free-tier RAM budget) — the ONLY live model. There is deliberately no
-# fallback: if its artifacts are missing or a prediction fails, the pipeline
-# raises and the API surfaces a clean 503 instead of silently serving a
-# different model. Legacy "ensemble" aliases resolve to the live single model.
-_MODEL_KEYS = ("Multilingual MiniLM",)
-_ENSEMBLE_NAME = "Multilingual MiniLM"
-_XGB_COMPAT_NAME = "XGBoost"
+# Multilingual MiniLM is the ONLY live model. The classical research services
+# (SVM, Naive Bayes, Logistic Regression) are intentionally NOT imported here —
+# they are only used by the offline training paths in training.py.
+LIVE_MODEL_NAME = "Multilingual MiniLM"
 
 
-def _usable(label: Optional[str], conf: Optional[float], probs: Optional[list]) -> bool:
-    """A model output is only usable if the label is a known class AND every
-    numeric value is finite. ``float('nan')`` passes ``is not None`` checks
-    but is stored as NULL by SQLite and breaks NOT NULL constraints, and an
-    NaN confidence once leaked into the predictions table as exactly that
+def _usable(label: Optional[str], conf: Optional[float]) -> bool:
+    """A model output is only usable if the label is a known class AND the
+    confidence is finite. ``float('nan')`` passes ``is not None`` checks but
+    is stored as NULL by SQLite and breaks NOT NULL constraints, and an NaN
+    confidence once leaked into the predictions table as exactly that
     (IntegrityError on predictions.confidence_score). NaN/infinite outputs
     are treated as model failure, same as an exception."""
     if label not in CLASS_ORDER:
         return False
-    values = [conf, *(probs or [])]
     try:
-        return all(
-            isinstance(v, (int, float)) and math.isfinite(float(v)) for v in values
-        )
+        return conf is not None and math.isfinite(float(conf))
     except (TypeError, ValueError):
         return False
 
@@ -80,194 +56,96 @@ def _load_deployment_metadata() -> dict:
 def _normalize_algorithm_name(value: str | None) -> str:
     """Map a stored approach name to a canonical approved approach name.
 
-    Legacy aliases (``Ensemble`` / ``Ensemble (soft vote)``) map to the live
-    single model (XGBoost); any other unrecognised name passes through unchanged
-    so the caller can ignore non-approved (legacy) values.
-    """
+    Any unrecognised name passes through unchanged so the caller can ignore
+    non-approved (legacy) values."""
     if value is None:
         return ""
-    normalized = value.strip()
-    aliases = {
-        "Ensemble": _ENSEMBLE_NAME,
-        "Ensemble (soft vote)": _ENSEMBLE_NAME,
-    }
-    return aliases.get(normalized, normalized)
+    return value.strip()
 
 
 def get_production_algorithm(db: Session) -> str:
     """Return the currently selected approach (approved only).
 
-    Uses the persisted ``is_production_model`` row and defaults to XGBoost
-    when no database selection exists. Deployment metadata is an artifact
-    manifest, not an authorization source for changing the active model.
-    Legacy rows are ignored so they cannot gate active inference.
-    """
-    row = db.query(TrainingHistory).filter(TrainingHistory.is_production_model.is_(True)).first()
-    if row:
-        raw = row.algorithm.value if row.algorithm else None
-        name = _normalize_algorithm_name(raw)
+    Uses the persisted ``is_production_model`` row and defaults to
+    Multilingual MiniLM when no database selection exists. Deployment
+    metadata is an artifact-level hint only — the database wins."""
+    current = (
+        db.query(TrainingHistory)
+        .filter(TrainingHistory.is_production_model.is_(True))
+        .first()
+    )
+    if current is not None:
+        name = _normalize_algorithm_name(current.algorithm.value)
         if name in APPROVED_APPROACHES:
             return name
-
-    # No persisted selection: default to the live production model
-    # (Multilingual MiniLM).
-    return _ENSEMBLE_NAME
+    metadata = _load_deployment_metadata()
+    name = _normalize_algorithm_name(metadata.get("production_model"))
+    if name in APPROVED_APPROACHES:
+        return name
+    return LIVE_MODEL_NAME
 
 
 def get_deployment_config(db: Session) -> dict:
-    """Describe the currently selected approach.
+    """Return the inference configuration for the selected production model.
 
-    For an ensemble this includes the persisted member models and the
-    persisted (trained) weights needed to reconstruct it at inference time.
-    """
-    name = get_production_algorithm(db)
-    metadata = _load_deployment_metadata()
-    if name in ENSEMBLES:
-        members = metadata.get("ensemble_members") or members_of(name)
-        stored_weights = metadata.get("ensemble_weights") or {}
-        weights = normalize_weights(list(members), stored_weights)
-        return {
-            "production_model": name,
-            "approach_type": "ensemble",
-            "ensemble_members": list(members),
-            "ensemble_weights": weights,
-        }
-    return {"production_model": name, "approach_type": "single"}
-
+    Multilingual MiniLM is the only live model, so the config is always a
+    single-model configuration."""
+    return {
+        "production_model": get_production_algorithm(db),
+        "approach_type": "single",
+        "ensemble_members": [],
+        "ensemble_weights": {},
+    }
 
 
 def run_prediction_pipeline(db: Session, text: str) -> dict:
-    """Run the approved research model set on ``text`` and return per-model
-    and official payloads.
+    """Run the live prediction pipeline for one comment.
 
-    The official result follows the approach selected during training. When
-    an ensemble is selected it is reconstructed here from its component
-    models and the persisted weights via weighted soft voting.
+    Only Multilingual MiniLM performs inference. The classical research
+    models (SVM, Naive Bayes, Logistic Regression) never run in the request
+    path — their result fields are always None. There is no inference
+    fallback: if MiniLM cannot serve, a RuntimeError is raised and the API
+    returns a clean 503.
     """
     start = time.perf_counter()
 
-    # Backward-compat report fields: the legacy per-model outputs are None in
-    # the live path (XGBoost is no longer run per-request; the transformers
-    # stay offline for the RAM budget).
-    xgb_label: Optional[str] = None
-    xgb_conf: Optional[float] = None
-    xgb_probs: Optional[list[float]] = None
-    deberta_label: Optional[str] = None
-    deberta_conf: Optional[float] = None
-    deberta_probs: Optional[list[float]] = None
-    roberta_label: Optional[str] = None
-    roberta_conf: Optional[float] = None
-    roberta_probs: Optional[list[float]] = None
-
-    # LIVE production model: Multilingual MiniLM (quantized ONNX) — the only
-    # live model. If its artifacts are missing, a prediction fails, or this
-    # host lacks the RAM the ONNX path needs (see
-    # MiniLMService.can_run_live_inference), the pipeline raises and the API
-    # returns a clean 503. No silent fallback to another model.
+    # ----- LIVE model: Multilingual MiniLM --------------------------------
     minilm_label: Optional[str] = None
     minilm_conf: Optional[float] = None
     minilm_probs: Optional[list[float]] = None
-
     if minilm_service.can_run_live_inference():
         try:
             minilm_label, minilm_conf, minilm_probs = minilm_service.predict(text)
         except Exception as exc:  # noqa: BLE001
-            logger.error(f"MiniLM prediction failed: {exc}")
-        if minilm_label is not None and not _usable(minilm_label, minilm_conf, minilm_probs):
-            logger.error("MiniLM returned an unusable output (NaN/invalid).")
-            minilm_label, minilm_conf, minilm_probs = None, None, None
-    else:
-        logger.error("MiniLM not serving live inference on this host.")
+            logger.error("Multilingual MiniLM inference failed: %s", exc)
 
-    active_probs = {
-        "Multilingual MiniLM": minilm_probs,
-    }
-    active_candidates = {
-        "Multilingual MiniLM": (minilm_label, minilm_conf),
-    }
+    # ----- Classical research models: NOT run in the request path ---------
+    svm_label = svm_conf = None
+    naive_bayes_label = naive_bayes_conf = None
+    logreg_label = logreg_conf = None
 
-    # Backward-compat "ensemble" report: with a single live member the soft
-    # vote degenerates to that member's output (weight 1.0), using the
-    # *persisted* weights when the stored production model matches, otherwise
-    # equal member weights.
-    metadata = _load_deployment_metadata()
-    if metadata.get("production_model") == _ENSEMBLE_NAME:
-        ensemble_weights = normalize_weights(list(_MODEL_KEYS), metadata.get("ensemble_weights"))
-    else:
-        ensemble_weights = normalize_weights(list(_MODEL_KEYS), {})
+    official_label = minilm_label
+    official_conf = minilm_conf
+    production_algo = LIVE_MODEL_NAME
 
-    ensemble_label: Optional[str] = None
-    ensemble_conf: Optional[float] = None
-    ensemble_probs: Optional[list[float]] = None
-    if all(active_probs[key] is not None for key in _MODEL_KEYS):
-        ensemble_label, ensemble_conf, ensemble_probs = soft_vote(
-            {key: active_probs[key] for key in _MODEL_KEYS},
-            ensemble_weights,
-            list(_MODEL_KEYS),
-        )
-
-    # Official result follows the selected (persisted) approach.
-    cfg = get_deployment_config(db)
-    production_algo = cfg["production_model"]
-    official_label: Optional[str] = None
-    official_conf: Optional[float] = None
-
-    if cfg["approach_type"] == "ensemble":
-        member_probs = {m: active_probs.get(m) for m in cfg["ensemble_members"]}
-        if all(value is not None for value in member_probs.values()):
-            official_label, official_conf, _ = soft_vote(
-                member_probs,
-                cfg["ensemble_weights"],
-                cfg["ensemble_members"],
-            )
-        else:
-            production_algo = None  # selected ensemble not reconstructable
-    elif cfg["approach_type"] == "single":
-        lookup_name = (
-            "Multilingual MiniLM"
-            if production_algo == _XGB_COMPAT_NAME
-            else production_algo
-        )
-        official_label, official_conf = active_candidates.get(lookup_name, (None, None))
-
-    # No fallback chain: MiniLM is the only live model. If its output is
-    # missing, fall through to the compat ensemble field (degenerates to the
-    # same single-model result) and then a clean 503.
-
-    if official_label is None and ensemble_label is not None:
-        official_label = ensemble_label
-        official_conf = ensemble_conf
-        production_algo = _ENSEMBLE_NAME
-
-    if official_label is None:
+    if not _usable(official_label, official_conf):
         raise RuntimeError(
-            "No sentiment model is currently available. Train at least one model via /ml/train."
-        )
-
-    # Final guard: the persisted Prediction row declares confidence_score
-    # NOT NULL, and SQLite stores NaN as NULL — so an official result with a
-    # non-finite confidence must never be returned (it would crash the
-    # submission with an IntegrityError). Fall through to a clean 503 instead.
-    if not _usable(official_label, official_conf, None):
-        raise RuntimeError(
-            "All available sentiment models returned invalid outputs. "
-            "Check the server logs and retrain or re-import the model artifacts."
+            "Multilingual MiniLM (the only live sentiment model) is unavailable. "
+            "Check the server logs and restart, or disable the memory guard via "
+            "MINILM_MIN_RAM_MB=0 if the host has enough RAM."
         )
 
     processing_time_ms = (time.perf_counter() - start) * 1000
 
     return {
-        "xgb_prediction": xgb_label,
-        "xgb_confidence": xgb_conf,
-        "deberta_prediction": deberta_label,
-        "deberta_confidence": deberta_conf,
-        "roberta_prediction": roberta_label,
-        "roberta_confidence": roberta_conf,
+        "svm_prediction": svm_label,
+        "svm_confidence": svm_conf,
+        "naive_bayes_prediction": naive_bayes_label,
+        "naive_bayes_confidence": naive_bayes_conf,
+        "logistic_regression_prediction": logreg_label,
+        "logistic_regression_confidence": logreg_conf,
         "minilm_prediction": minilm_label,
         "minilm_confidence": minilm_conf,
-        "ensemble_prediction": ensemble_label,
-        "ensemble_confidence": ensemble_conf,
-        "ensemble_probabilities": ensemble_probs,
         "official_prediction": official_label,
         "algorithm_used": production_algo,
         "confidence_score": official_conf,

@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 import csv
 import io
 import zipfile
@@ -75,10 +75,10 @@ async def upload_dataset(
 
     return {"rows": len(rows), "columns": reader.fieldnames, "message": "Dataset uploaded successfully."}
 
-# The ONLY live production model. Imported Colab approaches (XGBoost (TF-IDF),
-# mDeBERTa, XLM-RoBERTa, mDeBERTa + XLM-RoBERTa ensemble) are retained as
-# historical TrainingHistory rows — they appear in the model comparison but
-# are excluded from production rollback and live inference.
+# The ONLY live production model. Imported Colab approaches (SVM, Naive
+# Bayes, Logistic Regression) are retained as historical TrainingHistory
+# rows — they appear in the model comparison but are excluded from
+# production rollback and live inference.
 APPROVED_ALGORITHMS = (
     TrainingAlgorithm.MINILM,
 )
@@ -130,10 +130,11 @@ async def import_results(
 ):
     """Import metrics produced by a Colab training run.
 
-    Only the metrics JSON is accepted; model weight archives for the retired
-    models (XGBoost, mDeBERTa, XLM-RoBERTa) are no longer supported, since
-    Multilingual MiniLM is the only live model and its weights are fetched
-        directly from the private Hugging Face Hub repo at startup.
+            Only the metrics JSON is accepted; model weight archives for the retired
+    models (XGBoost, mDeBERTa, XLM-RoBERTa) are no longer supported. The
+    approved set is now SVM, Naive Bayes, Logistic Regression and
+    Multilingual MiniLM — but only MiniLM is the live model and its weights
+    are fetched directly from the private Hugging Face Hub repo at startup.
     """
     try:
         raw = await metrics_json.read()
@@ -180,9 +181,9 @@ def get_model_performance(db: Session = Depends(get_db), current_user: User = De
     """Latest run per approach that has training-history rows — the Admin
     Panel comparison table.
 
-    Approaches imported from a Colab metrics JSON (XGBoost (TF-IDF), mDeBERTa,
-    XLM-RoBERTa and the mDeBERTa + XLM-RoBERTa ensemble) appear here as
-    research results alongside Multilingual MiniLM. ``best_model`` is always
+    Approaches imported from a Colab metrics JSON (SVM, Naive Bayes,
+    Logistic Regression) appear here as research results alongside
+    Multilingual MiniLM. ``best_model`` is always
     the LIVE production model (Multilingual MiniLM) — legacy/imported rows are
     display-only and can never serve live inference.
     """
@@ -269,8 +270,8 @@ def rollback_production_model(
     current_user: User = Depends(require_admin),
 ):
     """Rolls back production to a previous Multilingual MiniLM training run.
-    Imported legacy approaches (XGBoost (TF-IDF), mDeBERTa, XLM-RoBERTa and
-    the approved ensembles) are research results only and are NOT eligible
+    Imported legacy approaches (SVM, Naive Bayes, Logistic Regression) are
+    research results only and are NOT eligible
     for live production."""
     target = db.query(TrainingHistory).filter(TrainingHistory.id == training_history_id).first()
     if not target:
@@ -286,9 +287,8 @@ def rollback_production_model(
     target.is_production_model = True
     db.commit()
 
-    # Keep model_metadata.json's production-model section (used to
-    # reconstruct ensembles at inference time) in sync with this rollback,
-    # using the rolled-back approach's own trained weights.
+    # Keep model_metadata.json's production-model section in sync with this
+    # rollback.
     sync_deployment_metadata(db, target.algorithm.value)
 
     return {"message": f"Production model rolled back to {target.algorithm.value} (run {target.id})."}
@@ -298,43 +298,40 @@ def rollback_production_model(
 def download_trained_model(algorithm: TrainingAlgorithm, current_user: User = Depends(require_admin)):
     """Expose the approved trained artifacts for download.
 
-    XGBoost serializes to a single ``.pkl`` or ``.joblib`` file. DeBERTa / RoBERTa are
-    HuggingFace model directories. Ensembles are reconstructed at runtime
-    from their member models and persisted weights, so they are described
-    via the deployment metadata rather than a single file.
+    The classical research models (SVM / Naive Bayes / Logistic Regression)
+    serialize to a single ``.pkl`` (model) plus a paired TF-IDF vectorizer.
+    Multilingual MiniLM is an ONNX directory under ``app/ml/minilm_sentiment``.
     """
     if algorithm not in APPROVED_ALGORITHMS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Legacy models (SVM / Random Forest / Naive Bayes / BERT) are no longer downloadable as active artifacts.",
+            detail="Only the approved model set (SVM, Naive Bayes, Logistic Regression, Multilingual MiniLM) is downloadable.",
         )
 
-    if algorithm == TrainingAlgorithm.XGBOOST_TFDF:
-        path = Path(settings.XGB_MODEL_PATH)
-        if not path.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="XGBoost model artifact not found on disk.")
+    CLASSICAL_PATHS = {
+        TrainingAlgorithm.SVM: (settings.SVM_MODEL_PATH, settings.SVM_VECTORIZER_PATH),
+        TrainingAlgorithm.NAIVE_BAYES: (settings.NAIVE_BAYES_MODEL_PATH, settings.NAIVE_BAYES_VECTORIZER_PATH),
+        TrainingAlgorithm.LOGISTIC_REGRESSION: (settings.LOGREG_MODEL_PATH, settings.LOGREG_VECTORIZER_PATH),
+    }
+    if algorithm in CLASSICAL_PATHS:
+        model_path, vectorizer_path = CLASSICAL_PATHS[algorithm]
+        if not model_path.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model artifact not found on disk.")
         return JSONResponse({
             "algorithm": algorithm.value,
-            "artifact_type": "joblib" if path.is_file() else "directory",
-            "path": str(path),
-            "note": "XGBoost models are stored as a Joblib file; legacy TF-DF SavedModel directories are also supported.",
+            "artifact_type": "joblib",
+            "path": str(model_path),
+            "vectorizer_path": str(vectorizer_path),
+            "note": "Classical models are stored as a Joblib file with a paired TF-IDF vectorizer pickle.",
         })
 
-    if algorithm in (TrainingAlgorithm.MDEBERTA, TrainingAlgorithm.XLM_ROBERTA):
-        path = Path(settings.MDEBERTA_MODEL_PATH if algorithm == TrainingAlgorithm.MDEBERTA else settings.XLM_ROBERTA_MODEL_PATH)
-        if not path.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transformer model directory not found on disk.")
-        return JSONResponse({
-            "algorithm": algorithm.value,
-            "artifact_type": "directory",
-            "path": str(path),
-            "note": "Transformer models are stored as a directory of HuggingFace artifacts under app/ml/.",
-        })
-
-    # Ensemble approaches: reconstructed at runtime from members + weights.
+    # Multilingual MiniLM: ONNX artifacts directory.
+    path = Path(settings.MINILM_MODEL_PATH)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="MiniLM ONNX artifact directory not found on disk.")
     return JSONResponse({
         "algorithm": algorithm.value,
-        "artifact_type": "ensemble",
-        "note": "Ensembles are reconstructed at runtime from their member models and the persisted ensemble weights.",
-        "deployment_metadata_path": str(settings.MODEL_METADATA_PATH),
+        "artifact_type": "directory",
+        "path": str(path),
+        "note": "Multilingual MiniLM is stored as an ONNX directory of artifacts under app/ml/.",
     })

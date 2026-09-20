@@ -296,12 +296,14 @@ def submit_evaluation(
     if prediction_result is not None:
         prediction = Prediction(
             evaluation_id=evaluation.id,
-            xgb_prediction=prediction_result["xgb_prediction"],
-            xgb_confidence=prediction_result["xgb_confidence"],
-            deberta_prediction=prediction_result["deberta_prediction"],
-            deberta_confidence=prediction_result["deberta_confidence"],
-            roberta_prediction=prediction_result["roberta_prediction"],
-            roberta_confidence=prediction_result["roberta_confidence"],
+            # Research-set per-model fields — never run live, always None;
+            # the official prediction is Multilingual MiniLM.
+            svm_prediction=prediction_result["svm_prediction"],
+            svm_confidence=prediction_result["svm_confidence"],
+            naive_bayes_prediction=prediction_result["naive_bayes_prediction"],
+            naive_bayes_confidence=prediction_result["naive_bayes_confidence"],
+            logistic_regression_prediction=prediction_result["logistic_regression_prediction"],
+            logistic_regression_confidence=prediction_result["logistic_regression_confidence"],
             official_prediction=prediction_result["official_prediction"],
             algorithm_used=prediction_result["algorithm_used"],
             confidence_score=prediction_result["confidence_score"],

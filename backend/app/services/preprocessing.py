@@ -3,8 +3,8 @@ Text preprocessing service.
 
 Two preprocessing paths are exposed:
 
-* ``clean_for_classical(text, remove_stopwords=False)``  -> used by XGBoost
-  (TF-IDF feature space). New behaviour: preserves repeated characters
+* ``clean_for_classical(text, remove_stopwords=False)``  -> used by the
+  classical TF-IDF models (SVM, Naive Bayes, Logistic Regression). New behaviour: preserves repeated characters
   (collapsed to <=3), preserves punctuation runs as feature tokens
   (EXCL, EXCL2, QSTN, QEXCL, ELLIP), preserves numbers as a NUM token,
   preserves emoticons as EMO_POS / EMO_NEG tokens, preserves all-caps
@@ -49,8 +49,8 @@ _FALLBACK_STOPWORDS: set[str] = {
 # ---------------------------------------------------------------------------
 
 PREPROCESSING_NOTES: str = """
-Preprocessing decisions (XGBoost / classical path)
-==================================================
+Preprocessing decisions (classical TF-IDF path)
+=================================================
 
 1. URLs (`http(s)://...`, `www.`) and HTML tags are removed. They are
    never sentiment-bearing in this domain and only inflate the
@@ -292,7 +292,7 @@ def clean_for_classical(
     text: str,
     remove_stopwords: bool = False,
 ) -> str:
-    """Preprocess ``text`` for the classical / XGBoost pipeline.
+    """Preprocess ``text`` for the classical (SVM/Naive Bayes/LogReg) pipeline.
 
     Parameters
     ----------

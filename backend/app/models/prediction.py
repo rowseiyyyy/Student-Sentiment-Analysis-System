@@ -16,25 +16,11 @@ class SentimentLabel(str, enum.Enum):
 
 
 class AlgorithmName(str, enum.Enum):
-    XGBOOST = "XGBoost"
-    XGBOOST_TFDF = "XGBoost (TF-IDF)"
-    MDEBERTA = "mDeBERTa"
-    XLM_ROBERTA = "XLM-RoBERTa"
+    # Approved research models (the 4-model set).
+    SVM = "SVM"
+    NAIVE_BAYES = "Naive Bayes"
+    LOGISTIC_REGRESSION = "Logistic Regression"
     MINILM = "Multilingual MiniLM"
-    LEGACY_XGBOOST = "XGBoost"
-    DEBERTA = "DeBERTa"
-    ROBERTA = "RoBERTa"
-    LEGACY_ENSEMBLE_SOFT_VOTE = "Ensemble (soft vote)"
-    ENSEMBLE_XGB_DEBERTA = "XGBoost + DeBERTa"
-    ENSEMBLE_DEBERTA_ROBERTA = "DeBERTa + RoBERTa"
-    ENSEMBLE_ROBERTA_XGB = "RoBERTa + XGBoost"
-    ENSEMBLE_XGB_DEBERTA_ROBERTA = "XGBoost + DeBERTa + RoBERTa"
-    ENSEMBLE_TFDF_MDEBERTA = "XGBoost (TF-IDF) + mDeBERTa"
-    ENSEMBLE_MDEBERTA_XLM = "mDeBERTa + XLM-RoBERTa"
-    ENSEMBLE_XLM_TFDF = "XLM-RoBERTa + XGBoost (TF-IDF)"
-    ENSEMBLE_TFDF_MDEBERTA_XLM = "XGBoost (TF-IDF) + mDeBERTa + XLM-RoBERTa"
-    ENSEMBLE_TFIDF_XLM = "XGBoost (TF-IDF) + XLM-RoBERTa"
-    ENSEMBLE_AVERAGE_ALL = "Average (All Models)"
 
 
 class Prediction(Base):
@@ -45,15 +31,16 @@ class Prediction(Base):
         String(36), ForeignKey("evaluations.id", ondelete="CASCADE"), unique=True, nullable=False
     )
 
-    # ----- Per-model predictions -----
-    xgb_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
-    xgb_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # ----- Per-model predictions (research set; MiniLM is the only live
+    # model and is not stored per-row here — only the official result is) -----
+    svm_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
+    svm_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    deberta_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
-    deberta_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    naive_bayes_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
+    naive_bayes_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    roberta_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
-    roberta_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    logistic_regression_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
+    logistic_regression_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Official (production) prediction
     official_prediction: Mapped[SentimentLabel] = mapped_column(Enum(SentimentLabel), nullable=False)

@@ -1,13 +1,11 @@
 """Re-save the classical ML artifacts in a version-safe format.
 
-Fixes the startup warnings caused by pickled models that were created with
-different library versions than the running environment:
-
-  - UserWarning: "XGBoost model was saved with ... a newer version ...
-    use Booster.save_model()"      -> re-saved as native JSON via
-    XGBClassifier.save_model() (the format the service now prefers).
-  - InconsistentVersionWarning (sklearn): TfidfVectorizer pickled with a
-    different scikit-learn -> re-pickled with the *current* environment.
+The approved classical research models (SVM, Naive Bayes, Logistic
+Regression) are persisted as joblib pickles (each bundling its fitted
+TF-IDF vectorizer with the classifier). Pickles created with different
+scikit-learn versions than the running environment surface
+InconsistentVersionWarning on load — this script re-pickles every
+classical artifact with the *current* environment so it loads cleanly.
 
 Usage (from the backend/ directory, venv activated):
     python scripts/resave_models.py
@@ -23,83 +21,62 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import joblib  # noqa: E402
 import sklearn  # noqa: E402
-import xgboost  # noqa: E402
-from sklearn.feature_extraction.text import TfidfVectorizer  # noqa: E402
-from xgboost import XGBClassifier  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
 
 
 def main() -> int:
-    print(f"Environment: scikit-learn {sklearn.__version__}, xgboost {xgboost.__version__}")
+    print(f"Environment: scikit-learn {sklearn.__version__}")
 
-    pkl_path = Path(settings.XGB_MODEL_PATH)
-    json_path = Path(settings.XGB_MODEL_JSON_PATH)
-    vec_path = Path(settings.XGB_TFIDF_VECTORIZER_PATH)
+    artifact_paths = (
+        Path(settings.SVM_MODEL_PATH),
+        Path(settings.NAIVE_BAYES_MODEL_PATH),
+        Path(settings.LOGREG_MODEL_PATH),
+    )
 
-    if not pkl_path.exists():
-        print(f"ERROR: pickled model not found at {pkl_path} — nothing to convert.")
+    missing = [str(p) for p in artifact_paths if not p.exists()]
+    if missing:
+        print("ERROR: classical model artifacts not found (train first):")
+        for p in missing:
+            print(f"  - {p}")
         return 1
-    if not vec_path.exists():
-        print(f"ERROR: TF-IDF vectorizer not found at {vec_path} — nothing to convert.")
-        return 1
-
-    # --- Load with warnings surfaced (they're the thing we're fixing) ---
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        model: XGBClassifier = joblib.load(pkl_path)
-        vectorizer: TfidfVectorizer = joblib.load(vec_path)
-    for w in caught:
-        print(f"  (expected on old artifacts) {w.category.__name__}: {w.message}")
-
-    if not isinstance(model, XGBClassifier):
-        print(f"ERROR: {pkl_path.name} is a {type(model).__name__}, expected XGBClassifier.")
-        return 1
-    if not hasattr(model, "save_model"):
-        print("ERROR: model has no save_model(); cannot convert to native format.")
-        return 1
-
-    # --- 1) Version-safe native XGBoost format (Booster.save_model / JSON) ---
-    model.save_model(json_path)
-    print(f"Wrote native XGBoost model: {json_path}")
-
-    # Keep a pickle copy for backward compatibility with older deployments,
-    # but re-dump it with the CURRENT library versions so it loads cleanly here.
-    joblib.dump(model, pkl_path)
-    print(f"Re-pickled model with current xgboost: {pkl_path}")
-
-    # --- 2) Re-pickle sklearn objects with the current scikit-learn ---
-    joblib.dump(vectorizer, vec_path)
-    print(f"Re-pickled vectorizer with current scikit-learn: {vec_path}")
-
-    # --- 3) Verify: reload everything with warnings treated as errors ---
-    fresh = XGBClassifier()
-    fresh.load_model(json_path)
-    vec2: TfidfVectorizer = joblib.load(vec_path)
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")  # any warning => failure
-        probe_model: XGBClassifier = joblib.load(pkl_path)
-        probe_vec: TfidfVectorizer = joblib.load(vec_path)
-
-    # --- 4) Sanity check: same predictions before and after conversion ---
-    sample = "The professor explains lessons clearly and is very approachable."
-    import numpy as np
 
     from app.services.preprocessing import clean_for_classical
 
-    old_proba = model.predict_proba(vectorizer.transform([clean_for_classical(sample)]))[0]
-    new_proba = fresh.predict_proba(vec2.transform([clean_for_classical(sample)]))[0]
-    if not np.allclose(old_proba, new_proba, atol=1e-6):
-        print("ERROR: predictions differ after conversion!")
-        print(f"  before: {old_proba}")
-        print(f"  after:  {new_proba}")
-        return 1
-    print(f"Prediction check OK: {np.round(new_proba, 4).tolist()}")
+    sample = "The professor explains lessons clearly and is very approachable."
 
-    # Silence the deliberately-kept probe objects.
-    _ = (probe_model, probe_vec)
+    for artifact_path in artifact_paths:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            model = joblib.load(artifact_path)
+        for w in caught:
+            print(f"  (expected on old artifacts) {w.category.__name__}: {w.message}")
+
+        if not hasattr(model, "predict_proba"):
+            print(f"ERROR: {artifact_path.name} provides no predict_proba() — not a classifier pipeline.")
+            return 1
+
+        before = model.predict_proba([clean_for_classical(sample)])[0]
+
+        joblib.dump(model, artifact_path)
+        print(f"Re-pickled with current scikit-learn: {artifact_path}")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # any warning => failure
+            probe = joblib.load(artifact_path)
+
+        import numpy as np
+
+        after = probe.predict_proba([clean_for_classical(sample)])[0]
+        if not np.allclose(before, after, atol=1e-6):
+            print(f"ERROR: predictions differ after conversion for {artifact_path.name}!")
+            print(f"  before: {before}")
+            print(f"  after:  {after}")
+            return 1
+        print(f"Prediction check OK for {artifact_path.name}: {np.round(after, 4).tolist()}")
+
     print("\nDone — models are now version-safe. Restart the API and the")
-    print("pickle/xgboost/sklearn startup warnings will be gone.")
+    print("pickle/sklearn startup warnings will be gone.")
     return 0
 
 

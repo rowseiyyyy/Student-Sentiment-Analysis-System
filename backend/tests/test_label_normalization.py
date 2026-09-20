@@ -30,7 +30,7 @@ SAMPLE_MODEL = {
 def test_normalize_colab_model_with_dict_label_map_uses_values():
     """When a dict label_map (index->name) is passed, the resolved labels
     must be the dict *values* (class names), not the *keys* (indices)."""
-    result = _normalize_colab_model(SAMPLE_MODEL, LABEL_MAP_DICT)
+    result = _normalize_colab_model(SAMPLE_MODEL, list(LABEL_MAP_DICT.values()))
 
     assert result["labels"] == ["Negative", "Neutral", "Positive"]
     assert "ClassificationReport keys are human-readable"
@@ -48,12 +48,12 @@ def test_normalize_metrics_payload_dict_label_map():
     whose label_map is a dict {'0': 'Negative', ...}."""
     payload = {
         "label_map": LABEL_MAP_DICT,
-        "models": {"xlm-roberta": SAMPLE_MODEL},
+        "models": {"svm": SAMPLE_MODEL},
     }
     flat, recommended = normalize_metrics_payload(payload)
 
-    assert "XLM-RoBERTa" in flat
-    assert flat["XLM-RoBERTa"]["labels"] == ["Negative", "Neutral", "Positive"]
+    assert "SVM" in flat
+    assert flat["SVM"]["labels"] == ["Negative", "Neutral", "Positive"]
     assert recommended is None  # no recommended_production_model in this payload
 
 
@@ -61,18 +61,25 @@ def test_normalize_metrics_payload_list_label_map():
     """End-to-end: normalize_metrics_payload with a list label_map."""
     payload = {
         "label_map": LABEL_MAP_LIST,
-        "models": {"xlm-roberta": SAMPLE_MODEL},
+        "models": {"svm": SAMPLE_MODEL},
     }
     flat, _ = normalize_metrics_payload(payload)
 
-    assert flat["XLM-RoBERTa"]["labels"] == ["Negative", "Neutral", "Positive"]
+    assert flat["SVM"]["labels"] == ["Negative", "Neutral", "Positive"]
 
 
 def test_normalize_metrics_payload_no_label_map_falls_back():
     """Without a label_map, CLASS_ORDER should be used."""
-    payload = {"models": {"xlm-roberta": SAMPLE_MODEL}}
+    payload = {"models": {"logistic_regression": SAMPLE_MODEL}}
     flat, _ = normalize_metrics_payload(payload)
-    assert flat["XLM-RoBERTa"]["labels"] == list(CLASS_ORDER)
+    assert flat["Logistic Regression"]["labels"] == list(CLASS_ORDER)
+
+
+def test_normalize_metrics_payload_minilm_key():
+    """The MiniLM export key resolves to the live production model name."""
+    payload = {"models": {"minilm": SAMPLE_MODEL}}
+    flat, _ = normalize_metrics_payload(payload)
+    assert flat["Multilingual MiniLM"]["labels"] == list(CLASS_ORDER)
 
 
 def test_label_map_values_not_keys():

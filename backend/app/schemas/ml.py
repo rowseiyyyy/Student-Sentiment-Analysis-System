@@ -7,9 +7,8 @@ from app.models.training_history import TrainingAlgorithm, TrainingStatus
 
 class TrainRequest(BaseModel):
     dataset_filename: str | None = None
-    n_estimators: int = 300
-    max_depth: int | None = None
-    min_samples_split: int = 2
+    response_column: str | None = None
+    label_column: str | None = None
 
 class ImportResultsResponse(BaseModel):
     message: str

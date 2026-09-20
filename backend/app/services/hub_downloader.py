@@ -3,8 +3,8 @@
 Multilingual MiniLM is the ONLY live model, so it is the only artifact set
 fetched at startup. This module only guarantees the expected files exist on
 disk - it does not load anything into memory; loading stays with the
-``minilm_service`` singleton. The retired models (XGBoost, mDeBERTa,
-XLM-RoBERTa) are no longer downloaded here.
+``minilm_service`` singleton. Only Multilingual MiniLM (the sole live
+model) is downloaded; XGBoost, mDeBERTa and XLM-RoBERTa are retired.
 
 Downloads are skipped when the target artifacts already exist locally, so
 repeated restarts (and the pre-committed ``app/ml/`` files in this repo) do
@@ -52,8 +52,8 @@ def ensure_hub_artifacts() -> bool:
 
     # Multilingual MiniLM IS the only live production sentiment model - its
     # config/tokenizer + quantized ONNX model are required for real-time
-    # inference. The retired models (XGBoost, mDeBERTa, XLM-RoBERTa) are
-    # intentionally not downloaded here.
+    # inference. Only Multilingual MiniLM is downloaded — XGB/mDeBERTa/XLM-R are
+    # retired and not fetched here.
     if _minilm_ready(settings.MINILM_MODEL_PATH):
         logger.info(
             "Multilingual MiniLM artifacts already present locally - skipping download."

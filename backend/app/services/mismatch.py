@@ -1,7 +1,7 @@
 """Likert-vs-sentiment mismatch detection.
 
 Combines a numeric Likert classification (from likert.py) with a text
-sentiment classification (from transformer_service.py / xgboost_service.py)
+sentiment classification (from classical_service.py / minilm_service.py)
 for the *same* category submission, and flags cases where the two
 disagree strongly enough to warrant admin review.
 
@@ -109,7 +109,7 @@ def summarize_category(
 
     ``likert_classifier`` should be ``likert.classify_likert``.
     ``sentiment_predictor`` should be a bound ``predict`` method from
-    ``TransformerSentimentService`` or ``XGBoostService`` (anything
+        ``TransformerSentimentService`` or ``ClassicalSentimentService`` (anything
     returning ``(label, confidence, probabilities)``).
     """
     likert_label, likert_average = likert_classifier(likert_ratings)

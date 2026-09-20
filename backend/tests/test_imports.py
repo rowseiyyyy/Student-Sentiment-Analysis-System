@@ -1,14 +1,14 @@
 from unittest.mock import patch
 
 PREDICTION_RESULT = {
-    "xgb_prediction": "Positive",
-    "xgb_confidence": 0.91,
-    "deberta_prediction": "Positive",
-    "deberta_confidence": 0.90,
-    "roberta_prediction": "Positive",
-    "roberta_confidence": 0.90,
+    "svm_prediction": "Positive",
+    "svm_confidence": 0.91,
+    "naive_bayes_prediction": "Positive",
+    "naive_bayes_confidence": 0.90,
+    "logistic_regression_prediction": "Positive",
+    "logistic_regression_confidence": 0.90,
     "official_prediction": "Positive",
-    "algorithm_used": "XGBoost",
+    "algorithm_used": "Multilingual MiniLM",
     "confidence_score": 0.91,
     "processing_time_ms": 12.5,
 }

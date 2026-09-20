@@ -4,13 +4,13 @@ Standalone CLI training script.
 
 Usage:
     python scripts/train_models.py --dataset app/datasets/feedback.csv
-    python scripts/train_models.py --dataset app/datasets/feedback.csv --n-estimators 400 --skip-bert
 
-This performs the same "research mode" pipeline as ``POST /ml/train``:
-trains SVM + Naive Bayes + Random Forest on an identical split,
-evaluates BERT on the same held-out data, records everything to the
-database (TrainingHistory) and to app/ml/comparison_results.json, and
-promotes the best model (highest weighted F1) to production.
+This performs the same pipeline as ``POST /ml/train``: trains the
+classical research models (SVM, Naive Bayes, Logistic Regression) on an
+identical split, evaluates Multilingual MiniLM on the same held-out data,
+records everything to the database (TrainingHistory) and to
+app/ml/comparison_results.json. Production stays on Multilingual MiniLM
+(the only live model).
 """
 import argparse
 import sys
@@ -23,7 +23,7 @@ from app.services.training import run_full_training  # noqa: E402
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train XGBoost (TF-IDF) and fine-tune mDeBERTa/XLM-RoBERTa.")
+    parser = argparse.ArgumentParser(description="Train SVM / Naive Bayes / Logistic Regression and evaluate Multilingual MiniLM.")
     parser.add_argument("--dataset", required=True, help="Path to a labeled CSV (id, category, comment, sentiment).")
     args = parser.parse_args()
 

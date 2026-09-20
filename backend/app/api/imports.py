@@ -61,8 +61,8 @@ async def import_evaluations(
         Respondent_ID. No ``category`` is needed — it is inferred per column.
 
     Do NOT include a Sentiment column — sentiment is always computed
-    fresh here via the live XGBoost + DeBERTa + RoBERTa pipeline, the
-    same as a normal student submission.
+    fresh here via the live Multilingual MiniLM model, the same as a normal
+    student submission.
 
     Returns a summary with the number of rows imported, failed, and
     per-row error details for any rows that could not be processed.

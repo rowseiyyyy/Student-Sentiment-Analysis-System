@@ -17,18 +17,14 @@ class SingleModelResult(BaseModel):
 class PredictionOut(BaseModel):
     id: str
     evaluation_id: str
-    xgb_prediction: SentimentLabel | None = None
-    xgb_confidence: float | None = None
-    deberta_prediction: SentimentLabel | None = None
-    deberta_confidence: float | None = None
-    roberta_prediction: SentimentLabel | None = None
-    roberta_confidence: float | None = None
-    # Backward-compat three-model soft-vote report (see
-    # run_prediction_pipeline's ensemble_prediction/ensemble_confidence).
-    # Distinct from `official_prediction`, which follows whatever approach
-    # (single model or ensemble) is currently selected as production.
-    ensemble_prediction: SentimentLabel | None = None
-    ensemble_confidence: float | None = None
+    # Research-set per-model results (never run live — always None; kept so
+    # historical rows stay readable). The official result is Multilingual MiniLM.
+    svm_prediction: SentimentLabel | None = None
+    svm_confidence: float | None = None
+    naive_bayes_prediction: SentimentLabel | None = None
+    naive_bayes_confidence: float | None = None
+    logistic_regression_prediction: SentimentLabel | None = None
+    logistic_regression_confidence: float | None = None
     official_prediction: SentimentLabel
     algorithm_used: AlgorithmName
     confidence_score: float
@@ -42,8 +38,8 @@ class PredictionOut(BaseModel):
 class PredictionResponse(BaseModel):
     """Live ad-hoc prediction result. Multilingual MiniLM is the ONLY live
     model, so the response carries its result plus the official (production)
-    prediction — no legacy per-model fields (XGBoost / mDeBERTa / XLM-RoBERTa
-    / ensembles) are included."""
+    prediction — no per-model fields (SVM / Naive Bayes / Logistic
+    Regression) are included."""
 
     text: str
     minilm: SingleModelResult | None = None

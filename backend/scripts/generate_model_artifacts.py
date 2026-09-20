@@ -12,8 +12,8 @@ POST /ml/import-results endpoint).
 Usage:
     python scripts/generate_model_artifacts.py "path/to/dashboard_export.json" [production_name]
         production_name defaults to the export's recommended model.
-        Accepted values (must equal an approach exactly): XGBoost (TF-IDF),
-        mDeBERTa, XLM-RoBERTa, Multilingual MiniLM, mDeBERTa + XLM-RoBERTa.
+        Accepted values (must equal an approach exactly): SVM,
+        Naive Bayes, Logistic Regression, Multilingual MiniLM.
 """
 from __future__ import annotations
 
@@ -33,31 +33,19 @@ def _canonicalize_key(key) -> str:
 
 def colab_key_to_approach(key) -> str | None:
     canonical = _canonicalize_key(key)
-    if "mdeberta" in canonical and (
-        "xlmroberta" in canonical or canonical in ("mdebertaxlm", "mdebertaxlmr")
-    ):
-        return "mDeBERTa + XLM-RoBERTa"
-    if "xlmroberta" in canonical and "mdeberta" in canonical:
-        return "mDeBERTa + XLM-RoBERTa"
-    if canonical in ("xgboost", "xgb"):
-        return "XGBoost (TF-IDF)"
+    if canonical in ("svm", "svc", "supportvectormachine"):
+        return "SVM"
+    if canonical in ("naivebayes", "nb", "multinomialnb"):
+        return "Naive Bayes"
+    if canonical in ("logisticregression", "logreg", "lr"):
+        return "Logistic Regression"
     if "minilm" in canonical:
         return "Multilingual MiniLM"
-    if canonical.startswith("mdeberta") or canonical in ("deberta", "debertabase"):
-        return "mDeBERTa"
-    if canonical.startswith("xlmroberta") or canonical in ("roberta", "robertabase"):
-        return "XLM-RoBERTa"
-    if canonical == "xlmr":
-        return "XLM-RoBERTa"
-    if canonical == "ensemble":
-        return "mDeBERTa + XLM-RoBERTa"
     return None
 
 
-# Approved ensemble member sets (mirrors app/services/ensembles.py).
-ENSEMBLES = {
-    "mDeBERTa + XLM-RoBERTa": ["mDeBERTa", "XLM-RoBERTa"],
-}
+# No ensembles in the approved set — single models only.
+ENSEMBLES = {}
 
 
 def _normalize_colab_model(model: dict, labels: list[str]) -> dict:

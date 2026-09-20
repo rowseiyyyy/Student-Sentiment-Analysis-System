@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Asiatech Sentiment Analysis API"
     PROJECT_DESCRIPTION: str = (
         "Sentiment Analysis of Student Feedback from Asiatech College of "
-        "Sta. Rosa, Laguna using XGBoost (TF-IDF), mDeBERTa and XLM-RoBERTa."
+        "Sta. Rosa, Laguna using SVM, Naive Bayes, Logistic Regression and Multilingual MiniLM."
     )
     VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
@@ -344,14 +344,14 @@ class Settings(BaseSettings):
     ML_DIR: Path = BASE_DIR / "app" / "ml"
     DATASETS_DIR: Path = BASE_DIR / "app" / "datasets"
 
-    # Active paths.
-    # TF-DF GradientBoostedTrees model. This is deliberately separate from
-    # the legacy native XGBoost artifacts; the formats are not interchangeable.
-    XGB_MODEL_PATH: Path = ML_DIR / "xgb_tfdf"
-    XGB_TFIDF_VECTORIZER_PATH: Path = ML_DIR / "tfidf_vectorizer_xgb.pkl"
-    XGB_LABEL_ENCODER_PATH: Path = ML_DIR / "label_encoder_xgb.pkl"
-    MDEBERTA_MODEL_PATH: Path = ML_DIR / "mdeberta_v3"
-    XLM_ROBERTA_MODEL_PATH: Path = ML_DIR / "xlm_roberta_sentiment"
+    # Active paths (classical research models: SVM / Naive Bayes / Logistic
+    # Regression — each with its own fitted TF-IDF vectorizer).
+    SVM_MODEL_PATH: Path = ML_DIR / "svm_model.pkl"
+    SVM_VECTORIZER_PATH: Path = ML_DIR / "tfidf_vectorizer_svm.pkl"
+    NAIVE_BAYES_MODEL_PATH: Path = ML_DIR / "naive_bayes_model.pkl"
+    NAIVE_BAYES_VECTORIZER_PATH: Path = ML_DIR / "tfidf_vectorizer_naive_bayes.pkl"
+    LOGREG_MODEL_PATH: Path = ML_DIR / "logreg_model.pkl"
+    LOGREG_VECTORIZER_PATH: Path = ML_DIR / "tfidf_vectorizer_logreg.pkl"
 
     MODEL_METADATA_PATH: Path = ML_DIR / "model_metadata.json"
     COMPARISON_RESULTS_PATH: Path = ML_DIR / "comparison_results.json"
@@ -369,9 +369,6 @@ class Settings(BaseSettings):
     # Private repos holding the tuned sentiment artifacts. The downloader pulls
     # these into the corresponding app/ml/ paths at startup only when the local
     # files are missing, using HF_TOKEN to authenticate.
-    HF_XLM_ROBERTA_REPO: str = "rowseiy/xlm-roberta-sentiment"
-    HF_MDEBERTA_REPO: str = "rowseiy/mdeberta-sentiment"
-    HF_XGB_TFIDF_REPO: str = "rowseiy/xgb-tfidf-sentiment"
     HF_MINILM_REPO: str = "rowseiy/minilm-sentiment"
 
     # Approved approach to register as production on a fresh database when the
@@ -381,24 +378,10 @@ class Settings(BaseSettings):
     # free-tier RAM budget.
     HF_PRODUCTION_MODEL: str = "Multilingual MiniLM"
 
-    # Quantized PyTorch state_dict filenames in the private hub repos. The repos
-    # still carry config.json + tokenizer files (only the weight files were
-    # replaced with these quantized .pt artifacts). Inference rebuilds the
-    # architecture from config then loads these weights per prediction.
-    MDEBERTA_QUANTIZED_FILE: str = "mdeberta_quantized_v2.pt"
-    XLM_ROBERTA_QUANTIZED_FILE: str = "xlmr_quantized_v2.pt"
-    # Multilingual MiniLM is served from a dynamic-INT8 quantized ONNX file
-    # (exported via onnxruntime.quantization in Colab) — see minilm_service.
     MINILM_ONNX_FILE: str = "model.onnx"
 
-    # General RoBERTa is fine-tuned on the actual student-feedback labels;
-    # avoid treating a Twitter-domain sentiment checkpoint as a final model.
-    XLM_ROBERTA_MODEL_NAME: str = "xlm-roberta-base"
-    MDEBERTA_MODEL_NAME: str = "microsoft/mdeberta-v3-base"
-
-    # Multilingual MiniLM — fourth approved single model. Trained in Colab and
-    # used for offline evaluation/comparison; excluded from the live inference
-    # path like the other transformers (free-tier RAM budget).
+    # Multilingual MiniLM — the ONLY live production model. Trained in Colab
+    # and served from its quantized ONNX artifact (see minilm_service).
     MINILM_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     MINILM_MODEL_PATH: Path = ML_DIR / "minilm_sentiment"
     MINILM_MAX_SEQ_LENGTH: int = 128
@@ -429,33 +412,24 @@ class Settings(BaseSettings):
     TEST_SIZE: float = 0.2
 
     # ------------------------------------------------------------------
-    # Ensemble / evaluation
+    # Evaluation / bootstrap
     # ------------------------------------------------------------------
-    # Initial weights for the soft-vote ensemble. These are NOT claimed
-    # to be optimal; they are starting values for the ensemble. The only
-    # approved ensemble is mDeBERTa + XLM-RoBERTa.
-    ENSEMBLE_WEIGHTS: dict[str, float] = {
-        "mDeBERTa": 0.5,
-        "XLM-RoBERTa": 0.5,
-    }
     BOOTSTRAP_N_ITER: int = 1000
     BOOTSTRAP_ALPHA: float = 0.05
     BOOTSTRAP_SEED: int = 42
 
-    # mDeBERTa fine-tune defaults (initial configuration; not validated
-    # as optimal until a real labelled training/evaluation run).
-    MDEBERTA_EPOCHS: int = 3
-    MDEBERTA_BATCH_SIZE: int = 8
-    MDEBERTA_LEARNING_RATE: float = 2e-5
-    MDEBERTA_WEIGHT_DECAY: float = 0.01
-    MDEBERTA_WARMUP_RATIO: float = 0.1
-    MDEBERTA_MAX_SEQ_LENGTH: int = 256
+    # Classical model defaults (SVM / Naive Bayes / Logistic Regression).
+    SVM_C: float = 1.0
+    NAIVE_BAYES_ALPHA: float = 1.0
+    LOGREG_C: float = 1.0
+    LOGREG_MAX_ITER: int = 1000
 
-
-    # XGBoost defaults.
-    XGB_N_ESTIMATORS: int = 300
-    XGB_MAX_DEPTH: int = 6
-    XGB_LEARNING_RATE: float = 0.1
+    # Shared transformer fine-tune defaults (used by the MiniLM training path).
+    MINILM_EPOCHS: int = 3
+    MINILM_BATCH_SIZE: int = 8
+    MINILM_LEARNING_RATE: float = 2e-5
+    MINILM_WEIGHT_DECAY: float = 0.01
+    MINILM_WARMUP_RATIO: float = 0.1
 
     # Stopword removal is OFF by default. Set
     # `PREPROCESSING_REMOVE_STOPWORDS=true` in `.env` to enable.
@@ -480,11 +454,12 @@ def get_settings() -> Settings:
         settings.TEMP_VALIDATION_ROOT = validation_root
         settings.ML_DIR = validation_root / "ml"
         settings.DATASETS_DIR = validation_root / "datasets"
-        settings.XGB_MODEL_PATH = settings.ML_DIR / "xgb_tfdf"
-        settings.XGB_TFIDF_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_xgb.pkl"
-        settings.XGB_LABEL_ENCODER_PATH = settings.ML_DIR / "label_encoder_xgb.pkl"
-        settings.MDEBERTA_MODEL_PATH = settings.ML_DIR / "mdeberta_v3"
-        settings.XLM_ROBERTA_MODEL_PATH = settings.ML_DIR / "xlm_roberta_sentiment"
+        settings.SVM_MODEL_PATH = settings.ML_DIR / "svm_model.pkl"
+        settings.SVM_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_svm.pkl"
+        settings.NAIVE_BAYES_MODEL_PATH = settings.ML_DIR / "naive_bayes_model.pkl"
+        settings.NAIVE_BAYES_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_naive_bayes.pkl"
+        settings.LOGREG_MODEL_PATH = settings.ML_DIR / "logreg_model.pkl"
+        settings.LOGREG_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_logreg.pkl"
         settings.MINILM_MODEL_PATH = settings.ML_DIR / "minilm_sentiment"
         settings.MODEL_METADATA_PATH = settings.ML_DIR / "model_metadata.json"
         settings.COMPARISON_RESULTS_PATH = settings.ML_DIR / "comparison_results.json"

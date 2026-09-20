@@ -24,7 +24,7 @@ def _register_and_login(client, email="predictuser@example.com", role="student")
 
 def test_run_prediction_pipeline_uses_live_minilm_model(db_session):
     # Multilingual MiniLM is the ONLY live model and produces the official
-    # result. XGBoost and the transformers are not run in the request path.
+    # result. The classical research models are not run in the request path.
     with patch("app.services.prediction.minilm_service.can_run_live_inference", return_value=True), \
          patch("app.services.prediction.minilm_service.predict", return_value=("Positive", 0.88, [0.05, 0.07, 0.88])):
         result = run_prediction_pipeline(db_session, "The professor is very helpful.")
@@ -32,13 +32,10 @@ def test_run_prediction_pipeline_uses_live_minilm_model(db_session):
     assert result["official_prediction"] == "Positive"
     assert result["algorithm_used"] == "Multilingual MiniLM"
     assert result["minilm_prediction"] == "Positive"
-    # XGBoost is no longer part of the live request path.
-    assert result["xgb_prediction"] is None
-    # Transformers are not part of the live request path anymore.
-    assert result["deberta_prediction"] is None
-    assert result["roberta_prediction"] is None
-    # Single-member "ensemble" report degenerates to the live model's result.
-    assert result["ensemble_prediction"] == "Positive"
+    # The classical research models (SVM / Naive Bayes / Logistic
+    # Regression) are not run in the live request path.
+    for key in ("svm_prediction", "naive_bayes_prediction", "logistic_regression_prediction"):
+        assert result[key] is None
 
 
 def test_run_prediction_pipeline_raises_without_minilm(db_session):
@@ -50,7 +47,7 @@ def test_run_prediction_pipeline_raises_without_minilm(db_session):
         try:
             run_prediction_pipeline(db_session, "The professor is very helpful.")
         except RuntimeError as exc:
-            assert "No sentiment model" in str(exc)
+            assert "Multilingual MiniLM" in str(exc)
         else:
             raise AssertionError("expected RuntimeError when MiniLM cannot serve")
 
@@ -68,12 +65,13 @@ def test_predict_sentiment(mock_pipeline, client):
     data = response.json()
     assert data["official_prediction"] == "Positive"
     assert data["algorithm_used"] == "Multilingual MiniLM"
-    # Only the live MiniLM result is exposed — legacy per-model fields
-    # (XGBoost / mDeBERTa / XLM-RoBERTa / ensemble) are not part of the
+    # Only the live MiniLM result is exposed — the classical research models
+    # (SVM / Naive Bayes / Logistic Regression) are not part of the
     # live response.
     assert data["minilm"]["prediction"] == "Positive"
     assert data["minilm"]["confidence"] == 0.88
-    for legacy in ("xgb", "deberta", "roberta", "xgboost_tfdf", "mdeberta", "xlm_roberta", "ensemble"):
+    for legacy in ("xgb", "deberta", "roberta", "xgboost_tfdf", "mdeberta", "xlm_roberta", "ensemble",
+                   "svm", "naive_bayes", "logistic_regression"):
         assert legacy not in data
     assert data["confidence_score"] == 0.88
 

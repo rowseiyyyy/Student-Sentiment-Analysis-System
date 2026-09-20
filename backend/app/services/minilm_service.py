@@ -30,7 +30,7 @@ def _build_onnx_feed(session, inputs) -> dict:
 
     Two mismatches between the HF tokenizer output and the traced graph are
     handled here, both of which otherwise made every prediction fail with an
-    ``InvalidArgument`` error (and silently fall back to XGBoost):
+    ``InvalidArgument`` error (and silently fall back to the classical TF-IDF fallback).
 
     * the export traced ``token_type_ids`` as a *required* input while the
       sentencepiece tokenizer used by this checkpoint does not emit it — it is
@@ -165,7 +165,8 @@ class MiniLMService(TransformerSentimentService):
         ~570-640 MB RSS, which exceeds a 512 MB instance's limit — the worker
         would be OOM-killed mid-request and the browser would report "Unable to
         connect to the server". Anything below ``settings.MINILM_MIN_RAM_MB``
-        therefore falls back to the light XGBoost (TF-IDF) model.
+        therefore raises a service-unavailable error — no lightweight fallback
+        is used.
         """
         return self._memory_allows_inference() and self.is_ready()
 

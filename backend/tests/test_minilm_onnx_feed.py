@@ -9,8 +9,8 @@ and no ``token_type_ids`` at all. Feeding the tokenizer output straight into
     InvalidArgument: Unexpected input data type. Actual: (tensor(int32)),
     expected: (tensor(int64))
 
-for every prediction, which silently downgraded live inference to the
-XGBoost (TF-IDF) fallback. ``_build_onnx_feed`` is the fix: it feeds exactly
+for every prediction, which left live inference with no usable result.
+``_build_onnx_feed`` is the fix: it feeds exactly
 the tensors the graph declares, synthesizing zero ``token_type_ids`` and
 casting each tensor to the declared element type.
 """
@@ -94,8 +94,9 @@ def test_feed_rejects_unknown_graph_inputs():
 # 119 MB quantized session). On a 512 MB instance (Render free tier) loading it
 # got the worker OOM-killed mid-request, which reaches the browser as
 # "Unable to connect to the server. Please ensure the backend is running."
-# Live inference therefore falls back to XGBoost (TF-IDF) when the host cannot
-# hold the model.
+# Live inference raises a clean 503 when the host cannot hold the model —
+# there is no fallback to another model: Multilingual MiniLM is the only
+# live model.
 # ---------------------------------------------------------------------------
 
 def _service(monkeypatch, *, ready: bool, enabled: bool = True, host_mb=None, min_ram_mb: int = 900):

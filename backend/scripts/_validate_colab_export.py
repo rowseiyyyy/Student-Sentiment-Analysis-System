@@ -31,34 +31,23 @@ def _canonicalize_key(key) -> str:
 def colab_key_to_approach(key) -> str | None:
     """Resolve a Colab-export model key to a canonical approved approach name."""
     canonical = _canonicalize_key(key)
-    if (
-        "mdeberta" in canonical
-        and ("xlmroberta" in canonical or canonical in ("mdebertaxlm", "mdebertaxlmr"))
-    ):
-        return "mDeBERTa + XLM-RoBERTa"
-    if "xlmroberta" in canonical and "mdeberta" in canonical:
-        return "mDeBERTa + XLM-RoBERTa"
-    if canonical in ("xgboost", "xgb"):
-        return "XGBoost (TF-IDF)"
-    if canonical.startswith("mdeberta") or canonical in ("deberta", "debertabase"):
-        return "mDeBERTa"
-    if canonical.startswith("xlmroberta") or canonical in ("roberta", "robertabase"):
-        return "XLM-RoBERTa"
-    if canonical == "xlmr":
-        return "XLM-RoBERTa"
-    if canonical == "ensemble":
-        return "Average (All Models)"
+    if canonical in ("svm", "svc", "supportvectormachine"):
+        return "SVM"
+    if canonical in ("naivebayes", "nb", "multinomialnb"):
+        return "Naive Bayes"
+    if canonical in ("logisticregression", "logreg", "lr"):
+        return "Logistic Regression"
+    if "minilm" in canonical:
+        return "Multilingual MiniLM"
     return None
 # ---------------------------------------------------------------------------
 
 
 APPROACH_TO_ALGORITHM = {
-    "XGBoost (TF-IDF)": "XGBOOST_TFDF",
-    "mDeBERTa": "MDEBERTA",
-    "XLM-RoBERTa": "XLM_ROBERTA",
-    "XGBoost (TF-IDF) + mDeBERTa": "ENSEMBLE_TFDF_MDEBERTA",
-    "XGBoost (TF-IDF) + XLM-RoBERTa": "ENSEMBLE_TFIDF_XLM",
-    "Average (All Models)": "ENSEMBLE_AVERAGE_ALL",
+    "SVM": "SVM",
+    "Naive Bayes": "NAIVE_BAYES",
+    "Logistic Regression": "LOGISTIC_REGRESSION",
+    "Multilingual MiniLM": "MINILM",
 }
 APPROVED = set(APPROACH_TO_ALGORITHM)
 
