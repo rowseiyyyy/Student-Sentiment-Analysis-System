@@ -304,15 +304,14 @@ async getEvaluations(params = {}) {
     // ML / ADMIN ENDPOINTS
     // ============================================================
 
-    async importModelResults({ metrics, xgbModel, xgbVectorizer, debertaZip, robertaZip, setProduction }) {
+    async importModelResults({ metrics, setProduction }) {
         const formData = new FormData();
-       formData.append('metrics_json', metrics);
-        if (xgbModel) formData.append('xgb_model', xgbModel);
-        if (xgbVectorizer) formData.append('xgb_vectorizer', xgbVectorizer);
-        if (debertaZip) formData.append('deberta_archive', debertaZip);
-       if (robertaZip) formData.append('roberta_archive', robertaZip);
-       if (setProduction) formData.append('set_production', setProduction);
-      return this.request('POST', '/ml/import-results', formData, true);
+        formData.append('metrics_json', metrics);
+        // set_production is a query parameter on the backend, not a form field.
+        const qs = setProduction
+            ? `?set_production=${encodeURIComponent(setProduction)}`
+            : '';
+        return this.request('POST', `/ml/import-results${qs}`, formData, true);
     },
 
     async getModels(algorithm = null) {

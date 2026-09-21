@@ -1472,36 +1472,26 @@ var ADMIN = {
 
             var predictionHtml = '';
             var pred = item.prediction || null;
-            var missingModelCount = pred ? [pred.minilm_prediction || pred.xgb_prediction].filter(function(p) { return !p; }).length : 1;
+            var missingModelCount = pred ? [pred.official_prediction].filter(function(p) { return !p; }).length : 1;
             if (pred) {
-                // Live model: Multilingual MiniLM — the ONLY live model.
-                // mDeBERTa / XLM-RoBERTa are excluded from live
-                // inference (free-tier RAM budget); their rows are shown only
-                // for historical submissions that still carry a stored
-                // prediction.
+                // Multilingual MiniLM is the ONLY live model, so the official
+                // result IS its result. The classical TF-IDF research models
+                // (SVM / Naive Bayes / Logistic Regression) never run in the
+                // request path, so their columns stay empty for live rows.
                 var modelRows = [
-                    { label: 'Multilingual MiniLM', pred: pred.minilm_prediction, conf: pred.minilm_confidence },
-                    { label: 'XGBoost (TF-IDF) (historical)', pred: pred.xgb_prediction, conf: pred.xgb_confidence }
+                    { label: 'Multilingual MiniLM', pred: pred.official_prediction, conf: pred.confidence_score, isOfficial: true },
+                    { label: 'SVM', pred: pred.svm_prediction, conf: pred.svm_confidence },
+                    { label: 'Naive Bayes', pred: pred.naive_bayes_prediction, conf: pred.naive_bayes_confidence },
+                    { label: 'Logistic Regression', pred: pred.logistic_regression_prediction, conf: pred.logistic_regression_confidence }
                 ];
-                if (pred.deberta_prediction) {
-                    modelRows.push({ label: 'mDeBERTa (historical)', pred: pred.deberta_prediction, conf: pred.deberta_confidence });
-                }
-                if (pred.roberta_prediction) {
-                    modelRows.push({ label: 'XLM-RoBERTa (historical)', pred: pred.roberta_prediction, conf: pred.roberta_confidence });
-                }
-                if (pred.ensemble_prediction) {
-                    modelRows.push({ label: 'Ensemble (Official)', pred: pred.ensemble_prediction, conf: pred.ensemble_confidence, isEnsemble: true });
-                }
                 modelRows = modelRows.map(function(m) {
-                    var isOfficial = m.isEnsemble
-                        ? pred.algorithm_used === 'mDeBERTa + XLM-RoBERTa'
-                        : pred.algorithm_used === m.label || pred.algorithm_used === (m.label === 'Multilingual MiniLM' ? 'Multilingual MiniLM' : '');
+                    var isOfficial = m.isOfficial || pred.algorithm_used === m.label;
                     var predCell = m.pred
                         ? sentimentBadge(m.pred)
-                        : '<span class="text-muted" title="No stored prediction - this model has no weights deployed on this server">Not deployed</span>';
+                        : '<span class="text-muted" title="No stored prediction - the classical research models never run in the live request path">Not run</span>';
                     var confCell = m.conf != null
                         ? (m.conf * 100).toFixed(1) + '%'
-                        : '<span class="text-muted" title="No stored confidence - this model has no weights deployed on this server">Not deployed</span>';
+                        : '<span class="text-muted" title="No stored confidence - the classical research models never run in the live request path">Not run</span>';
                     return '<tr>' +
                         '<td><strong>' + m.label + '</strong> ' + (isOfficial ? '<span class="badge badge-positive" title="Used for the official sentiment"><i class="fas fa-crown"></i> Official</span>' : '') + '</td>' +
                         '<td>' + predCell + '</td>' +
@@ -1515,14 +1505,8 @@ var ADMIN = {
                 predictionHtml = '<div class="form-section" style="margin-top:1rem;">' +
                     '<h4 style="margin-bottom:0.5rem;">Text Sentiment â€” Model Breakdown</h4>' +
                     '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody>' + modelRows + '</tbody></table></div>' +
-                    (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> ' + missingModelCount + ' model(s) show "Not deployed" — the live model (Multilingual MiniLM) has no weights loaded on this server. Its weights are fetched from the private Hugging Face repo at startup or uploaded via Model Result &gt; Import. mDeBERTa and XLM-RoBERTa are excluded from live inference by design (free-tier RAM budget).</p>' : '') +
-                    (pred.algorithm_used === 'Multilingual MiniLM' && pred.ensemble_prediction
-                        ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result comes from the live production model, Multilingual MiniLM (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence). The other transformers are kept offline for the free-tier RAM budget and appear only for older submissions.</p>'
-                        : (pred.algorithm_used === 'XGBoost (TF-IDF)' && pred.ensemble_prediction
-                            ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result comes from XGBoost (TF-IDF) (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence) — recorded before Multilingual MiniLM became the only live model.</p>'
-                            : (pred.algorithm_used === 'mDeBERTa + XLM-RoBERTa' && pred.ensemble_prediction
-                                ? '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> Official result is the weighted mDeBERTa + XLM-RoBERTa ensemble used at the time of this submission (' + (pred.ensemble_confidence != null ? (pred.ensemble_confidence * 100).toFixed(1) + '%' : 'N/A') + ' confidence).</p>'
-                                : ''))) +
+                    (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> The live model (Multilingual MiniLM) has not produced a result for this submission. Its weights are fetched from the private Hugging Face repo at startup.</p>' : '') +
+                    '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> The official result comes from the live production model, Multilingual MiniLM. The SVM, Naive Bayes and Logistic Regression research models are trained and evaluated offline for the model comparison and never run during live inference.</p>' +
                 '</div>';
             }
 
@@ -1592,8 +1576,10 @@ predictionHtml +
                 'Student ID', 'Course', 'Year Level', 'Category',
                 'Share Your Thoughts', 'Ratings (avg)',
                 'Likert Sentiment', 'Likert Average', 'Text Sentiment', 'Official Confidence',
-                'XGB Prediction', 'XGB Confidence', 'DeBERTa Prediction', 'DeBERTa Confidence',
-                'RoBERTa Prediction', 'RoBERTa Confidence', 'Date Submitted'
+                'SVM Prediction', 'SVM Confidence',
+                'Naive Bayes Prediction', 'Naive Bayes Confidence',
+                'Logistic Regression Prediction', 'Logistic Regression Confidence',
+                'Date Submitted'
             ];
             var aoa = [headers];
             items.forEach(function(item) {
@@ -1614,12 +1600,12 @@ predictionHtml +
                     item.likert_average != null ? item.likert_average : '',
                     item.sentiment || '',
                     pred.confidence_score != null ? pred.confidence_score : '',
-                    pred.xgb_prediction || '',
-                    pred.xgb_confidence != null ? pred.xgb_confidence : '',
-                    pred.deberta_prediction || '',
-                    pred.deberta_confidence != null ? pred.deberta_confidence : '',
-                    pred.roberta_prediction || '',
-                    pred.roberta_confidence != null ? pred.roberta_confidence : '',
+                    pred.svm_prediction || '',
+                    pred.svm_confidence != null ? pred.svm_confidence : '',
+                    pred.naive_bayes_prediction || '',
+                    pred.naive_bayes_confidence != null ? pred.naive_bayes_confidence : '',
+                    pred.logistic_regression_prediction || '',
+                    pred.logistic_regression_confidence != null ? pred.logistic_regression_confidence : '',
                     item.created_at || ''
                 ]);
             });
@@ -1975,7 +1961,7 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training Multilingual MiniLM in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the ONLY live inference model — its small quantized ONNX footprint runs on the free tier within the RAM budget. mDeBERTa / XLM-RoBERTa / XGBoost are retired from the live system and appear only as historical training rows. Weights are fetched from the private Hugging Face Hub repo at startup, so you do not upload model files here.</p>' +
+                '<p class="form-desc">After training in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the ONLY live inference model — its small quantized ONNX footprint runs on the free tier within the RAM budget. SVM, Naive Bayes and Logistic Regression are the offline research baselines and appear in the comparison table only. Weights are fetched from the private Hugging Face Hub repo at startup, so you do not upload model files here.</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
@@ -1999,8 +1985,6 @@ predictionHtml +
                 var active = modelPerfDisplayName(perf.best_model);
                 var match = null;
                 Array.prototype.forEach.call(select.options, function(opt) {
-                    // canonicalise: backend may return "RoBERTa + DeBERTa" for
-                    // the "DeBERTa + RoBERTa" ensemble.
                     if (modelPerfDisplayName(opt.value) === active) { match = opt; }
                 });
                 if (match) {
@@ -2031,7 +2015,7 @@ predictionHtml +
                 metrics: metricsFile,
                 setProduction: document.getElementById('import-set-production').value || null
             });
-            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '. XGBoost (TF-IDF) is the only live inference model — restart the API server if its weights changed.' : 'No model files were uploaded â€” only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';
+            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);"><h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4><p><strong>Production model:</strong> ' + result.production_model + '</p><p><strong>Algorithms imported:</strong> ' + result.imported_algorithms.join(', ') + '</p><p style="font-size:.8rem;color:var(--ink-faint);">' + (result.artifacts_updated.length ? 'Model files updated: ' + result.artifacts_updated.join(', ') + '.' : 'No model files were uploaded — only metrics were recorded.') + '</p><button class="btn btn-primary mt-2" onclick="ADMIN.renderMLTab(\'performance\')"><i class="fas fa-chart-bar"></i> View Performance</button></div>';
             showToast('Model results imported!', 'success');
         } catch (error) {
             resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--neg);"><h4 style="color:var(--neg);"><i class="fas fa-times-circle"></i> Import Failed</h4><p>' + error.message + '</p></div>';
@@ -2107,7 +2091,7 @@ predictionHtml +
             }).join('');
 
             if (!optionsHtml) {
-                container.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-th"></i></div><h3>No Trained Models Yet</h3><p>Train XGBoost, DeBERTa, or RoBERTa first to view a confusion matrix.</p></div></div>';
+                container.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-th"></i></div><h3>No Trained Models Yet</h3><p>Import Colab training results first to view a confusion matrix.</p></div></div>';
                 return;
             }
 

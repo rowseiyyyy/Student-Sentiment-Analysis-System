@@ -37,8 +37,7 @@ README.md
 TODO.md
 folder-structure.txt
 
-backend/app/ml/deberta_v3/
-backend/app/ml/roberta_sentiment/
+backend/app/ml/minilm_sentiment/
 
 # Temporary and unused local files
 .tmp/

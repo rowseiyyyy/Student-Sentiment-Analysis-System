@@ -130,9 +130,8 @@ async def import_results(
 ):
     """Import metrics produced by a Colab training run.
 
-    Only the metrics JSON is accepted; model weight archives for the retired
-    models (XGBoost, mDeBERTa, XLM-RoBERTa) are no longer supported. The
-    approved set is now SVM, Naive Bayes, Logistic Regression and
+    Only the metrics JSON is accepted; no model weight archives are uploaded.
+    The approved set is SVM, Naive Bayes, Logistic Regression and
     Multilingual MiniLM — but only MiniLM is the live model and its weights
     are fetched directly from the private Hugging Face Hub repo at startup.
     """

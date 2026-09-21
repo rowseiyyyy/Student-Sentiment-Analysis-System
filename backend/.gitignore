@@ -1,5 +1,4 @@
 .venv/
-.venv-tfdf/
 .env
 .env.*
 !.env.example
@@ -27,17 +26,12 @@ __pycache__/
 *.bin
 *.safetensors
 
-# Ship the small XGBoost/TF-IDF artifacts with the app (see root .gitignore):
-# production needs them at boot, and Render's disk is ephemeral. The ~1GB
-# transformer checkpoints remain ignored.
+# Ship only the metrics artifacts with the app (see root .gitignore):
+# the admin panel reads them, and Render's disk is ephemeral. Model weight
+# files are fetched from the Hugging Face Hub at startup.
 app/ml/*
 !app/ml/comparison_results.json
 !app/ml/model_metadata.json
-!app/ml/xgb_model.pkl
-!app/ml/xgb_model.json
-!app/ml/xgb_tfdf
-!app/ml/tfidf_vectorizer_xgb.pkl
-!app/ml/label_encoder_xgb.pkl
 backend/app/training_outputs/
 
 node_modules/

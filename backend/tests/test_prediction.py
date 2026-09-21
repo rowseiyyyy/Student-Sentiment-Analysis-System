@@ -65,14 +65,18 @@ def test_predict_sentiment(mock_pipeline, client):
     data = response.json()
     assert data["official_prediction"] == "Positive"
     assert data["algorithm_used"] == "Multilingual MiniLM"
-    # Only the live MiniLM result is exposed — the classical research models
-    # (SVM / Naive Bayes / Logistic Regression) are not part of the
-    # live response.
+    # Only the live MiniLM result is exposed — no per-model research fields
+    # are part of the live response, so the exact key set is asserted.
     assert data["minilm"]["prediction"] == "Positive"
     assert data["minilm"]["confidence"] == 0.88
-    for legacy in ("xgb", "deberta", "roberta", "xgboost_tfdf", "mdeberta", "xlm_roberta", "ensemble",
-                   "svm", "naive_bayes", "logistic_regression"):
-        assert legacy not in data
+    assert set(data) == {
+        "text",
+        "minilm",
+        "official_prediction",
+        "algorithm_used",
+        "confidence_score",
+        "processing_time_ms",
+    }
     assert data["confidence_score"] == 0.88
 
 

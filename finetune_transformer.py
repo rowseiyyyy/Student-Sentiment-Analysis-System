@@ -15,9 +15,9 @@ that no duplicate Comments leak between the train, validation and test sets.
 
 Usage examples
 --------------
-    python finetune_transformer.py                              # mDeBERTa, 3-class
-    python finetune_transformer.py --target rating              # mDeBERTa, 5-class
-    python finetune_transformer.py --model xlm-roberta-base --epochs 4
+    python finetune_transformer.py                              # MiniLM, 3-class
+    python finetune_transformer.py --target rating              # MiniLM, 5-class
+    python finetune_transformer.py --epochs 4
     python finetune_transformer.py --train a.csv --val b.csv --test c.csv
 """
 from __future__ import annotations
@@ -55,15 +55,14 @@ COMMENT_COL = "Comment"
 SENTIMENT_COL = "Sentiment"
 RATING_COL = "Rating"
 
-DEFAULT_MODEL = "microsoft/mdeberta-v3-base"
+DEFAULT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 SUPPORTED_MODELS = {
-    "mdeberta": DEFAULT_MODEL,
-    "mdeberta-v3-base": DEFAULT_MODEL,
-    "xlm-roberta": "xlm-roberta-base",
-    "xlm-roberta-base": "xlm-roberta-base",
+    "minilm": DEFAULT_MODEL,
+    "multilingual-minilm": DEFAULT_MODEL,
+    "paraphrase-multilingual-minilm-l12-v2": DEFAULT_MODEL,
 }
 
-# Reference baseline (TF-IDF + XGBoost) reported by the user.
+# Reference baselines reported by the user, as percentages.
 BASELINE = {"sentiment": 95.7, "rating": 85.0}
 # ---------------------------------------------------------------------------
 # Helpers
@@ -355,7 +354,7 @@ def run(args) -> dict:
     (args.output_dir / "test_metrics.json").write_text(
         json.dumps(metrics, indent=2), encoding="utf-8")
 
-    print("\n=== Comparison vs TF-IDF + XGBoost baseline ===")
+    print("\n=== Comparison vs the recorded baseline ===")
     baseline = BASELINE[args.target]
     delta_pp = (accuracy * 100.0) - baseline
     print(f"  Transformer ({args.model}): {accuracy*100:.2f}% | Baseline: {baseline:.1f}% | Δ: {delta_pp:+.2f} pp")
@@ -370,7 +369,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Fine-tune a Hugging Face transformer for 3-class sentiment or 5-class rating.")
     parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help="HF model name. Shortcuts: mdeberta, xlm-roberta. Default: microsoft/mdeberta-v3-base")
+                        help=("HF model name. Shortcuts: minilm, multilingual-minilm. "
+                              "Default: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"))
     parser.add_argument("--target", choices=["sentiment", "rating"], default="sentiment",
                         help="Prediction target (default: sentiment)")
     parser.add_argument("--train", default=None, help="Path to train.csv (auto-discovered if omitted)")

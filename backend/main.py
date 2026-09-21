@@ -87,9 +87,7 @@ async def lifespan(app: FastAPI):
     Multilingual MiniLM is the ONLY live model. On first boot for a fresh
     deployment, pull its private HF repository into the local ``app/ml/``
     path when missing (no-op when already present, which is the case for the
-    pre-committed artifacts in this repo). The XGBoost and transformer
-    (mDeBERTa / XLM-RoBERTa) artifacts are no longer fetched or loaded at
-    startup — those models are retired from the live system.
+    pre-committed artifacts in this repo).
     """
     from app.services.hub_downloader import ensure_hub_artifacts
 
@@ -281,7 +279,6 @@ def _models_are_ready() -> bool:
     required_paths = [
         # Multilingual MiniLM - the ONLY live production sentiment model
         # (config.json + INT8-quantized ONNX graph, downloaded at startup).
-        # The retired XGBoost/TF-IDF artifacts are no longer required.
         settings.MINILM_MODEL_PATH / "config.json",
         settings.MINILM_MODEL_PATH / settings.MINILM_ONNX_FILE,
     ]
