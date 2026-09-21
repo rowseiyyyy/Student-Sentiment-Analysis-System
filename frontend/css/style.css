@@ -2398,6 +2398,115 @@ tbody tr:last-child td {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 0.75rem;
 }
+
+/* ============================================================
+   MOBILE RESPONSIVENESS REFINEMENTS
+   Scoped strictly to small viewports — desktop rules above are
+   untouched. Reference widths: 375px, 414px, 768px.
+   ============================================================ */
+
+@media (max-width: 768px) {
+  /* Navigation: brand + user controls share row 1, tabs get their
+     own horizontally scrollable row below (no page-level overflow). */
+  .nav-links {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .nav-links li button {
+    min-height: 44px;
+  }
+  .nav-user {
+    padding: 0.4rem 0;
+  }
+
+  /* Touch targets: >= 44px on primary controls */
+  .btn,
+  .tab-btn,
+  .btn-logout {
+    min-height: 44px;
+  }
+  .tab-btn {
+    padding: 0.6rem 0.9rem;
+  }
+  .btn-logout {
+    padding: 0.5rem 0.9rem;
+  }
+  .role-pill {
+    min-height: 44px;
+    padding: 0.75rem 0.5rem;
+  }
+  .modal-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .pagination button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* The analytics tab injects an inline grid-template-columns on
+     .two-col (admin.js); !important guarantees single-column
+     stacking on phones despite the inline style. */
+  .two-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* The alerts panel is fixed at 340px — cap it so it cannot
+     overflow a 375px viewport. */
+  .alert-panel {
+    max-width: calc(100vw - 2rem);
+  }
+  .alert-bell {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Tables: smooth touch scrolling; wrap long words inside cells
+     (the .table-container itself still scrolls horizontally). */
+  .table-container {
+    -webkit-overflow-scrolling: touch;
+  }
+  .table-container td {
+    overflow-wrap: break-word;
+  }
+
+  /* 16px inputs prevent iOS Safari's automatic zoom-on-focus */
+  .form-control,
+  select.form-control,
+  textarea.form-control {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Login card: reclaim padding so the form has usable width at
+     375px (2.25rem side padding left only ~240px of form width). */
+  .login-page {
+    padding: 1.25rem 1rem;
+  }
+  .login-container {
+    padding: 1.75rem 1.25rem 1.5rem;
+  }
+
+  /* Course/year selector cards stack vertically instead of two
+     cramped columns */
+  .course-year-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Slightly shorter charts keep donut/bar proportions pleasant */
+  .chart-container {
+    height: 240px;
+  }
+
+  .modal-body {
+    padding: 1.1rem 1rem;
+  }
+}
 .voice-feed-card {
   background: var(--paper-raised);
   border: 1px solid var(--paper-line);
