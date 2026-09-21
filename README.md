@@ -2,7 +2,7 @@
 
 A **web-based student feedback evaluation and sentiment analysis system** developed for **Asia Technological School of Science and Arts (Asiatech), Sta. Rosa, Laguna, Philippines**.
 
-The system collects student evaluations and analyzes open-ended feedback using **XGBoost (TF-IDF), mDeBERTa, and XLM-RoBERTa**, combined through a **weighted soft-voting ensemble** to classify feedback as **Positive, Neutral, or Negative**.
+The system collects student evaluations and analyzes open-ended feedback using **SVM, Naive Bayes and Logistic Regression (TF-IDF) alongside Multilingual MiniLM**, then serves the live classification as **Positive, Neutral, or Negative**.
 
 ---
 
@@ -31,7 +31,7 @@ The system collects student evaluations and analyzes open-ended feedback using *
 * **Administrator authentication**
 * **Dataset management**
 * Dataset import
-* **Model training and retraining**
+* **Training results import and model comparison**
 * **Model performance comparison**
 * Classification reports
 * Confusion matrices
@@ -42,19 +42,22 @@ The system collects student evaluations and analyzes open-ended feedback using *
 
 ## Sentiment Analysis
 
-The system uses **three machine learning models** combined through a **weighted soft-voting ensemble**.
+The system compares **four machine learning approaches** on identical train/test splits.
 
-| Model       | Role                                                |
-| ----------- | --------------------------------------------------- |
-| **XGBoost (TF-IDF)** | TensorFlow Decision Forests gradient-boosted trees using **TF-IDF** features |
-| **DeBERTa** | Transformer-based sentiment classifier              |
-| **RoBERTa** | Transformer-based sentiment classifier              |
+| Model                        | Role                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| **SVM (TF-IDF)**             | Linear support-vector classifier over TF-IDF features (research/comparison)  |
+| **Naive Bayes (TF-IDF)**     | Multinomial Naive Bayes over TF-IDF features (research/comparison)           |
+| **Logistic Regression (TF-IDF)** | Linear logistic classifier over TF-IDF features (research/comparison)    |
+| **Multilingual MiniLM**      | Fine-tuned sentence-transformer served as a quantized ONNX model — the **only live production model** |
 
-### Weighted Ensemble
+### Production inference
 
-![Weighted Ensemble](https://github.com/user-attachments/assets/29fa62be-36db-469f-b3c3-fbf020bce353)
-
-The predictions from the three models are combined using a **weighted soft-voting approach** to produce the final sentiment classification.
+The classical TF-IDF models (SVM, Naive Bayes, Logistic Regression) are
+**offline research baselines** — they are trained/evaluated outside the API
+(Colab or `scripts/train_models.py`) and shown in the admin comparison view
+only. Live predictions are always produced by **Multilingual MiniLM**; there
+is no fallback model (a failed MiniLM load returns HTTP 503).
 
 ---
 
@@ -71,12 +74,11 @@ The predictions from the three models are combined using a **weighted soft-votin
 
 ### Machine Learning / NLP
 
-* **XGBoost**
+* **Scikit-learn** (SVM, Naive Bayes, Logistic Regression)
+* **Multilingual MiniLM** (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`)
+* **ONNX Runtime** (quantized live inference)
 * **Hugging Face Transformers**
 * **PyTorch**
-* **DeBERTa**
-* **RoBERTa**
-* **Scikit-learn**
 * **TF-IDF**
 * **NLTK**
 * **spaCy**

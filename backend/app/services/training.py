@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
+import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -303,8 +304,6 @@ def load_and_validate_dataset(
     response_column: str | None = None,
     label_column: str | None = None,
 ) -> "pd.DataFrame":
-    import pandas as pd
-
     df = pd.read_csv(csv_path)
     original_columns = [str(column) for column in df.columns]
     response_source = _resolve_dataset_column(original_columns, response_column, RESPONSE_COLUMN_ALIASES, "response")

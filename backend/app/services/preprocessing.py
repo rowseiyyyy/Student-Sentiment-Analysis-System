@@ -13,9 +13,9 @@ Two preprocessing paths are exposed:
   opt-in flag (off by default) so the academic writeup can compare
   configurations.
 
-* ``clean_for_transformer(text)`` -> used by the DeBERTa and RoBERTa
-  pipelines. Light cleaning only: URLs, HTML, and emojis removed. The
-  HuggingFace tokenizers handle casing, punctuation, and grammar.
+* ``clean_for_transformer(text)`` -> used by the Multilingual MiniLM
+  pipeline. Light cleaning only: URLs, HTML, and emojis removed. The
+  HuggingFace tokenizer handles casing, punctuation, and grammar.
 
 This module also exposes ``PREPROCESSING_NOTES`` — a long string
 documenting every decision so the project paper can quote it verbatim.
@@ -33,7 +33,7 @@ import emoji
 # tokenizer is a regex tokenizer that does not require NLTK. NLTK is
 # intentionally NOT imported here so it is never a startup-time dependency;
 # stopwords fall back to a built-in set.
-_NLTK_OK = False
+# _NLTK_OK = False  # Disabled — using built-in fallback only
 
 # Minimal English stopword fallback in case NLTK corpora are unavailable.
 _FALLBACK_STOPWORDS: set[str] = {
@@ -58,8 +58,8 @@ Preprocessing decisions (classical TF-IDF path)
 
 2. Emojis are converted to their CLDR short name via `emoji.demojize`
    (e.g. `😊` -> `:smiling_face:`). The token is preserved. The
-   transformer pipelines (DeBERTa, RoBERTa) handle emojis natively
-   and do not need this conversion.
+   Multilingual MiniLM pipeline handles emojis natively and does not
+   need this conversion.
 
 3. A small built-in emoticon lexicon maps ASCII emoticons to
    sentiment tokens:
@@ -150,12 +150,7 @@ def _get_stopwords() -> set[str]:
     global _cached_stopwords
     if _cached_stopwords is not None:
         return _cached_stopwords
-    if _NLTK_OK:
-        try:
-            _cached_stopwords = set(_nltk_stopwords.words("english"))
-            return _cached_stopwords
-        except Exception:
-            pass
+    # NLTK disabled — using built-in fallback only
     _cached_stopwords = set(_FALLBACK_STOPWORDS)
     return _cached_stopwords
 
@@ -331,7 +326,7 @@ def clean_for_classical(
 
 
 def clean_for_transformer(text: str) -> str:
-    """Light preprocessing for DeBERTa / RoBERTa. Preserves case,
+    """Light preprocessing for Multilingual MiniLM. Preserves case,
     grammar, and most punctuation so the transformer's contextual
     embeddings stay meaningful.
 

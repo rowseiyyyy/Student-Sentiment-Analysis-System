@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Asiatech Sentiment Analysis API",
-    "description": "Sentiment Analysis of Student Feedback from Asiatech College of Sta. Rosa, Laguna using XGBoost, DeBERTa and RoBERTa.",
+    "description": "Sentiment Analysis of Student Feedback from Asiatech College of Sta. Rosa, Laguna using SVM, Naive Bayes, Logistic Regression and Multilingual MiniLM.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -240,33 +240,20 @@
           }
         },
         {
-          "name": "Train Models",
+          "name": "Import Colab Training Results",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{access_token}}" }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"dataset_filename\": \"{{dataset_filename}}\",\n  \"n_estimators\": 300,\n  \"max_depth\": null,\n  \"min_samples_split\": 2\n}"
+              "mode": "formdata",
+              "formdata": [{ "key": "metrics_json", "type": "file", "src": "" }]
             },
-            "url": { "raw": "{{base_url}}/ml/train", "host": ["{{base_url}}"], "path": ["ml", "train"] }
-          }
-        },
-        {
-          "name": "Retrain Models",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{access_token}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"dataset_filename\": \"{{dataset_filename}}\",\n  \"n_estimators\": 400,\n  \"max_depth\": 20,\n  \"min_samples_split\": 4\n}"
+            "url": {
+              "raw": "{{base_url}}/ml/import-results?set_production=Multilingual%20MiniLM",
+              "host": ["{{base_url}}"], "path": ["ml", "import-results"],
+              "query": [{ "key": "set_production", "value": "Multilingual MiniLM" }]
             },
-            "url": { "raw": "{{base_url}}/ml/retrain", "host": ["{{base_url}}"], "path": ["ml", "retrain"] }
+            "description": "Upload the metrics JSON exported by the Colab training run. Only approved approaches (SVM, Naive Bayes, Logistic Regression, Multilingual MiniLM) are imported. There is no /ml/train endpoint."
           }
         },
         {
@@ -291,9 +278,9 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
             "url": {
-              "raw": "{{base_url}}/ml/confusion-matrix?algorithm=DeBERTa",
+              "raw": "{{base_url}}/ml/confusion-matrix?algorithm=SVM",
               "host": ["{{base_url}}"], "path": ["ml", "confusion-matrix"],
-              "query": [{ "key": "algorithm", "value": "DeBERTa" }]
+              "query": [{ "key": "algorithm", "value": "SVM" }]
             }
           }
         },
@@ -303,9 +290,9 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
             "url": {
-              "raw": "{{base_url}}/ml/classification-report?algorithm=RoBERTa",
+              "raw": "{{base_url}}/ml/classification-report?algorithm=Logistic%20Regression",
               "host": ["{{base_url}}"], "path": ["ml", "classification-report"],
-              "query": [{ "key": "algorithm", "value": "RoBERTa" }]
+              "query": [{ "key": "algorithm", "value": "Logistic Regression" }]
             }
           }
         },
@@ -327,8 +314,8 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
             "url": {
-              "raw": "{{base_url}}/ml/models/XGBoost/download",
-              "host": ["{{base_url}}"], "path": ["ml", "models", "XGBoost", "download"]
+              "raw": "{{base_url}}/ml/models/Multilingual%20MiniLM/download",
+              "host": ["{{base_url}}"], "path": ["ml", "models", "Multilingual MiniLM", "download"]
             }
           }
         }

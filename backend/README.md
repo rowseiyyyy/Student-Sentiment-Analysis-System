@@ -5,9 +5,10 @@ Laguna, Philippines Using Machine Learning Algorithms**
 
 A production-ready FastAPI backend that classifies open-ended student
 evaluation comments (Faculty, Staff, Payment, Facilities) into
-**Positive / Neutral / Negative** sentiment, comparing three algorithms —
-**XGBoost (TF-IDF)**, **mDeBERTa**, and **XLM-RoBERTa** — and automatically promoting the
-best-performing model (or ensemble) to production.
+**Positive / Neutral / Negative** sentiment, comparing four approaches —
+**SVM (TF-IDF)**, **Naive Bayes (TF-IDF)**, **Logistic Regression (TF-IDF)**,
+and **Multilingual MiniLM** — with Multilingual MiniLM serving every live
+prediction.
 
 ## Quick Start (Windows)
 
@@ -25,7 +26,7 @@ Or use the launcher scripts (they put `backend/` on `sys.path` for you):
 ..\.venv\Scripts\python.exe run.py
 
 :: from the project root (asiatech-sentiment-backend/)
-python run.pypuy
+python run.py
 ```
 
 > **Important:** the application entry point is `backend/main.py`, not
@@ -51,35 +52,36 @@ python run.pypuy
 
 ## Features
 
-- **Three-model sentiment pipeline**: XGBoost (TF-DF with TF-IDF), mDeBERTa
-  (`microsoft/mdeberta-v3-base`), and XLM-RoBERTa (`xlm-roberta-base`) via HuggingFace
-  Transformers, trained/evaluated on identical splits.
+- **Four-approach sentiment pipeline**: SVM, Naive Bayes, and Logistic
+  Regression over TF-IDF features, plus **Multilingual MiniLM**
+  (HuggingFace Transformers, quantized ONNX) — trained/evaluated on
+  identical splits.
 - **Research mode**: `/ml/import-results` records training metrics from the
   Colab notebook — accuracy, precision, recall, F1,
   macro F1, weighted F1, confusion matrices, classification reports,
   training time, inference time, and memory usage for every model.
-- **Production mode**: the highest-weighted-F1 model is automatically
-  promoted; every new student evaluation is officially scored using that
-  model, while all three models' raw predictions are still stored for
-  ongoing research/comparison.
+- **Production mode**: **Multilingual MiniLM** is the only live model —
+  every new student evaluation is officially scored with it. The classical
+  TF-IDF models are research baselines and are never used for live
+  inference (no fallback; a failed MiniLM load returns HTTP 503).
 - **Full CRUD + analytics** for evaluations, with role-based access
   control (student vs. administrator), JWT auth, rate limiting, and CSV
   export.
-- **Admin panel API**: dataset upload/validation, train/retrain, model
+- **Admin panel API**: dataset upload/validation, metrics import, model
   comparison table, confusion matrix, classification report, rollback to
-  a previous model, and downloadable `.pkl` artifacts.
+  a previous run, and downloadable MiniLM artifacts.
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology |
-|---|---|
+| --- | --- |
 | Backend framework | FastAPI, Pydantic v2, Uvicorn |
 | ORM / Migrations | SQLAlchemy 2.0, Alembic |
 | Database | MySQL (PyMySQL driver) |
 | Auth | JWT (python-jose), bcrypt (passlib) |
-| ML / NLP | scikit-learn, HuggingFace Transformers, PyTorch, NLTK, spaCy |
+| ML / NLP | scikit-learn, HuggingFace Transformers, ONNX Runtime, NLTK, spaCy |
 | Data | Pandas, NumPy, Joblib |
 | Visualization (data prep) | Plotly, Matplotlib |
 | Docs | Swagger / OpenAPI (auto-generated at `/docs`) |
@@ -88,7 +90,7 @@ python run.pypuy
 
 ## Project Structure
 
-```
+```text
 backend/
 ├── app/
 │   ├── api/                 # FastAPI routers (auth, evaluation, prediction, analytics, ml)
@@ -118,7 +120,7 @@ backend/
 
 ### Prerequisites
 
-- Python 3.11 (required by the currently supported TF-DF release)
+- Python 3.11+ (recommended; the app runs on 3.11 – 3.12)
 - MySQL 8.0+ (running instance, with a database created for this project)
 - `pip` and (recommended) a virtual environment tool
 
@@ -161,10 +163,9 @@ alembic upgrade head
 - Run the backend with Gunicorn instead of the debug server for public deployment.
 - Keep secrets in environment variables or a managed secrets store, not in source control.
 
-
 > In `ENVIRONMENT=development` mode, `main.py` also calls
-> `Base.metadata.create_all()` on startup as a convenience, so tables  you skip Alembic locally. **Always use Alembic in
-> production.**
+> `Base.metadata.create_all()` on startup as a convenience, so you can skip
+> Alembic locally. **Always use Alembic in production.**
 
 ---
 
@@ -189,14 +190,19 @@ python run.py
 > `backend/app/main.py`); that will raise
 > `ModuleNotFoundError: No module named 'app'`.
 
-- Swagger UI: http://localhost:8000/docs
-- login with: {
+- Swagger UI: <http://localhost:8000/docs>
+- ReDoc: <http://localhost:8000/redoc>
+- OpenAPI schema: <http://localhost:8000/openapi.json>
+- Health check: <http://localhost:8000/health>
+
+Seed admin credentials (development only):
+
+```json
+{
   "email": "admin@gmail.com",
   "password": "admin123"
 }
-- ReDoc: **http://localhost:8000/redoc**
-- OpenAPI schema: **http://localhost:8000/openapi.json**
-- Health check: **http://localhost:8000/health**
+```
 
 ---
 
@@ -206,30 +212,42 @@ The system ships with a labeled sample dataset at
 `app/datasets/sample_feedback.csv` (60 rows across all 4 categories and 3
 sentiment classes) so you can exercise the full pipeline immediately.
 
-### Option A — via the API (recommended, matches the Admin Panel flow)
+There is **no `/ml/train` endpoint** — training runs outside the API
+(Colab notebook or the CLI script) and the resulting metrics are imported
+back through `/ml/import-results`. Only **Multilingual MiniLM** serves live
+inference; the classical approaches are research/comparison entries.
+
+### Option A — Colab notebook + metrics import (recommended)
 
 1. Register an administrator account:
+
    ```bash
    curl -X POST http://localhost:8000/api/v1/auth/register \
      -H "Content-Type: application/json" \
      -d '{"full_name":"Admin","email":"admin@asiatech.edu.ph","password":"AdminPass123","role":"administrator"}'
    ```
+
 2. Log in and grab the `access_token`.
-3. Upload a dataset:
+
+3. Upload a dataset (optional; used for dataset versioning/validation):
+
    ```bash
    curl -X POST http://localhost:8000/api/v1/ml/dataset/upload \
      -H "Authorization: Bearer <TOKEN>" \
      -F "file=@app/datasets/sample_feedback.csv"
    ```
-4. Train:
+
+4. Run the Colab training notebook and export its metrics JSON, then import it:
+
    ```bash
-   curl -X POST http://localhost:8000/api/v1/ml/train \
+   curl -X POST "http://localhost:8000/api/v1/ml/import-results?set_production=Multilingual%20MiniLM" \
      -H "Authorization: Bearer <TOKEN>" \
-     -H "Content-Type: application/json" \
-     -d '{"dataset_filename":"<returned_filename>","n_estimators":300}'
+     -F "metrics_json=@metrics.json"
    ```
+
 5. Inspect results: `GET /api/v1/ml/performance`,
-   `/ml/confusion-matrix?algorithm=DeBERTa`, `/ml/classification-report?algorithm=RoBERTa`, etc.
+   `GET /api/v1/ml/confusion-matrix?algorithm=SVM`,
+   `GET /api/v1/ml/classification-report?algorithm=Multilingual%20MiniLM`, etc.
 
 ### Option B — via the CLI script
 
@@ -237,15 +255,14 @@ sentiment classes) so you can exercise the full pipeline immediately.
 python scripts/train_models.py --dataset app/datasets/sample_feedback.csv
 ```
 
-The full pipeline trains XGBoost and fine-tunes the DeBERTa/RoBERTa
-transformers on the given dataset; the transformer fine-tuning is the
-slowest step, especially on CPU.
+The full pipeline fits the TF-IDF classical models (SVM, Naive Bayes,
+Logistic Regression) and evaluates Multilingual MiniLM on the same splits,
+writing the metrics artifacts that the API/Admin panel reads.
 
-After training, the best model (by weighted F1) is automatically flagged
-`is_production_model = true` in `training_history`, and
-`app/ml/comparison_results.json` / `app/ml/model_metadata.json` are
-updated. All subsequent `POST /evaluation` and `POST /predict` calls use
-that model for the **official** prediction.
+After training, `app/ml/comparison_results.json` and
+`app/ml/model_metadata.json` are updated. All subsequent `POST /evaluation`
+and `POST /predict` calls use **Multilingual MiniLM** for the **official**
+prediction.
 
 ---
 
@@ -254,12 +271,15 @@ that model for the **official** prediction.
 Full interactive documentation is available at `/docs`. Summary:
 
 | Group | Endpoints |
-|---|---|
-| Auth | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me` |
-| Evaluations | `POST /evaluation`, `GET /evaluation`, `GET /evaluation/{id}`, `DELETE /evaluation/{id}` (admin) |
+| --- | --- |
+| Auth | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me`, `GET/PUT /auth/me/profile`, `POST /auth/forgot-password`, `POST /auth/reset-password` |
+| Evaluations | `POST /evaluation`, `GET /evaluation`, `GET /evaluation/{id}`, `DELETE /evaluation/{id}` (admin), `POST /evaluation/bulk-delete`, `GET /evaluation/config` |
 | Prediction | `POST /predict` |
-| Analytics | `GET /analytics/overall`, `/category`, `/monthly`, `/daily`, `/word-frequency`, `/top-complaints`, `/top-appreciations`, `/export/csv` |
-| ML (Admin) | `POST /ml/dataset/upload`, `POST /ml/train`, `POST /ml/retrain`, `GET /ml/models`, `GET /ml/performance`, `GET /ml/confusion-matrix`, `GET /ml/classification-report`, `POST /ml/rollback`, `GET /ml/models/{algorithm}/download` |
+| Analytics | `GET /analytics/overall`, `/category`, `/monthly`, `/daily`, `/terms`, `/term-comparison`, `/word-frequency`, `/top-complaints`, `/top-appreciations`, `/export/csv` |
+| Imports (Admin) | `POST /imports/evaluations` |
+| ML (Admin) | `POST /ml/dataset/upload`, `POST /ml/import-results`, `GET /ml/models`, `GET /ml/performance`, `GET /ml/confusion-matrix`, `GET /ml/classification-report`, `POST /ml/rollback`, `GET /ml/models/{algorithm}/download` |
+| Action updates | `GET /action-updates/public`, `GET/POST /action-updates`, `PATCH/DELETE /action-updates/{post_id}` |
+| Voice notes | `POST /voice-notes`, `GET /voice-notes`, `GET /voice-notes/stats`, `DELETE /voice-notes/{note_id}` |
 
 All routes are versioned under `/api/v1`. A ready-to-import
 [Postman collection](docs/postman_collection.json) covering every endpoint
@@ -297,7 +317,7 @@ The backend follows a **service-layer architecture**:
 
 - `clean_for_classical(text)` — aggressive cleaning (lowercase, strip
   URLs/HTML/emojis/punctuation/numbers, expand contractions, tokenize,
-  remove stopwords, lemmatize) used by XGBoost before TF-IDF.
+  remove stopwords, lemmatize) used by the classical models before TF-IDF.
 - `clean_for_transformer(text)` — light cleaning only (URLs/HTML/emojis
   removed); case, stopwords and grammar are preserved so the transformer
   contextual embeddings remain meaningful.
@@ -306,7 +326,7 @@ The backend follows a **service-layer architecture**:
 
 `app/services/training.py::run_full_training` is the single source of
 truth for how models are trained/evaluated and how the production model
-is selected (highest **weighted F1** across identical test splits). If
+is recorded (highest **weighted F1** across identical test splits). If
 you need a different selection criterion (e.g. macro F1, or a minimum
 accuracy threshold), that's the function to change.
 
@@ -330,7 +350,11 @@ Set the following in production (never commit real secrets):
 - `SECRET_KEY` — a long, random value (`openssl rand -hex 32`)
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 - `CORS_ORIGINS` — restrict to your actual frontend domain(s)
+- `HF_TOKEN` — Hugging Face read token for the private
+  `HF_MINILM_REPO` (`rowseiy/minilm-sentiment`) that serves the live model
 - `TRANSFORMER_DEVICE=cuda` if a GPU is available (falls back to `cpu` otherwise)
+- `ENABLE_MINILM_INFERENCE` / `MINILM_MIN_RAM_MB` — the memory guard that
+  protects the free-tier instance from MiniLM OOM crashes
 
 ### Recommended production checklist
 
@@ -338,18 +362,16 @@ Set the following in production (never commit real secrets):
    rely on `Base.metadata.create_all()` (that only runs when
    `ENVIRONMENT=development`).
 2. Serve with a process manager, e.g.:
+
    ```bash
    gunicorn main:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:8000
    ```
+
 3. Put a reverse proxy (Nginx / Traefik) in front for TLS termination and
    static file caching.
-5. Run TF-DF inference/training on Linux or WSL2. The current Windows TF-DF
-  package lacks its native custom inference operation; installing the Python
-  packages alone is insufficient.
-6. Pre-warm the multilingual transformer models at startup (first request will
-  otherwise pay the HuggingFace download/load cost) if desired.
-7. Persist `app/ml/` (including the TF-DF SavedModel directory) and
-  `app/datasets/` on a volume that survives
+4. Pre-warm the Multilingual MiniLM ONNX model at startup (the first request
+   will otherwise pay the load cost) if desired.
+5. Persist `app/ml/` and `app/datasets/` on a volume that survives
    deployments/restarts (or move them to object storage and adjust
    `app/core/config.py` paths accordingly).
 6. Configure log shipping from `logs/app.log` (rotated via Loguru) to your

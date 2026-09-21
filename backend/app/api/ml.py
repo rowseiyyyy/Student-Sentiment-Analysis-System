@@ -130,7 +130,7 @@ async def import_results(
 ):
     """Import metrics produced by a Colab training run.
 
-            Only the metrics JSON is accepted; model weight archives for the retired
+    Only the metrics JSON is accepted; model weight archives for the retired
     models (XGBoost, mDeBERTa, XLM-RoBERTa) are no longer supported. The
     approved set is now SVM, Naive Bayes, Logistic Regression and
     Multilingual MiniLM — but only MiniLM is the live model and its weights
