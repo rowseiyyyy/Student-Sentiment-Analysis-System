@@ -53,11 +53,9 @@ const APP = {
 
         const studentForm = document.getElementById('login-form-student');
         const credentialForm = document.getElementById('login-form-credential');
-        const registerForm = document.getElementById('login-form-register');
 
         studentForm.classList.toggle('hidden', role !== 'student');
         credentialForm.classList.toggle('hidden', role === 'student');
-        registerForm.classList.add('hidden');
     },
 
     setupLoginForms() {
@@ -68,7 +66,6 @@ const APP = {
         });
 
         // Credential login (admin/faculty) — handled in HTML onclick
-        // Registration — handled in HTML onsubmit
     },
 
     doCredentialLogin(e) {
@@ -83,40 +80,9 @@ const APP = {
         }
     },
 
-    doRegister(e) {
-        e.preventDefault();
-        const data = {
-            full_name: document.getElementById('inp-rname').value.trim(),
-            email: document.getElementById('inp-remail').value.trim(),
-            password: document.getElementById('inp-rpass').value,
-            role: document.getElementById('inp-rrole').value
-        };
-
-        showLoading('Creating account...');
-        API.register(data)
-            .then(() => {
-                showToast('Account created! Please login.', 'success');
-                this.hideRegForm();
-            })
-            .catch(error => {
-                showToast('Registration failed: ' + error.message, 'error');
-            })
-            .finally(() => hideLoading());
-    },
-
-showRegForm() {
-        document.getElementById('login-form-credential').classList.add('hidden');
-        document.getElementById('login-form-register').classList.remove('hidden');
-    },
-
-    hideRegForm() {
-        document.getElementById('login-form-register').classList.add('hidden');
-        document.getElementById('login-form-credential').classList.remove('hidden');
-    },
 
     showForgotForm() {
         document.getElementById('login-form-credential').classList.add('hidden');
-        document.getElementById('login-form-register').classList.add('hidden');
         document.getElementById('login-form-forgot').classList.remove('hidden');
         document.getElementById('login-form-reset').classList.add('hidden');
     },
@@ -307,6 +273,70 @@ setupNavListeners() {
 
     closeModal() {
         document.getElementById('modal-eval').classList.remove('show');
+    },
+
+    // ============================================================
+    // DEFAULT PASSWORD PROMPT — offered (never forced) right after
+    // login when the backend flags the account as still using its
+    // seed default password (Token.using_default_password).
+    // ============================================================
+    _defaultPassword: null,
+
+    promptDefaultPasswordChange(plainPassword) {
+        // Kept in memory only for the lifetime of this prompt; never
+        // written to storage.
+        this._defaultPassword = plainPassword;
+        this.openModal(
+            '<div style="max-width:36ch;margin:0 auto;text-align:left;">' +
+            '<h3><i class="fas fa-shield-alt"></i> Security notice</h3>' +
+            '<p style="color:var(--ink-soft);">Your account is still using the default password issued by the system. We recommend changing it now.</p>' +
+            '<div class="form-group">' +
+            '<label for="inp-dp-new"><i class="fas fa-lock"></i> New password</label>' +
+            '<input type="password" id="inp-dp-new" class="form-control" placeholder="At least 8 characters">' +
+            '</div>' +
+            '<div class="form-group">' +
+            '<label for="inp-dp-confirm"><i class="fas fa-lock"></i> Confirm new password</label>' +
+            '<input type="password" id="inp-dp-confirm" class="form-control" placeholder="Repeat new password">' +
+            '</div>' +
+            '<button class="btn btn-primary" style="margin-top:.5rem;" onclick="APP.changeDefaultPassword(event)">' +
+            '<i class="fas fa-key"></i> Change password now</button> ' +
+            '<button class="btn btn-secondary" style="margin-top:.5rem;" onclick="APP.remindLaterDefaultPassword()">' +
+            'Remind me later</button>' +
+            '</div>'
+        );
+    },
+
+    remindLaterDefaultPassword() {
+        this._defaultPassword = null;
+        this.closeModal();
+    },
+
+    async changeDefaultPassword(e) {
+        if (e) e.preventDefault();
+        const newPass = document.getElementById('inp-dp-new').value;
+        const confirmPass = document.getElementById('inp-dp-confirm').value;
+
+        if (newPass.length < 8) {
+            showToast('Password must be at least 8 characters.', 'warning');
+            return;
+        }
+        if (newPass !== confirmPass) {
+            showToast('Passwords do not match.', 'warning');
+            return;
+        }
+
+        const currentPassword = this._defaultPassword;
+        showLoading('Updating password...');
+        try {
+            await API.updateProfile({ current_password: currentPassword, new_password: newPass });
+            this._defaultPassword = null;
+            this.closeModal();
+            showToast('Password changed successfully.', 'success');
+        } catch (error) {
+            showToast(error.message || 'Could not change your password. Please try again.', 'error');
+        } finally {
+            hideLoading();
+        }
     }
 };
 

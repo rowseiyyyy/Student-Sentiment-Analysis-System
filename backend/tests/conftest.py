@@ -49,5 +49,25 @@ def client(db_session):
 
     main.app.dependency_overrides[get_db] = override_get_db
     with TestClient(main.app) as test_client:
+        # Public registration was removed from the API, so tests create
+        # users directly in the database through this helper attached to
+        # the test client: client.make_user(email, password=..., role=...).
+        from app.core.security import hash_password
+        from app.models.user import User, UserRole
+
+        def make_user(email, password="SecurePass123", role="student", full_name="Test User"):
+            user = User(
+                full_name=full_name,
+                email=email,
+                hashed_password=hash_password(password),
+                role=UserRole(role),
+                is_active=True,
+            )
+            db_session.add(user)
+            db_session.commit()
+            db_session.refresh(user)
+            return user
+
+        test_client.make_user = make_user
         yield test_client
     main.app.dependency_overrides.clear()

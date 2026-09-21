@@ -21,13 +21,6 @@ class UserProfileUpdate(BaseModel):
     new_password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
-class UserRegister(BaseModel):
-    full_name: str = Field(min_length=2, max_length=150)
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
-    role: UserRole = UserRole.STUDENT
-
-
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
@@ -52,6 +45,9 @@ class Token(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: UserOut
+    # True when the account still uses its seed default password. The UI uses
+    # this to offer (never force) a password change after login.
+    using_default_password: bool = False
 
 
 class TokenRefreshRequest(BaseModel):

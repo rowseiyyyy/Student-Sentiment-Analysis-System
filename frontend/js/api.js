@@ -127,10 +127,6 @@ const API = {
     // AUTH ENDPOINTS
     // ============================================================
 
-    async register(data) {
-        return this.post('/auth/register', data);
-    },
-
     async login(email, password) {
         return this.post('/auth/login', { email, password });
     },

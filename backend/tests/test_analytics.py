@@ -1,16 +1,9 @@
 from datetime import datetime
 
 
-def _register_admin_and_login(client, email="admin_analytics@example.com"):
-    client.post(
-        "/api/v1/auth/register",
-        json={
-            "full_name": "Admin Analytics",
-            "email": email,
-            "password": "SecurePass123",
-            "role": "administrator",
-        },
-    )
+def _register_admin_and_login(client, email="admin_analytics@asiatech.edu.ph"):
+    # Public registration was removed; users are created directly in the DB.
+    client.make_user(email, role="administrator", full_name="Admin Analytics")
     login = client.post("/api/v1/auth/login", json={"email": email, "password": "SecurePass123"})
     return login.json()["access_token"]
 
@@ -25,7 +18,7 @@ def test_overall_analytics_empty_db(client):
 
 
 def test_category_analytics_requires_valid_category(client):
-    token = _register_admin_and_login(client, email="admin_analytics2@example.com")
+    token = _register_admin_and_login(client, email="admin_analytics2@asiatech.edu.ph")
     response = client.get(
         "/api/v1/analytics/category",
         params={"category": "Faculty"},
@@ -47,7 +40,7 @@ def test_csv_export_requires_auth(client):
 
 
 def test_monthly_trend_empty_db(client):
-    token = _register_admin_and_login(client, email="monthly_admin@example.com")
+    token = _register_admin_and_login(client, email="monthly_admin@asiatech.edu.ph")
     response = client.get("/api/v1/analytics/monthly", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
@@ -55,7 +48,7 @@ def test_monthly_trend_empty_db(client):
 
 
 def test_daily_trend_empty_db(client):
-    token = _register_admin_and_login(client, email="daily_admin@example.com")
+    token = _register_admin_and_login(client, email="daily_admin@asiatech.edu.ph")
     response = client.get("/api/v1/analytics/daily", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
@@ -63,7 +56,7 @@ def test_daily_trend_empty_db(client):
 
 
 def test_word_frequency_requires_valid_sentiment(client):
-    token = _register_admin_and_login(client, email="wf_admin@example.com")
+    token = _register_admin_and_login(client, email="wf_admin@asiatech.edu.ph")
     response = client.get(
         "/api/v1/analytics/word-frequency",
         params={"sentiment": "Positive", "top_n": 10},
@@ -74,7 +67,7 @@ def test_word_frequency_requires_valid_sentiment(client):
 
 
 def test_top_complaints_and_appreciations_empty(client):
-    token = _register_admin_and_login(client, email="tc_admin@example.com")
+    token = _register_admin_and_login(client, email="tc_admin@asiatech.edu.ph")
     complaints = client.get(
         "/api/v1/analytics/top-complaints",
         params={"limit": 5},
@@ -92,7 +85,7 @@ def test_top_complaints_and_appreciations_empty(client):
 def test_csv_export_with_data(client):
     from unittest.mock import patch
 
-    token = _register_admin_and_login(client, email="csvdata_admin@example.com")
+    token = _register_admin_and_login(client, email="csvdata_admin@asiatech.edu.ph")
     # The export endpoint joins Evaluation + Prediction. With an empty DB
     # it should still return a valid CSV with only the header row.
     response = client.get(
@@ -147,7 +140,7 @@ _TERM_ORDER = [
 
 
 def test_term_analytics_empty_db(client):
-    token = _register_admin_and_login(client, email="terms_admin@example.com")
+    token = _register_admin_and_login(client, email="terms_admin@asiatech.edu.ph")
     response = client.get("/api/v1/analytics/terms", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
@@ -165,7 +158,7 @@ def test_term_analytics_requires_auth(client):
 
 def test_term_analytics_buckets_by_submission_month(client, db_session):
     """Prior-month submissions re-bucket correctly under the new calendar."""
-    token = _register_admin_and_login(client, email="termbucket_admin@example.com")
+    token = _register_admin_and_login(client, email="termbucket_admin@asiatech.edu.ph")
     # New calendar is single-month periods: Term 1 Prelim = Jul, Term 1
     # Midterm = Aug, Term 2 Midterm = Mar, Term 2 Finals = May.
     _seed_evaluation(
@@ -197,7 +190,7 @@ def test_term_analytics_buckets_by_submission_month(client, db_session):
 
 def test_term_analytics_excludes_break_months(client, db_session):
     """Nov/Dec/Jan/Jun belong to no period: skipped, never guessed or errored."""
-    token = _register_admin_and_login(client, email="termbreak_admin@example.com")
+    token = _register_admin_and_login(client, email="termbreak_admin@asiatech.edu.ph")
     for month in (1, 6, 11, 12):
         _seed_evaluation(
             db_session, evaluation_id=f"term-break-{month}", category="Professors",
@@ -231,7 +224,7 @@ def test_term_analytics_rebuckets_every_month_under_new_calendar(client, db_sess
     periods (Jul-Oct, Feb-May) and the four break months must drop out, while
     the zero-filled x-axis still shows all eight periods in calendar order.
     """
-    token = _register_admin_and_login(client, email="termmatrix_admin@example.com")
+    token = _register_admin_and_login(client, email="termmatrix_admin@asiatech.edu.ph")
     for month in range(1, 13):
         _seed_evaluation(
             db_session, evaluation_id=f"term-matrix-{month}", category="Professors",
@@ -251,7 +244,7 @@ def test_term_analytics_rebuckets_every_month_under_new_calendar(client, db_sess
 
 
 def test_term_analytics_category_filter(client, db_session):
-    token = _register_admin_and_login(client, email="termcategory_admin@example.com")
+    token = _register_admin_and_login(client, email="termcategory_admin@asiatech.edu.ph")
     _seed_evaluation(
         db_session, evaluation_id="term-professor", category="Professors",
         sentiment="Positive", created_at=datetime(2026, 7, 15, 9, 0, 0),
@@ -275,7 +268,7 @@ def test_term_analytics_category_filter(client, db_session):
 
 
 def test_term_analytics_rejects_out_of_range_days(client):
-    token = _register_admin_and_login(client, email="termdays_admin@example.com")
+    token = _register_admin_and_login(client, email="termdays_admin@asiatech.edu.ph")
     response = client.get(
         "/api/v1/analytics/terms",
         params={"days": 0},

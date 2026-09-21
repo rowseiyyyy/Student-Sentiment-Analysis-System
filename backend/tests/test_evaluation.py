@@ -1,11 +1,9 @@
 from unittest.mock import patch
 
 
-def _register_and_login(client, email="student@example.com", role="student"):
-    client.post(
-        "/api/v1/auth/register",
-        json={"full_name": "Test User", "email": email, "password": "SecurePass123", "role": role},
-    )
+def _register_and_login(client, email="student@asiatech.edu.ph", role="student"):
+    # Public registration was removed; users are created directly in the DB.
+    client.make_user(email, role=role, full_name="Test User")
     login = client.post("/api/v1/auth/login", json={"email": email, "password": "SecurePass123"})
     return login.json()["access_token"]
 
@@ -79,7 +77,7 @@ def test_submit_evaluation(mock_pipeline, client):
 
 
 def test_submit_evaluation_without_trained_model_fails_gracefully(client):
-    token = _register_and_login(client, email="student2@example.com")
+    token = _register_and_login(client, email="student2@asiatech.edu.ph")
     response = client.post(
         "/api/v1/evaluation",
         json=_complete_staff_payload(),
@@ -97,8 +95,8 @@ def test_list_evaluations_requires_auth(client):
 
 @patch("app.api.evaluation.run_prediction_pipeline")
 def test_faculty_can_list_all_evaluations_but_not_delete(mock_pipeline, client):
-    student_token = _register_and_login(client, email="student@example.com", role="student")
-    faculty_token = _register_and_login(client, email="faculty@example.com", role="faculty")
+    student_token = _register_and_login(client, email="student@asiatech.edu.ph", role="student")
+    faculty_token = _register_and_login(client, email="faculty@asiatech.edu.ph", role="faculty")
 
     mock_pipeline.return_value = {
 
@@ -152,8 +150,8 @@ def test_student_can_only_see_own_submissions(mock_pipeline, client):
         "confidence_score": 0.91,
         "processing_time_ms": 12.5,
     }
-    student_a = _register_and_login(client, email="rbac_a@example.com", role="student")
-    student_b = _register_and_login(client, email="rbac_b@example.com", role="student")
+    student_a = _register_and_login(client, email="rbac_a@asiatech.edu.ph", role="student")
+    student_b = _register_and_login(client, email="rbac_b@asiatech.edu.ph", role="student")
 
     # Student A submits
     a_resp = client.post(

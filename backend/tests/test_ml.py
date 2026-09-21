@@ -1,22 +1,12 @@
-def _register_admin_and_login(client, email="admin@example.com"):
-    client.post(
-        "/api/v1/auth/register",
-        json={
-            "full_name": "Admin User",
-            "email": email,
-            "password": "SecurePass123",
-            "role": "administrator",
-        },
-    )
+def _register_admin_and_login(client, email="admin@asiatech.edu.ph"):
+    # Public registration was removed; users are created directly in the DB.
+    client.make_user(email, role="administrator", full_name="Admin User")
     login = client.post("/api/v1/auth/login", json={"email": email, "password": "SecurePass123"})
     return login.json()["access_token"]
 
 
-def _register_student_and_login(client, email="student@example.com"):
-    client.post(
-        "/api/v1/auth/register",
-        json={"full_name": "Student User", "email": email, "password": "SecurePass123", "role": "student"},
-    )
+def _register_student_and_login(client, email="student@asiatech.edu.ph"):
+    client.make_user(email, role="student", full_name="Student User")
     login = client.post("/api/v1/auth/login", json={"email": email, "password": "SecurePass123"})
     return login.json()["access_token"]
 
@@ -72,13 +62,13 @@ def test_upload_rejects_non_csv(client, tmp_path):
 
 
 def test_get_model_performance_requires_admin(client):
-    token = _register_student_and_login(client, email="student2@example.com")
+    token = _register_student_and_login(client, email="student2@asiatech.edu.ph")
     response = client.get("/api/v1/ml/performance", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
 
 
 def test_get_model_performance_empty(client):
-    token = _register_admin_and_login(client, email="perfadmin@example.com")
+    token = _register_admin_and_login(client, email="perfadmin@asiatech.edu.ph")
     response = client.get("/api/v1/ml/performance", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
@@ -87,7 +77,7 @@ def test_get_model_performance_empty(client):
 
 
 def test_rollback_nonexistent_run_returns_404(client):
-    token = _register_admin_and_login(client, email="rollbackadmin@example.com")
+    token = _register_admin_and_login(client, email="rollbackadmin@asiatech.edu.ph")
     response = client.post(
         "/api/v1/ml/rollback",
         params={"training_history_id": "does-not-exist"},
@@ -101,7 +91,7 @@ def test_confusion_matrix_requires_trained_model(client, db_session):
     confusion-matrix endpoint should report 404. (The endpoint only
     queries TrainingHistory -- it never checks a service's is_ready() --
     so no model needs to be mocked as loaded for this test.)"""
-    token = _register_admin_and_login(client, email="cmadmin@example.com")
+    token = _register_admin_and_login(client, email="cmadmin@asiatech.edu.ph")
     response = client.get(
         "/api/v1/ml/confusion-matrix",
         params={"algorithm": "SVM"},
@@ -115,7 +105,7 @@ def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(c
     Regression and Multilingual MiniLM as research results. They must appear
     in /ml/performance, but the production model must remain Multilingual
     MiniLM — the only live sentiment model."""
-    token = _register_admin_and_login(client, email="importperf@example.com")
+    token = _register_admin_and_login(client, email="importperf@asiatech.edu.ph")
 
     # Keep comparison/deployment artifacts out of the real app/ml directory —
     # redirect them to a temp dir so the test cannot pollute tracked files.

@@ -78,8 +78,7 @@
                         <i class="fas fa-sign-in-alt"></i> Sign in →
                     </button>
                     <p class="form-footer">
-                        No account yet? <a href="#" onclick="APP.showRegForm();return false;">Register</a>
-                        · <a href="#" onclick="APP.showForgotForm();return false;">Forgot password?</a>
+                        <a href="#" onclick="APP.showForgotForm();return false;">Forgot password?</a>
                     </p>
                 </form>
 
@@ -115,34 +114,10 @@
                     </p>
                 </form>
 
-                <!-- Register Form -->
-                <form id="login-form-register" class="hidden" onsubmit="APP.doRegister(event)">
-                    <div class="form-group">
-                        <label><i class="fas fa-user"></i> Full Name</label>
-                        <input class="form-control" id="inp-rname" placeholder="Full name" required>
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-envelope"></i> Email</label>
-                        <input type="email" class="form-control" id="inp-remail" placeholder="name@asiatech.edu.ph" required>
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-lock"></i> Password</label>
-                        <input type="password" class="form-control" id="inp-rpass" placeholder="••••••••" required>
-                    </div>
-                   <div class="form-group">
-                    <label for="inp-rrole"><i class="fas fa-user-tag"></i> Role</label>
-                    <select class="form-control" id="inp-rrole">
-                        <option value="faculty">Faculty</option>
-                        <option value="administrator">Administrator</option>
-                    </select>
-                </div>
-                    <button type="submit" class="btn btn-primary btn-block btn-lg">
-                        <i class="fas fa-user-plus"></i> Create account →
-                    </button>
-                    <p class="form-footer">
-                        Already have an account? <a href="#" onclick="APP.hideRegForm();return false;">Sign in</a>
-                    </p>
-                </form>
+                <!-- NOTE: there is deliberately NO public sign-up form. Admin
+                     and faculty accounts are provisioned internally via
+                     seed_admin.py / an internal admin panel, and sign-in is
+                     gated to @asiatech.edu.ph addresses. -->
 
                 <!-- Public "Action Taken" bulletin link — visible on the
                      login page for every role (students, admins, faculty),

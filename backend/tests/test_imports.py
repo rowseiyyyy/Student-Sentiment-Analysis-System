@@ -14,20 +14,15 @@ PREDICTION_RESULT = {
 }
 
 
-def _register_admin_and_login(client, email="importadmin@example.com"):
-    client.post(
-        "/api/v1/auth/register",
-        json={"full_name": "Import Admin", "email": email, "password": "SecurePass123", "role": "administrator"},
-    )
+def _register_admin_and_login(client, email="importadmin@asiatech.edu.ph"):
+    # Public registration was removed; users are created directly in the DB.
+    client.make_user(email, role="administrator", full_name="Import Admin")
     login = client.post("/api/v1/auth/login", json={"email": email, "password": "SecurePass123"})
     return login.json()["access_token"]
 
 
-def _register_student_and_login(client, email="importstudent@example.com"):
-    client.post(
-        "/api/v1/auth/register",
-        json={"full_name": "Import Student", "email": email, "password": "SecurePass123", "role": "student"},
-    )
+def _register_student_and_login(client, email="importstudent@asiatech.edu.ph"):
+    client.make_user(email, role="student", full_name="Import Student")
     login = client.post("/api/v1/auth/login", json={"email": email, "password": "SecurePass123"})
     return login.json()["access_token"]
 

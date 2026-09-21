@@ -103,6 +103,11 @@ var ADMIN = {
             API.setAuth(result.access_token, result.user);
             this.currentUser = result.user;
             showToast('Welcome, ' + result.user.full_name + '!', 'success');
+            // Offer (never force) a password change when the account still
+            // uses its seed default password.
+            if (result.using_default_password) {
+                APP.promptDefaultPasswordChange(password);
+            }
             this.showDashboard();
         } catch (error) {
             showToast('Login failed: ' + error.message, 'error');

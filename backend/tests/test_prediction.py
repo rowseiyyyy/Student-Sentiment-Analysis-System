@@ -13,11 +13,9 @@ PREDICTION_RESULT = {
 }
 
 
-def _register_and_login(client, email="predictuser@example.com", role="student"):
-    client.post(
-        "/api/v1/auth/register",
-        json={"full_name": "Predict User", "email": email, "password": "SecurePass123", "role": role},
-    )
+def _register_and_login(client, email="predictuser@asiatech.edu.ph", role="student"):
+    # Public registration was removed; users are created directly in the DB.
+    client.make_user(email, role=role, full_name="Predict User")
     login = client.post("/api/v1/auth/login", json={"email": email, "password": "SecurePass123"})
     return login.json()["access_token"]
 
@@ -90,7 +88,7 @@ def test_predict_requires_auth(mock_pipeline, client):
 @patch("app.api.prediction.run_prediction_pipeline")
 def test_predict_empty_text_rejected(mock_pipeline, client):
     mock_pipeline.return_value = PREDICTION_RESULT
-    token = _register_and_login(client, email="emptypredict@example.com")
+    token = _register_and_login(client, email="emptypredict@asiatech.edu.ph")
     response = client.post(
         "/api/v1/predict",
         json={"text": "   "},
@@ -102,7 +100,7 @@ def test_predict_empty_text_rejected(mock_pipeline, client):
 @patch("app.api.prediction.run_prediction_pipeline")
 def test_predict_pipeline_failure_returns_503(mock_pipeline, client):
     mock_pipeline.side_effect = RuntimeError("No sentiment model is currently available.")
-    token = _register_and_login(client, email="failpredict@example.com")
+    token = _register_and_login(client, email="failpredict@asiatech.edu.ph")
     response = client.post(
         "/api/v1/predict",
         json={"text": "some feedback comment here"},
