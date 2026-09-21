@@ -6,6 +6,15 @@ from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    Token,
+    TokenRefreshRequest,
+    UserLogin,
+    UserProfileUpdate,
+    UserOut,
+)
 from app.core.security import (
     create_access_token,
     create_password_reset_token,
@@ -15,42 +24,33 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.auth import (
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    Token,
-    TokenRefreshRequest,
-    UserLogin,
-    UserOut,
-    UserProfileUpdate,
-    UserRegister,
-)
-
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Only Asia Tech institution emails may sign in. There is no public sign-up:
+# Admin/Faculty accounts are provisioned by the seed script (seed_admin.py)
+# or an internal admin panel. Students are anonymous and never log in.
+ALLOWED_EMAIL_DOMAIN = "@asiatech.edu.ph"
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-@limiter.limit("10/minute")
-def register(request: Request, payload: UserRegister, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == payload.email).first()
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already registered.")
-
-    user = User(
-        full_name=payload.full_name,
-        email=payload.email,
-        hashed_password=hash_password(payload.password),
-        role=payload.role,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+# Default passwords assigned by the seed script. Login reports whether the
+# account is still using one so the UI can offer (not force) a password
+# change. These are compared against the stored hash, never stored.
+DEFAULT_PASSWORDS = {
+    "administrator": "ASIATECH-admin123",
+    "faculty": "ASIATECH-faculty123",
+}
 
 
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
 def login(request: Request, payload: UserLogin, db: Session = Depends(get_db)):
+    # Institution-only sign-in: reject any non-@asiatech.edu.ph address
+    # before doing anything else (no public registration exists).
+    if not payload.email.lower().endswith(ALLOWED_EMAIL_DOMAIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only @asiatech.edu.ph accounts can sign in.",
+        )
+
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
@@ -59,9 +59,19 @@ def login(request: Request, payload: UserLogin, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated.")
 
+    default_password = DEFAULT_PASSWORDS.get(user.role.value)
+    using_default_password = bool(
+        default_password and verify_password(default_password, user.hashed_password)
+    )
+
     access_token = create_access_token(subject=user.id, role=user.role.value)
     refresh_token = create_refresh_token(subject=user.id, role=user.role.value)
-    return Token(access_token=access_token, refresh_token=refresh_token, user=user)
+    return Token(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=user,
+        using_default_password=using_default_password,
+    )
 
 
 @router.post("/refresh", response_model=Token)

@@ -1,53 +1,69 @@
-"""Seed default admin/faculty users with known passwords."""
+"""Seed default Admin/Faculty accounts with the institution default passwords.
+
+Accounts live on the @asiatech.edu.ph domain only — there is no public
+sign-up. Students are anonymous and never have accounts.
+
+Usage:
+    cd backend && python seed_admin.py [more emails ...]
+
+Every seeded account keeps the default password (ASIATECH-admin123 /
+ASIATECH-faculty123) so the login UI can offer a change on first sign-in.
+Pass extra emails as arguments to create additional accounts; the role is
+derived from a naming hint or defaults to faculty.
+"""
 import sys
-sys.path.insert(0, '.')
+import uuid
+
+sys.path.insert(0, ".")
 
 from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.models.user import User, UserRole
-from app.models.evaluation import Evaluation
-from app.models.prediction import Prediction
-from app.models.training_history import TrainingHistory
-import uuid
 
-db = SessionLocal()
+ALLOWED_DOMAIN = "@asiatech.edu.ph"
+DEFAULT_ADMIN_PASSWORD = "ASIATECH-admin123"
+DEFAULT_FACULTY_PASSWORD = "ASIATECH-faculty123"
 
-# Check if admin exists
-admin = db.query(User).filter(User.email == "admin@asiatech.edu.ph").first()
-if admin:
-    # Reset password
-    admin.hashed_password = hash_password("AdminPass123")
-    print(f"Updated admin password: {admin.email}")
-else:
-    admin = User(
-        id=str(uuid.uuid4()),
-        full_name="System Administrator",
-        email="admin@asiatech.edu.ph",
-        hashed_password=hash_password("AdminPass123"),
-        role=UserRole.ADMINISTRATOR,
-        is_active=True
-    )
-    db.add(admin)
-    print(f"Created admin: {admin.email} / AdminPass123")
 
-# Also check/faculty
-faculty = db.query(User).filter(User.email == "faculty@asiatech.edu.ph").first()
-if not faculty:
-    faculty = User(
-        id=str(uuid.uuid4()),
-        full_name="Faculty Member",
-        email="faculty@asiatech.edu.ph",
-        hashed_password=hash_password("FacultyPass123"),
-        role=UserRole.FACULTY,
-        is_active=True
-    )
-    db.add(faculty)
-    print(f"Created faculty: {faculty.email} / FacultyPass123")
+def seed(email: str, full_name: str, role: UserRole) -> None:
+    if not email.lower().endswith(ALLOWED_DOMAIN):
+        print(f"SKIP {email}: only @{ALLOWED_DOMAIN} accounts can be created.")
+        return
 
-db.commit()
-db.close()
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        default_password = (
+            DEFAULT_ADMIN_PASSWORD if role == UserRole.ADMINISTRATOR else DEFAULT_FACULTY_PASSWORD
+        )
+        if user:
+            print(f"EXISTS {email} (role={user.role.value}) — left untouched.")
+            return
+        db.add(
+            User(
+                id=str(uuid.uuid4()),
+                full_name=full_name,
+                email=email,
+                hashed_password=hash_password(default_password),
+                role=role,
+                is_active=True,
+            )
+        )
+        db.commit()
+        print(f"CREATED {email} / {default_password}")
+    finally:
+        db.close()
 
-print("\nSeed complete! Test credentials:")
-print("  Admin: admin@asiatech.edu.ph / AdminPass123")
-print("  Faculty: faculty@asiatech.edu.ph / FacultyPass123")
-print("  Faculty (existing): faculty-test@example.com / password123")
+
+if __name__ == "__main__":
+    seed("admin@asiatech.edu.ph", "System Administrator", UserRole.ADMINISTRATOR)
+    seed("faculty@asiatech.edu.ph", "Faculty Member", UserRole.FACULTY)
+
+    for extra in sys.argv[1:]:
+        role = UserRole.ADMINISTRATOR if "admin" in extra.lower() else UserRole.FACULTY
+        seed(extra, extra.split("@")[0].replace(".", " ").title(), role)
+
+    print("\nSeed complete. Default passwords:")
+    print(f"  Admin:   {DEFAULT_ADMIN_PASSWORD}")
+    print(f"  Faculty: {DEFAULT_FACULTY_PASSWORD}")
+
