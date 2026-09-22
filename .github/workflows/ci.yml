@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
 
 jobs:
   build:
@@ -36,6 +36,9 @@ jobs:
             sleep 5
           done
 
+      - name: Run backend test suite
+        run: docker compose exec -T web sh -c "pip install -q -r backend/requirements-dev.txt && cd backend && python -m pytest -q"
+
       - name: Show running containers
         run: docker compose ps
 
@@ -46,4 +49,3 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down
-</parameter>
