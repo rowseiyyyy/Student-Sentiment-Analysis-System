@@ -1648,6 +1648,9 @@ predictionHtml +
                 '<div class="chart-card"><h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Volume and sentiment for each of the eight grading periods (Term 1 Prelim to Finals, then Term 2 Prelim to Finals), from each submission\'s month. Break / enrollment months (Nov, Dec, Jan, Jun) belong to no grading period and are intentionally not plotted.</p><div class="chart-container" id="chart-host-term-sentiment"></div></div>' +
                 '<div class="chart-card"><h3><i class="fas fa-project-diagram"></i> Sentiment Trend by Department</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Department positivity rate per month, size-normalized so trends compare fairly. Each point is tagged with that month\'s raw submission count (n=), so a swing backed by real volume can be told apart from one resting on a handful of low-traffic submissions.</p><div class="chart-container" id="chart-host-department-trend"></div></div>' +
             '</div>' +
+            '<div class="chart-grid">' +
+                '<div class="chart-card"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>' +
+            '</div>' +
             '<div class="chart-card">' +
                 '<h3><i class="fas fa-tags"></i> Word / Theme Frequency</h3>' +
                 '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Most frequent keywords in comments, split by the sentiment they came from.</p>' +
@@ -1692,12 +1695,14 @@ predictionHtml +
                     return API.getMonthlyTrend('category=' + encodeURIComponent(c)).catch(function() { return null; });
                 })),
                 API.getWordFrequency('Negative', 12).catch(function() { return null; }),
-                API.getWordFrequency('Positive', 12).catch(function() { return null; })
+                API.getWordFrequency('Positive', 12).catch(function() { return null; }),
+                API.getCourseAnalytics().catch(function() { return null; })
             ]);
             var termData = extra[0];
             var deptTrends = extra[1];
             var complaintWords = extra[2];
             var appreciationWords = extra[3];
+            var courseData = extra[4];
 
             setTimeout(function() {
                 var ctx = document.getElementById('chart-category-sentiment');
@@ -1869,14 +1874,91 @@ predictionHtml +
                 }, 'No department trend data available.');
             }, 100);
 
+            // ---- Sentiment by Courses (net sentiment score, best course first) ----
+            // One bar per course, scored (Positive - Negative) / total x 100 on
+            // a fixed -100..+100 axis, so bar lengths are comparable between
+            // courses and the zero line reads as "positives and negatives even
+            // out" rather than a missing bar. The API already returns the rows
+            // best-to-worst and Chart.js plots the first label of a vertical
+            // category axis at the TOP (verified against chart.js 4.4.0, the
+            // version index.html loads), so the highest-scoring course lands at
+            // the top with no reversal here.
+            var coursePoints = (courseData && courseData.points) ? courseData.points : [];
+            var hasCourseData = coursePoints.length > 0;
+            var courseHost = document.getElementById('chart-host-course-sentiment');
+            if (courseHost && hasCourseData) {
+                // A program list runs longer than the stylesheet's chart height
+                // (280px, or 240px on small screens), so give the bars ~30px
+                // each rather than squeezing a dozen into slivers. Only grows --
+                // a short list keeps the stylesheet's own height, and a long one
+                // is capped so the card cannot run away down the page.
+                var courseHeight = Math.max(280, Math.min(560, coursePoints.length * 30 + 70));
+                if (courseHeight > courseHost.clientHeight) courseHost.style.height = courseHeight + 'px';
+            }
+            var courseBarColor = function(score) {
+                if (score > 0) return '#2f6f4e';
+                if (score < 0) return '#b33a3a';
+                return '#b7791f';
+            };
+            setTimeout(function() {
+                ADMIN.mountChart('chart-host-course-sentiment', hasCourseData, function(canvas) {
+                    ADMIN.charts.courseSentiment = new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: coursePoints.map(function(p) { return p.course; }),
+                            datasets: [{
+                                label: 'Sentiment score',
+                                data: coursePoints.map(function(p) { return p.sentiment_score || 0; }),
+                                backgroundColor: coursePoints.map(function(p) { return courseBarColor(p.sentiment_score); }),
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        // Thin data is visible here: a score at the
+                                        // extremes carried by "n=1" is a flag, not
+                                        // a verdict on the whole program.
+                                        label: function(ctx) {
+                                            var point = coursePoints[ctx.dataIndex] || {};
+                                            return 'Score ' + (point.sentiment_score || 0).toFixed(1) +
+                                                ' \u00b7 n=' + (point.total || 0) +
+                                                ' (P' + (point.positive || 0) + ' / Neu' + (point.neutral || 0) + ' / Neg' + (point.negative || 0) + ')';
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                // Fixed bounds keep every course on one ruler.
+                                x: {
+                                    min: -100,
+                                    max: 100,
+                                    title: { display: true, text: 'Sentiment score (-100 to +100)' }
+                                },
+                                // reverse:false pins the descending order as-is:
+                                // first (best) course at the top, worst at the
+                                // bottom. autoSkip:false keeps every course named.
+                                y: { reverse: false, ticks: { autoSkip: false } }
+                            }
+                        }
+                    });
+                }, 'No course data available.');
+            }, 100);
+
             // ---- Word / theme frequency (aggregate view of the verbatim lists) ----
-            // indexAxis:'y' draws categories bottom-up, so the backend's
-            // most_common() ordering is reversed to put the most frequently
-            // mentioned keyword at the top of each chart.
+            // The backend returns words most-frequent first (Counter.most_common)
+            // and a vertical category axis plots index 0 at the TOP (see the
+            // course chart above), so that order is charted as-is: the most
+            // frequently mentioned keyword sits at the top of each chart. The
+            // .reverse() calls that used to live here assumed the axis ran
+            // bottom-up, which put the *least* frequent term on top instead.
             var complaintTerms = (complaintWords && complaintWords.words) ? complaintWords.words.slice() : [];
             var appreciationTerms = (appreciationWords && appreciationWords.words) ? appreciationWords.words.slice() : [];
-            complaintTerms.reverse();
-            appreciationTerms.reverse();
             setTimeout(function() {
                 ADMIN.mountChart('chart-host-theme-complaints', complaintTerms.length > 0, function(canvas) {
                     ADMIN.charts.complaintThemes = new Chart(canvas, {

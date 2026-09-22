@@ -14,6 +14,7 @@ from app.models.prediction import Prediction, SentimentLabel
 from app.models.user import User
 from app.schemas.analytics import (
     CategoryAnalyticsResponse,
+    CourseAnalyticsResponse,
     OverallAnalyticsResponse,
     TermAnalyticsResponse,
     TermComparisonResponse,
@@ -103,6 +104,21 @@ def get_term_comparison(
     term-over-term widget. "Current" is resolved from today's month with the
     same configured calendar the /analytics/terms chart uses."""
     return analytics_service.term_comparison(db, days=_days_param(days), category=category)
+
+
+@router.get("/courses", response_model=CourseAnalyticsResponse)
+@retry_on_disconnect()
+def get_course_analytics(
+    days: Optional[int] = Query(None, ge=1, le=3650),
+    category: Optional[NormalizedCategory] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    """Net sentiment score per course — backs the "Sentiment by Courses"
+    horizontal bar chart (course names on the Y axis, score on the X axis).
+    Rows come back sorted by descending score, which is the order the chart
+    plots them in: the best-scoring course sits at the top."""
+    return analytics_service.course_analytics(db, days=_days_param(days), category=category)
 
 
 @router.get("/word-frequency", response_model=WordFrequencyResponse)

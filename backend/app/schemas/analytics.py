@@ -86,6 +86,31 @@ class TermComparisonResponse(BaseModel):
     note: str
 
 
+class CourseSentimentPoint(BaseModel):
+    """One course's aggregate for the "Sentiment by Courses" chart.
+
+    ``sentiment_score`` is a net score on a -100..+100 scale, computed as
+    ``(positive - negative) / total * 100``: +100 means the course's feedback
+    was entirely positive, -100 entirely negative, and 0 means positives and
+    negatives cancel out. Neutral submissions still count toward ``total``
+    (and therefore shrink the score toward 0) so a course cannot look
+    perfectly positive off a single submission.
+    """
+
+    course: str
+    positive: int
+    neutral: int
+    negative: int
+    total: int
+    sentiment_score: float
+
+
+class CourseAnalyticsResponse(BaseModel):
+    # Rows arrive sorted by descending sentiment_score, which is exactly the
+    # order the horizontal bar chart plots (best course at the top).
+    points: list[CourseSentimentPoint]
+
+
 class WordFrequencyItem(BaseModel):
     word: str
     count: int

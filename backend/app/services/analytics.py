@@ -253,6 +253,77 @@ def term_analytics(
     return {"points": points}
 
 
+def course_analytics(
+    db: Session,
+    days: Optional[int] = None,
+    category: Optional[EvaluationCategory] = None,
+) -> dict:
+    """Net sentiment score per course (backs the "Sentiment by Courses" chart).
+
+    The course/program is free text captured by the anonymous evaluation form
+    (and by bulk import), stored on the evaluation row itself rather than
+    normalised into a lookup table, so it is grouped by its stored value.
+    Submissions with no course (NULL or blank) cannot be attributed to any
+    program and are skipped instead of being folded into a misleading
+    "Unknown" bar.
+
+    Every course gets one score on a -100..+100 scale:
+
+        sentiment_score = (positive - negative) / total * 100
+
+    An all-positive course scores +100, an all-negative one -100, and a course
+    with as many positive as negative submissions scores 0. Neutral submissions
+    stay in the denominator, so they damp the score toward 0 rather than being
+    ignored — ten neutral and one positive submission must not read the same as
+    a single positive one.
+
+    Rows are sorted by descending score so the chart reads best-to-worst from
+    top to bottom, with submission volume and then the course name as
+    tie-breakers so repeated calls return a stable order.
+    """
+    query = (
+        db.query(
+            Evaluation.course,
+            Prediction.official_prediction,
+            func.count(Prediction.id),
+        )
+        .join(Prediction, Prediction.evaluation_id == Evaluation.id)
+        .filter(Evaluation.course.isnot(None))
+        .group_by(Evaluation.course, Prediction.official_prediction)
+    )
+    if category is not None:
+        query = query.filter(Evaluation.category == category)
+    if days is not None:
+        query = query.filter(Evaluation.created_at >= utcnow_naive() - timedelta(days=days))
+
+    buckets: dict[str, Counter] = {}
+    for course, label, count in query.all():
+        course = (course or "").strip()
+        if not course:
+            continue
+        buckets.setdefault(course, Counter())[label] += count
+
+    points = []
+    for course, counter in buckets.items():
+        positive = counter.get(SentimentLabel.POSITIVE, 0)
+        neutral = counter.get(SentimentLabel.NEUTRAL, 0)
+        negative = counter.get(SentimentLabel.NEGATIVE, 0)
+        total = positive + neutral + negative
+        points.append({
+            "course": course,
+            "positive": positive,
+            "neutral": neutral,
+            "negative": negative,
+            "total": total,
+            "sentiment_score": round(((positive - negative) / total) * 100, 2) if total else 0.0,
+        })
+
+    # Descending score, then the better-evidenced course first on a tie, then
+    # case-insensitive name so the bar order never jitters between requests.
+    points.sort(key=lambda p: (-p["sentiment_score"], -p["total"], p["course"].lower()))
+    return {"points": points}
+
+
 def _academic_cycle_position(month: int, anchor_month: int) -> int:
     """Where ``month`` sits in the academic cycle, measured from ``anchor_month``.
 

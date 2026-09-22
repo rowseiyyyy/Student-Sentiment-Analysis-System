@@ -275,3 +275,182 @@ def test_term_analytics_rejects_out_of_range_days(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 422
+
+
+# ============================================================
+# Course analytics (Sentiment by Courses chart)
+# ============================================================
+
+def _seed_course_evaluation(
+    db_session, *, evaluation_id, sentiment, course, category="Professors", created_at=None
+):
+    """Insert one evaluation carrying a course + its prediction.
+
+    ``course`` is passed through as-is (including None) so tests can prove the
+    endpoint's behaviour for submissions that never named a program.
+    """
+    from app.core.time import utcnow_naive
+    from app.models.evaluation import Evaluation, EvaluationCategory
+    from app.models.prediction import AlgorithmName, Prediction, SentimentLabel
+
+    stamp = created_at or utcnow_naive()
+    db_session.add(
+        Evaluation(
+            id=evaluation_id,
+            category=EvaluationCategory(category),
+            comment=f"Comment for {evaluation_id}",
+            course=course,
+            created_at=stamp,
+        )
+    )
+    db_session.add(
+        Prediction(
+            evaluation_id=evaluation_id,
+            official_prediction=SentimentLabel(sentiment),
+            algorithm_used=AlgorithmName.MINILM,
+            confidence_score=0.9,
+            processing_time_ms=12.0,
+            created_at=stamp,
+        )
+    )
+    db_session.commit()
+
+
+def test_course_analytics_empty_db(client):
+    token = _register_admin_and_login(client, email="courses_empty_admin@asiatech.edu.ph")
+    response = client.get("/api/v1/analytics/courses", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    # Nothing to rank yet: an empty list, not a fabricated "Unknown" bucket.
+    assert response.json()["points"] == []
+
+
+def test_course_analytics_requires_auth(client):
+    assert client.get("/api/v1/analytics/courses").status_code == 401
+
+
+def test_course_analytics_scores_and_sorts_descending(client, db_session):
+    """Net score is (positive - negative) / total * 100, best course first."""
+    token = _register_admin_and_login(client, email="courses_scores_admin@asiatech.edu.ph")
+    # BSA: one positive only -> +100.
+    _seed_course_evaluation(db_session, evaluation_id="c-bsa", sentiment="Positive", course="BSA")
+    # BSIT/AIT: three positive + one negative -> (3 - 1) / 4 * 100 = +50.
+    for index, sentiment in enumerate(["Positive", "Positive", "Positive", "Negative"]):
+        _seed_course_evaluation(
+            db_session, evaluation_id=f"c-bsit-{index}", sentiment=sentiment, course="BSIT/AIT"
+        )
+    # BSCS: one positive + one negative -> 0 (they cancel out).
+    _seed_course_evaluation(db_session, evaluation_id="c-bscs-p", sentiment="Positive", course="BSCS")
+    _seed_course_evaluation(db_session, evaluation_id="c-bscs-n", sentiment="Negative", course="BSCS")
+    # BSCRIM: negative only -> -100, so a course can score below zero.
+    _seed_course_evaluation(db_session, evaluation_id="c-bscrim", sentiment="Negative", course="BSCRIM")
+
+    response = client.get("/api/v1/analytics/courses", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    points = response.json()["points"]
+
+    # The chart plots this order top-to-bottom, so it must already be
+    # descending: the course with the best score comes first.
+    assert [p["course"] for p in points] == ["BSA", "BSIT/AIT", "BSCS", "BSCRIM"]
+    assert [p["sentiment_score"] for p in points] == [100.0, 50.0, 0.0, -100.0]
+    scores = [p["sentiment_score"] for p in points]
+    assert scores == sorted(scores, reverse=True)
+
+    by_course = {p["course"]: p for p in points}
+    assert by_course["BSIT/AIT"]["positive"] == 3
+    assert by_course["BSIT/AIT"]["negative"] == 1
+    assert by_course["BSIT/AIT"]["total"] == 4
+    assert by_course["BSCS"]["neutral"] == 0
+
+
+def test_course_analytics_skips_submissions_without_a_course(client, db_session):
+    """A submission that named no program cannot be attributed to one."""
+    token = _register_admin_and_login(client, email="courses_blank_admin@asiatech.edu.ph")
+    _seed_course_evaluation(
+        db_session, evaluation_id="c-named", sentiment="Positive", course="BSIT/AIT"
+    )
+    # Legacy/anonymous rows: course never captured (NULL), or stored blank.
+    _seed_course_evaluation(db_session, evaluation_id="c-null", sentiment="Negative", course=None)
+    _seed_course_evaluation(db_session, evaluation_id="c-blank", sentiment="Negative", course="   ")
+
+    response = client.get("/api/v1/analytics/courses", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    points = response.json()["points"]
+    # Only the named course is ranked -- no "Unknown" bar is invented, and the
+    # unanswered rows cannot drag its score down either.
+    assert [p["course"] for p in points] == ["BSIT/AIT"]
+    assert points[0]["sentiment_score"] == 100.0
+    assert points[0]["negative"] == 0
+
+
+def test_course_analytics_damps_score_with_neutral_submissions(client, db_session):
+    """Neutral submissions sit in the denominator, so they pull scores to 0."""
+    token = _register_admin_and_login(client, email="courses_neutral_admin@asiatech.edu.ph")
+    # One positive submission alone -> +100.
+    _seed_course_evaluation(db_session, evaluation_id="c-one-pos", sentiment="Positive", course="BSA")
+    # One positive among nine neutrals -> (1 - 0) / 10 * 100 = +10, not +100.
+    _seed_course_evaluation(
+        db_session, evaluation_id="c-mixed-pos", sentiment="Positive", course="BSCS"
+    )
+    for index in range(9):
+        _seed_course_evaluation(
+            db_session, evaluation_id=f"c-mixed-neutral-{index}", sentiment="Neutral", course="BSCS"
+        )
+
+    response = client.get("/api/v1/analytics/courses", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert {p["course"]: p["sentiment_score"] for p in response.json()["points"]} == {
+        "BSA": 100.0,
+        "BSCS": 10.0,
+    }
+
+
+def test_course_analytics_tie_break_prefers_more_submissions(client, db_session):
+    """Equal scores fall back to volume, so the better-evidenced course leads."""
+    token = _register_admin_and_login(client, email="courses_tie_admin@asiatech.edu.ph")
+    # Both score +100: "BSIT/AIT" off two submissions, "BSA" off one. Alphabetical
+    # order would put BSA first, so this proves the volume tie-break is applied.
+    for index in range(2):
+        _seed_course_evaluation(
+            db_session, evaluation_id=f"c-tie-bsit-{index}", sentiment="Positive", course="BSIT/AIT"
+        )
+    _seed_course_evaluation(db_session, evaluation_id="c-tie-bsa", sentiment="Positive", course="BSA")
+
+    response = client.get("/api/v1/analytics/courses", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    points = response.json()["points"]
+    assert [p["course"] for p in points] == ["BSIT/AIT", "BSA"]
+    assert [p["total"] for p in points] == [2, 1]
+
+
+def test_course_analytics_category_filter(client, db_session):
+    token = _register_admin_and_login(client, email="courses_category_admin@asiatech.edu.ph")
+    _seed_course_evaluation(
+        db_session, evaluation_id="c-cat-prof", sentiment="Positive", course="BSIT/AIT",
+        category="Professors",
+    )
+    _seed_course_evaluation(
+        db_session, evaluation_id="c-cat-staff", sentiment="Negative", course="BSIT/AIT",
+        category="Staff",
+    )
+
+    # "Faculty" is a legacy alias normalized onto "Professors".
+    response = client.get(
+        "/api/v1/analytics/courses",
+        params={"category": "Faculty"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    points = response.json()["points"]
+    assert [p["course"] for p in points] == ["BSIT/AIT"]
+    assert points[0]["positive"] == 1
+    assert points[0]["negative"] == 0
+
+
+def test_course_analytics_rejects_out_of_range_days(client):
+    token = _register_admin_and_login(client, email="courses_days_admin@asiatech.edu.ph")
+    response = client.get(
+        "/api/v1/analytics/courses",
+        params={"days": 0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422

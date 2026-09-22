@@ -262,6 +262,13 @@ async getEvaluations(params = {}) {
         return this.get('/analytics/term-comparison' + this._buildQuery(params));
     },
 
+    // Net sentiment score per course (-100..+100), for the "Sentiment by
+    // Courses" chart. Rows come back sorted by descending score, which is the
+    // order the horizontal bar chart plots them in.
+    async getCourseAnalytics(params) {
+        return this.get('/analytics/courses' + this._buildQuery(params));
+    },
+
     async getDailyTrend(params) {
         return this.get('/analytics/daily' + this._buildQuery(params));
     },

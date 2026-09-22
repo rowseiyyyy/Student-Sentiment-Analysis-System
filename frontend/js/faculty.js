@@ -287,14 +287,24 @@ const FACULTY = {
                     <div id="faculty-top-comments" style="max-height:400px;overflow-y:auto;"></div>
                 </div>
             </div>
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3><i class="fas fa-book"></i> Sentiment by Courses</h3>
+                    <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so bars to the right of zero are net-positive courses. Bars are sorted best to worst, and only submissions that named a course are counted.</p>
+                    <div class="chart-container" id="faculty-chart-courses"></div>
+                </div>
+            </div>
         `;
 
         showLoading('Loading analytics...');
         try {
-            const [monthly, complaints, appreciations] = await Promise.all([
+            const [monthly, complaints, appreciations, courses] = await Promise.all([
                 API.getMonthlyTrend(),
                 API.getTopComplaints(5),
-                API.getTopAppreciations(5)
+                API.getTopAppreciations(5),
+                // Individually guarded: a failure here must degrade to this one
+                // chart's "No course data available." caption, not blank the tab.
+                API.getCourseAnalytics().catch(() => null)
             ]);
 
             setTimeout(() => {
@@ -319,6 +329,78 @@ const FACULTY = {
                     }
                 });
             }, 100);
+
+            // Sentiment by Courses: one horizontal bar per course, scored
+            // (Positive - Negative) / total x 100 on a fixed -100..+100 axis so
+            // bar lengths stay comparable between programs. The API returns the
+            // rows best-to-worst and Chart.js plots the first label of a
+            // vertical category axis at the top (chart.js 4.4.0, per
+            // index.html), so the best-scoring course sits at the top of the
+            // chart with no reversal needed here.
+            const coursePoints = (courses && courses.points) ? courses.points : [];
+            const courseHost = document.getElementById('faculty-chart-courses');
+            if (courseHost && coursePoints.length === 0) {
+                // Empty dataset: show the same readable placeholder the admin
+                // charts use instead of a broken axis-only canvas.
+                courseHost.style.display = 'flex';
+                courseHost.style.alignItems = 'center';
+                courseHost.style.justifyContent = 'center';
+                courseHost.innerHTML = '<p class="text-muted text-center">No course data available.</p>';
+            } else if (courseHost) {
+                // A program list runs longer than the stylesheet's chart height
+                // (280px, or 240px on small screens), so give the bars ~30px
+                // each rather than squeezing a dozen of them into slivers. Only
+                // grows, and is capped so the card cannot run away down the page.
+                const courseHeight = Math.max(280, Math.min(560, coursePoints.length * 30 + 70));
+                if (courseHeight > courseHost.clientHeight) courseHost.style.height = `${courseHeight}px`;
+                setTimeout(() => {
+                    courseHost.innerHTML = '';
+                    const canvas = document.createElement('canvas');
+                    courseHost.appendChild(canvas);
+                    this.charts.courses = new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: coursePoints.map(p => p.course),
+                            datasets: [{
+                                label: 'Sentiment score',
+                                data: coursePoints.map(p => p.sentiment_score || 0),
+                                backgroundColor: coursePoints.map(p => p.sentiment_score > 0 ? '#2f6f4e' : (p.sentiment_score < 0 ? '#b33a3a' : '#b7791f')),
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        // Shows the submission count, so a score
+                                        // carried by a couple of responses is
+                                        // readable as thin data.
+                                        label: ctx => {
+                                            const point = coursePoints[ctx.dataIndex] || {};
+                                            return `Score ${(point.sentiment_score || 0).toFixed(1)} \u00b7 n=${point.total || 0} (P${point.positive || 0} / Neu${point.neutral || 0} / Neg${point.negative || 0})`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    min: -100,
+                                    max: 100,
+                                    title: { display: true, text: 'Sentiment score (-100 to +100)' }
+                                },
+                                // reverse:false pins descending order (best
+                                // course at the top); autoSkip:false keeps every
+                                // course named.
+                                y: { reverse: false, ticks: { autoSkip: false } }
+                            }
+                        }
+                    });
+                }, 100);
+            }
 
             const commentsDiv = document.getElementById('faculty-top-comments');
             let html = '';
