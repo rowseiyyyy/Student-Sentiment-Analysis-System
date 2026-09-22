@@ -38,6 +38,20 @@ jobs:
           FRONTEND_URL=http://localhost:8000
           EOF
 
+      - name: Create MiniLM stubs for the readiness check
+        # The real MiniLM artifacts live in a PRIVATE Hugging Face repo and are
+        # pulled at startup via HF_TOKEN (services/hub_downloader.py). CI has no
+        # token, so /ready would report models:degraded and
+        # test_readiness_endpoint_reports_database_and_model_state fails
+        # ("models" != "ready"). That check - and every model test - only
+        # verifies EXISTENCE of these two files (tokenizer/ONNX session are
+        # faked in tests), so empty stubs satisfy them without committing any
+        # model bytes to the repo.
+        run: |
+          mkdir -p backend/app/ml/minilm_sentiment
+          : > backend/app/ml/minilm_sentiment/config.json
+          : > backend/app/ml/minilm_sentiment/model.onnx
+
       - name: Build web image
         run: docker compose build web
 
