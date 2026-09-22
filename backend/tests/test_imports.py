@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+from app.services.import_service import validate_imported_data
+
 PREDICTION_RESULT = {
     "svm_prediction": "Positive",
     "svm_confidence": 0.91,
@@ -137,6 +139,79 @@ def test_import_combined_csv_auto_detected(mock_process, client, tmp_path):
         assert r["ratings"]
     faculty = next(r for r in rows if r["category"] == "Faculty")
     assert faculty["ratings"] == {"teaching_quality": 4}
+
+
+# ---------------------------------------------------------------------------
+# Canonical category values must resolve the import layer's internal keyword
+# maps. The API passes EvaluationCategory.value ("Professors" / "Payments"),
+# but RATING_KEYWORDS_BY_CATEGORY is keyed by the legacy labels ("Faculty",
+# "Payment"); without the canonical -> internal mapping a single-category
+# import matched zero rating columns and silently dropped every Likert answer.
+# ---------------------------------------------------------------------------
+
+_PROFESSOR_HEADERS = [
+    "Respondent_ID",
+    "The professors provides timely and constructive feedback on students' performance.",
+    "The professors teaching style is effective this semester.",
+    "Share your thoughts",
+    "Category",
+]
+
+_PAYMENTS_HEADERS = [
+    "Respondent_ID",
+    "The payment portal/counter is easily accessible at convenient times.",
+    "The information about fees, balances, and transactions is clear and accurate.",
+    "I trust that the digital banking system protects my data.",
+    "Share your thoughts",
+    "Category",
+]
+
+
+def test_single_category_import_resolves_canonical_professors():
+    rows = [{
+        "Respondent_ID": "S1",
+        _PROFESSOR_HEADERS[1]: "4",
+        _PROFESSOR_HEADERS[2]: "5",
+        "Share your thoughts": "Great class",
+        "Category": "Professors",
+    }]
+    clean, errors = validate_imported_data(rows, category="Professors")
+    assert errors == []
+    assert clean[0]["category"] == "Professors"  # canonical value preserved
+    assert clean[0]["ratings"] == {"feedback": 4, "teaching_style": 5}
+
+
+def test_single_category_import_resolves_canonical_payments_with_new_questions():
+    rows = [{
+        "Respondent_ID": "S2",
+        _PAYMENTS_HEADERS[1]: "5",
+        _PAYMENTS_HEADERS[2]: "4",
+        _PAYMENTS_HEADERS[3]: "5",
+        "Share your thoughts": "Smooth transactions",
+        "Category": "Payment",  # legacy label in the file must still match
+    }]
+    clean, errors = validate_imported_data(rows, category="Payments")
+    assert errors == []
+    assert clean[0]["category"] == "Payments"
+    assert clean[0]["ratings"] == {
+        "accessibility": 5,
+        "info_clarity": 4,
+        "digital_trust": 5,
+    }
+
+
+def test_single_category_import_rejects_cross_category_file_label():
+    rows = [{
+        "Respondent_ID": "S3",
+        _PAYMENTS_HEADERS[1]: "3",
+        _PAYMENTS_HEADERS[2]: "4",
+        _PAYMENTS_HEADERS[3]: "2",
+        "Share your thoughts": "Wrong form entirely",
+        "Category": "Faculty",  # a Faculty file is NOT a valid Payments label
+    }]
+    clean, errors = validate_imported_data(rows, category="Payments")
+    assert clean == []
+    assert any("says 'Faculty'" in e["_errors"][0] for e in errors)
 
 
 

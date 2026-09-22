@@ -419,6 +419,13 @@ const STUDENT = {
     },
 
     paymentsFormContent() {
+        // Questions 6-8 (security / info_clarity / digital_trust) were added to
+        // complete the approved Payments question set. The keys are the ones the
+        // backend already reserves — ASPECT_KEYS_BY_CATEGORY["Payment"] in
+        // app/services/import_service.py and REQUIRED_LIKERT_QUESTIONS in
+        // app/api/evaluation.py — so all three are required here too.
+        // Questions 1-5 keep their existing keys, wording and order: responses
+        // already stored under those keys must stay comparable.
         return `<div class="form-section" style="margin-top:1.5rem;">
             <h4 style="margin-bottom:0.75rem;">Rate the following aspects:</h4>
             ${likertScale("accessibility", "The payment portal/counter is easily accessible at convenient times for my schedule.")}
@@ -426,6 +433,9 @@ const STUDENT = {
             ${likertScale("queues", "The on-site payment queues move quickly and efficiently, even during peak days.")}
             ${likertScale("courteous", "Payment personnel are courteous, helpful, and prompt in addressing payment-related inquiries or concerns.")}
             ${likertScale("accounting", "Accounting and registrar personnel are helpful, polite, and responsive when addressing payment and document-related inquiries or issues.")}
+            ${likertScale("security", "I am confident that my personal and financial information is secure.")}
+            ${likertScale("info_clarity", "The information provided about fees, balances, and transactions is clear and accurate.")}
+            ${likertScale("digital_trust", "I trust that the digital banking and information system protects my data.")}
         </div>
         ${textareaField("share_your_thoughts", "Share Your Thoughts", "")}`;
     },
@@ -473,12 +483,16 @@ const STUDENT = {
     // Required Field Validation Helpers
     // ========================================
     
-    // Define all required questions for each category
+    // Define all required questions for each category.
+    // Order mirrors the on-screen form; the Payments list must stay in step
+    // with paymentsFormContent() and REQUIRED_LIKERT_QUESTIONS["Payments"] in
+    // backend/app/api/evaluation.py, or the server rejects a submission the
+    // form considered complete (and vice versa).
     requiredQuestions: {
         professor: ["teaching_quality", "mastery", "clarity", "fairness", "punctuality", "approachability", "feedback", "classroom_mgmt", "teaching_style"],
         staff: ["safety", "registrar", "cashier", "canteen", "substitute", "office_staff", "admin_comm", "maintenance"],
         facilities: ["spaces", "furniture", "cleanliness", "bathrooms", "cafeteria", "monitors", "computers", "classrooms"],
-        payments: ["accessibility", "processing", "queues", "courteous", "accounting"]
+        payments: ["accessibility", "processing", "queues", "courteous", "accounting", "security", "info_clarity", "digital_trust"]
     },
 
     // Get required questions for a category

@@ -108,6 +108,14 @@ RATING_KEYWORDS_BY_CATEGORY: dict[str, dict[str, list[str]]] = {
         "punctuality": ["punctuality and attendance", "punctuality"],
         "approachability": ["approachability"],
         "classroom_mgmt": ["classroom management"],
+        # The two remaining live professor questions had no alias at all, so a
+        # single-category export carrying them imported with those ratings
+        # silently dropped. Appended (never reordered) so columns that already
+        # matched still map to the same aspect. A bare "feedback" alias is
+        # deliberately omitted: it is also a COMMENT_COL_KEYWORDS term, so a
+        # header called just "Feedback" belongs to the comment column.
+        "feedback": ["timely and constructive feedback", "constructive feedback"],
+        "teaching_style": ["teaching style", "effective this semester"],
     },
     "Staff": {
         "safety": ["guards make me feel safe", "safety"],
@@ -137,10 +145,25 @@ RATING_KEYWORDS_BY_CATEGORY: dict[str, dict[str, list[str]]] = {
         "courteous": ["payment personnel are courteous", "courteous"],
         "accounting": ["accounting and registrar personnel", "accounting"],
         "security": ["personal and financial information is secure", "security"],
+        # The two remaining live Payments questions (added to complete the
+        # approved question set) had a canonical key but no alias here, so a
+        # single-category export carrying them imported with those ratings
+        # dropped. Appended so columns that already matched keep their aspect.
+        # The pre-existing "online" alias is deliberately left untouched.
+        "info_clarity": ["fees, balances", "clear and accurate", "info clarity"],
+        "digital_trust": ["digital banking", "protects my data", "digital trust"],
     },
 }
 
 VALID_CATEGORIES = {c.value for c in EvaluationCategory}
+
+# The import layer's internal category keys ("Faculty", "Payment") predate the
+# canonical EvaluationCategory values ("Professors", "Payments") that the API
+# passes in via ``category.value``. Map canonical -> internal so the keyword and
+# aspect lookups below resolve; without this a single-category import of a
+# Professor or Payments file matched zero rating columns and silently dropped
+# every Likert answer. The canonical value is preserved for the output rows.
+_IMPORT_CATEGORY_ALIASES = {"Professors": "Faculty", "Payments": "Payment"}
 
 # ---------------------------------------------------------------------------
 # Combined multi-category import support (auto-detected)
@@ -616,6 +639,11 @@ def validate_imported_data(
             f"'{category}' is not a valid category. Must be one of: {sorted(VALID_CATEGORIES)}"
         )
 
+    # Keep the canonical value the API sent for the output rows and user-facing
+    # messages; resolve columns under the import layer's internal key.
+    canonical_category = category
+    category = _IMPORT_CATEGORY_ALIASES.get(canonical_category, canonical_category)
+
     col_map = resolve_column_map(headers, category)
 
     clean: list[dict[str, Any]] = []
@@ -647,10 +675,12 @@ def validate_imported_data(
         # miscategorized.
         if col_map["category"]:
             file_cat = (row.get(col_map["category"]) or "").strip()
-            if file_cat and file_cat.lower() != category.lower():
+            # Accept either spelling: the file may say the canonical name
+            # ("Professors") or the import layer's legacy label ("Faculty").
+            if file_cat and file_cat.lower() not in {canonical_category.lower(), category.lower()}:
                 row_errors.append(
                     f"Row's Category column says '{file_cat}' but you selected "
-                    f"'{category}' for this import — skipped to avoid miscategorizing it."
+                    f"'{canonical_category}' for this import — skipped to avoid miscategorizing it."
                 )
 
         evaluatee = None
@@ -668,12 +698,12 @@ def validate_imported_data(
             error_entry = {
                 "_row": row_idx,
                 "_errors": row_errors,
-                "_preview": raw_comment[:100] or f"({category} — ratings only)",
+                "_preview": raw_comment[:100] or f"({canonical_category} — ratings only)",
             }
             errors.append(error_entry)
         else:
             clean.append({
-                "category": category,
+                "category": canonical_category,
                 "share_your_thoughts": raw_comment or None,
                 "evaluatee": evaluatee,
                 "ratings": ratings or None,

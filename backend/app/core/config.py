@@ -7,6 +7,7 @@ runs out of the box, but every value should be overridden in production.
 """
 import hashlib
 import os
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, List, Union
@@ -106,9 +107,35 @@ class Settings(BaseSettings):
     # Minimum number of Likert questions that must be answered when a
     # submission includes ratings. Prevents API-level abuse where a
     # partial/empty ratings payload bypasses the frontend's "answer all"
-    # enforcement. Should match (or exceed) the number of questions in
-    # the evaluation form.
-    LIKERT_MIN_QUESTIONS: int = 5
+    # enforcement.
+    #
+    # This is only the FLOOR for the fallback branch of
+    # app.api.evaluation.submit_evaluation, which covers a category that has no
+    # entry in REQUIRED_LIKERT_QUESTIONS. All four current categories do have an
+    # entry (Professor 9, Staff 8, Facilities 8, Payments 8) and those
+    # per-category lists are the real enforcement, so a single scalar cannot
+    # express them; it is set to the smallest of the four. The guard test
+    # test_likert_min_questions_matches_smallest_form keeps the two in step.
+    LIKERT_MIN_QUESTIONS: int = 8
+
+    # ------------------------------------------------------------------
+    # Rolling out newly added evaluation questions
+    # ------------------------------------------------------------------
+    # Adding a question to a live form must not make it mandatory immediately:
+    # a student whose browser — or a shared lab machine — still serves the
+    # previous form has no input for that question, and a hard requirement would
+    # block their submission for reasons outside their control. Until this
+    # moment, the questions listed in app.api.evaluation.GRACE_PERIOD_QUESTIONS
+    # are accepted (validated and stored) when answered but NOT required, so the
+    # previous form keeps submitting successfully.
+    #
+    # Once the timestamp passes, those questions become required automatically —
+    # no deploy needed to close the window. Extend the date below (or set the
+    # NEW_QUESTION_GRACE_UNTIL env var) to widen it; set None to enforce
+    # immediately.
+    #
+    # 2026-10-06 = 14 days after the Payments questions were added.
+    NEW_QUESTION_GRACE_UNTIL: datetime | None = datetime(2026, 10, 6)
 
     # ------------------------------------------------------------------
     # Analytics thresholds

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.security import hash_password
+from app.core.time import utcnow_naive
 from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction
 from app.models.user import User, UserRole
@@ -48,7 +49,25 @@ REQUIRED_LIKERT_QUESTIONS: dict[str, list[str]] = {
     ],
     EvaluationCategory.PAYMENTS.value: [
         "accessibility", "processing", "queues", "courteous", "accounting",
+        # Added to complete the approved question set. They are required once
+        # the rollout window has passed; while it is still open they are
+        # accepted but optional for the categories listed in
+        # GRACE_PERIOD_QUESTIONS below (see _questions_in_grace).
+        "security", "info_clarity", "digital_trust",
     ],
+}
+
+# Questions added to a form *after* it shipped, per category.
+#
+# A student whose browser – or a shared lab machine – still serves the previous
+# form has no input to send for a newly added question, so requiring it
+# immediately would block their submission for reasons outside their control.
+# While settings.NEW_QUESTION_GRACE_UNTIL is in the future these questions are
+# accepted (and validated, and stored) when answered, but not required; once
+# that moment passes they are enforced exactly like every other question, so
+# finishing the rollout needs no further deploy. See _questions_in_grace().
+GRACE_PERIOD_QUESTIONS: dict[str, list[str]] = {
+    EvaluationCategory.PAYMENTS.value: ["security", "info_clarity", "digital_trust"],
 }
 
 _SORTABLE_FIELDS = {
@@ -59,6 +78,19 @@ _SORTABLE_FIELDS = {
     "likert_average",
     "evaluatee",
 }
+
+
+def _questions_in_grace(category: str) -> set[str]:
+    """Newly added questions that are accepted but not yet required.
+
+    Empty once ``settings.NEW_QUESTION_GRACE_UNTIL`` has passed (or is None),
+    which is precisely what turns the rollout from "accept" into "require" —
+    no deploy is needed to close the window.
+    """
+    until = settings.NEW_QUESTION_GRACE_UNTIL
+    if until is None or utcnow_naive() >= until:
+        return set()
+    return set(GRACE_PERIOD_QUESTIONS.get(category, ()))
 
 
 @router.get("/public/config")
@@ -118,6 +150,9 @@ def submit_evaluation(
     # the frontend's required-question checks. This is the authoritative security boundary.
     if payload.category.value in REQUIRED_LIKERT_QUESTIONS:
         required_questions = REQUIRED_LIKERT_QUESTIONS[payload.category.value]
+        # Questions whose rollout window is still open are optional, so a
+        # student on a cached copy of the previous form can keep submitting.
+        graced_questions = _questions_in_grace(payload.category.value)
         # 1) The open-ended "Share Your Thoughts" question is mandatory.
         if not (payload.share_your_thoughts and payload.share_your_thoughts.strip()):
             raise HTTPException(
@@ -133,11 +168,25 @@ def submit_evaluation(
             )
 
         missing = [q for q in required_questions if (
-            q not in payload.ratings
-            or payload.ratings[q] is None
-            or (isinstance(payload.ratings[q], str) and not payload.ratings[q].strip()))
+            q not in graced_questions
+            and (q not in payload.ratings
+                 or payload.ratings[q] is None
+                 or (isinstance(payload.ratings[q], str) and not payload.ratings[q].strip())))
         ]
         if missing:
+            newly_added = set(GRACE_PERIOD_QUESTIONS.get(payload.category.value, ()))
+            if newly_added and set(missing) <= newly_added:
+                # Every missing question is one added after this form was built,
+                # so the student answered everything they were shown: the page is
+                # a stale cached copy, not an incomplete submission. Listing
+                # questions they never saw is a dead end — point at the fix.
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "This evaluation form has been updated with new questions. "
+                        "Please refresh the page (Ctrl/Cmd + Shift + R) and submit again."
+                    ),
+                )
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
