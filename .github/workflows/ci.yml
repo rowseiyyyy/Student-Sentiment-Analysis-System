@@ -15,8 +15,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create .env file for build
-        run: cp backend/.env.example backend/.env
+      - name: Create .env for containers (dev-safe)
+        # backend/.env.example is production-flavoured: its DB host does not
+        # exist in CI, and main.py performs a schema check against the
+        # configured database at import time — with the example file the web
+        # container crash-loops and `import main` fails anywhere else too.
+        # Generate an env that matches docker-compose.yml's MySQL service and
+        # keeps ENVIRONMENT=development so the readiness assert is skipped.
+        run: |
+          cat > backend/.env <<'EOF'
+          ENVIRONMENT=development
+          DEBUG=false
+          APP_RELOAD=false
+          DB_DRIVER=mysql+pymysql
+          DB_HOST=mysql
+          DB_PORT=3306
+          DB_USER=appuser
+          DB_PASSWORD=change-me-now
+          DB_NAME=asiatech_sentiment_db
+          SECRET_KEY=ci-only-secret-key-not-for-production-123456
+          CORS_ORIGINS=http://localhost:8000
+          FRONTEND_URL=http://localhost:8000
+          EOF
 
       - name: Build web image
         run: docker compose build web
@@ -36,8 +56,35 @@ jobs:
             sleep 5
           done
 
+      - name: Set up Python for tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend dependencies (runner-level)
+        # Runs pytest on the runner, not inside the web container: the
+        # container already runs 2 gunicorn workers importing the full ML
+        # stack (onnxruntime/sklearn/pandas), and the previous exec-based
+        # pytest step was SIGKILLed (exit 137) within seconds — the exec
+        # attached to a container that was dying, not an OOM of pytest itself.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
       - name: Run backend test suite
-        run: docker compose exec -T web sh -c "pip install -q -r backend/requirements-dev.txt && cd backend && python -m pytest -q"
+        # Hermetic: sqlite via DB_DRIVER=sqlite (conftest already uses
+        # in-memory sqlite). No MySQL needed for the test suite; the compose
+        # services above serve as the container/boot smoke test.
+        working-directory: backend
+        env:
+          ENVIRONMENT: development
+          DEBUG: "false"
+          DB_DRIVER: sqlite
+          SECRET_KEY: ci-only-secret-key-not-for-production-123456
+          CORS_ORIGINS: http://localhost:8000
+          FRONTEND_URL: http://localhost:8000
+        run: python -m pytest -q
 
       - name: Show running containers
         run: docker compose ps
