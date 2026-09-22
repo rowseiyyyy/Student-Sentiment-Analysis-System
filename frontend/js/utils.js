@@ -108,11 +108,10 @@ function debounce(fn, delay = 300) {
 //      deployment-injected config snippet) to point at any backend. Escape hatch
 //      for forks, custom domains and preview deployments.
 //   2. Local pages (localhost / 127.0.0.1 / file://) -> the local dev backend.
-//   3. Every other (deployed) host -> the production backend.
-// Previously anything that was not *.vercel.app fell through to localhost:8000,
-// so a frontend served from a custom domain, a Render static site, Netlify or a
-// Vercel *preview* URL silently called the visitor's own machine and every
-// request failed with "Unable to connect to the server".
+//   3. Any other (deployed) host MUST declare window.ASIATECH_API_BASE in its
+//      HTML (see index.html). There is deliberately no hardcoded fallback here:
+//      a misconfigured deployment used to silently fall through to the real
+//      production backend and submit data to it. Failing loudly is safer.
 function getApiBase() {
     if (window.ASIATECH_API_BASE) {
         return window.ASIATECH_API_BASE;
@@ -127,7 +126,12 @@ function getApiBase() {
     if (isLocalPage) {
         return 'http://localhost:8000/api/v1';
     }
-    return 'https://student-sentiment-analysis-system.onrender.com/api/v1';
+    throw new Error(
+        'API base URL is not configured. Set window.ASIATECH_API_BASE in a ' +
+        '<script> tag before js/utils.js loads (see index.html for the ' +
+        'production example). Refusing to guess a backend — an earlier ' +
+        'hardcoded fallback silently sent data to the production API.'
+    );
 }
 
 // Likert scale labels

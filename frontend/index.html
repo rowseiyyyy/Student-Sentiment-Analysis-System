@@ -316,6 +316,12 @@
         </div>
     </div>
 
+    <!-- Deployment configuration: the exact backend the deployed frontend talks to.
+         No hardcoded fallback exists in utils.js any more - a deployment that
+         forgets this line fails loudly instead of silently calling production. -->
+    <script>
+        window.ASIATECH_API_BASE = 'https://student-sentiment-analysis-system.onrender.com/api/v1';
+    </script>
     <script src="js/utils.js"></script>
     <script src="js/api.js"></script>
     <script src="js/bulletin.js"></script>
