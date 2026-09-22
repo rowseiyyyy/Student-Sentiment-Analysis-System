@@ -5,7 +5,6 @@ All values are loaded from environment variables (or a .env file in the
 backend/ root). Sensible development defaults are provided so the project
 runs out of the box, but every value should be overridden in production.
 """
-import hashlib
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -223,25 +222,6 @@ class Settings(BaseSettings):
             db_name = self.VALIDATION_DB_NAME
         else:
             db_name = self.DB_NAME
-
-        print("DEBUG DB_DRIVER passed to URL.create:", repr(self.DB_DRIVER), flush=True)
-        print("DEBUG DB_USER:", repr(settings.DB_USER), flush=True)
-        print("DEBUG DB_PASSWORD length:", len(settings.DB_PASSWORD), flush=True)
-        _pw = settings.DB_PASSWORD
-        _fp = hashlib.sha256(_pw.encode("utf-8")).hexdigest()[:12]
-        print("DEBUG DB_PASSWORD length:", len(_pw), flush=True)
-        print("DEBUG DB_PASSWORD sha256[:12]:", _fp, flush=True)
-        print("DEBUG DB_PASSWORD has surrounding whitespace:", _pw != _pw.strip(), flush=True)
-        print(
-            "DEBUG DB_PASSWORD charset:",
-            sorted({c for c in _pw if not (c.isalnum())}),
-            flush=True,
-        )
-
-        print("DEBUG DB_HOST:", settings.DB_HOST, flush=True)
-        print("DEBUG DB_PORT:", settings.DB_PORT, flush=True)
-        print("DEBUG DB_NAME:", settings.DB_NAME, flush=True)
-        print("DEBUG db_url_override is set:", bool(settings.db_url_override), flush=True)
 
         # Build SQLAlchemy DSNs using URL.create so username/password,
         # host, port, and database names are escaped the normal way and
