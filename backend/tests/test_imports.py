@@ -1,4 +1,4 @@
-import csv as _csv
+1import csv as _csv
 import io as _io
 from unittest.mock import patch
 
@@ -328,4 +328,157 @@ def test_import_google_forms_placeholder_comment_kept_as_ratings(
     for row in captured["clean_rows"]:
         assert row["share_your_thoughts"] is None
         assert len(row["ratings"]) == len(EXPECTED_ASPECTS[row["category"]])
+
+
+# ---------------------------------------------------------------------------
+# Regression: single-category Faculty / Payment files.
+#
+# The admin UI's import dropdown sends "Faculty" / "Payment"; the API enum
+# stores "Professors" / "Payments" (FastAPI coerces the form value through its
+# aliases before the service runs); the per-category keyword tables in
+# import_service are keyed on "Faculty" / "Payment". Before the alias fold-in,
+# a single-category Faculty/Payment file imported as a comment-only evaluation
+# (every rating question unresolved, evaluatee dropped by the
+# `category != "Faculty"` rule) and a file whose own Category column said
+# "Faculty" had all of its rows rejected as a category mismatch.
+# ---------------------------------------------------------------------------
+
+SINGLE_FACULTY_CSV = (
+    "Timestamp,Course,Professor Name,"
+    "The professors demonstrate mastery of the subject matter.,"
+    "Share your thoughts\n"
+    "8/25/2026,BSCS,Prof. Cruz,5,Great teacher.\n"
+)
+
+
+def _post_single(client, tmp_path, csv_text, category, filename="single.csv"):
+    token = _register_admin_and_login(client)
+    csv_path = tmp_path / filename
+    csv_path.write_text(csv_text, encoding="utf-8")
+
+    with open(csv_path, "rb") as f:
+        return client.post(
+            "/api/v1/imports/evaluations",
+            files={"file": (filename, f, "text/csv")},
+            data={"category": category},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_single_faculty_keeps_ratings_evaluatee_and_course(
+    mock_process, client, tmp_path
+):
+    """Selecting the Professor/Faculty form must keep the Likert ratings, the
+    professor column and the row's Course — not fall back to a comment-only
+    evaluation."""
+    captured = {}
+    mock_process.side_effect = _capture_process(captured)
+
+    response = _post_single(client, tmp_path, SINGLE_FACULTY_CSV, "Faculty")
+
+    assert response.status_code == 201
+    assert response.json()["failed"] == 0
+
+    row = captured["clean_rows"][0]
+    assert row["category"] == "Faculty"
+    assert row["course"] == "BSCS"
+    assert row["evaluatee"] == "Prof. Cruz"
+    assert row["ratings"] == {"mastery": 5}
+
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_single_faculty_rating_question_is_not_the_evaluatee(
+    mock_process, client, tmp_path
+):
+    """A rating question that mentions "professor" must never be mistaken for
+    the professor-name column, even when it comes first in the header row."""
+    captured = {}
+    mock_process.side_effect = _capture_process(captured)
+
+    response = _post_single(
+        client,
+        tmp_path,
+        "Timestamp,Course,"
+        "The professors demonstrate mastery of the subject matter.,"
+        "Professor Name,Share your thoughts\n"
+        "8/25/2026,BSCS,5,Prof. Cruz,Great teacher.\n",
+        "Faculty",
+    )
+
+    assert response.status_code == 201
+    row = captured["clean_rows"][0]
+    assert row["evaluatee"] == "Prof. Cruz"
+    assert row["ratings"] == {"mastery": 5}
+    assert row["course"] == "BSCS"
+
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_single_course_column_is_not_claimed_as_evaluatee(
+    mock_process, client, tmp_path
+):
+    """A lone 'Course' column must never be reused as the evaluatee column —
+    otherwise the course value is rendered as the professor's name."""
+    captured = {}
+    mock_process.side_effect = _capture_process(captured)
+
+    response = _post_single(
+        client,
+        tmp_path,
+        "Timestamp,Course,Share your thoughts\n"
+        "8/25/2026,BSCS,Great teacher.\n",
+        "Faculty",
+    )
+
+    assert response.status_code == 201
+    row = captured["clean_rows"][0]
+    assert row["course"] == "BSCS"
+    assert row["evaluatee"] is None
+
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_single_payment_alias_resolves_ratings(mock_process, client, tmp_path):
+    """'Payment' (the UI spelling) resolves the Payment rating questions and
+    keeps the row's Course."""
+    captured = {}
+    mock_process.side_effect = _capture_process(captured)
+
+    response = _post_single(
+        client,
+        tmp_path,
+        "Timestamp,Course,The payment portal is easily accessible,Share your thoughts\n"
+        "8/25/2026,BSCS,5,Quick and easy.\n",
+        "Payment",
+    )
+
+    assert response.status_code == 201
+    row = captured["clean_rows"][0]
+    assert row["category"] == "Payment"
+    assert row["course"] == "BSCS"
+    assert row["ratings"] == {"accessibility": 5}
+
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_single_category_column_alias_matches_selection(
+    mock_process, client, tmp_path
+):
+    """A file whose Category column says 'Faculty' is imported cleanly when the
+    admin picks the Faculty form — no bogus per-row mismatch."""
+    captured = {}
+    mock_process.side_effect = _capture_process(captured)
+
+    response = _post_single(
+        client,
+        tmp_path,
+        "Timestamp,Course,Category,Share your thoughts\n"
+        "8/25/2026,BSCS,Faculty,Great teacher.\n",
+        "Faculty",
+    )
+
+    assert response.status_code == 201
+    assert response.json()["failed"] == 0
+
+    row = captured["clean_rows"][0]
+    assert row["category"] == "Faculty"
+    assert row["course"] == "BSCS"
 

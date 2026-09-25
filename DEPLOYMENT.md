@@ -2,6 +2,11 @@
 
 This project is now set up to run with production-safe defaults, but the actual hosting environment still needs a few real values before deployment.
 
+> For the full picture (layers, ports, data model, request flows) see
+> `SYSTEM_ARCHITECTURE.md`. Sections §8 (PuTTY session setup, tunnels, Docker /
+> systemd / nginx runbook) and §11 (post-deployment verification checklist) cover
+> deploying this backend on a Linux host while administering it through PuTTY.
+
 ## 1. Required production environment variables
 
 Create a real deployment environment or `.env` file from the template in `backend/.env.example` and replace placeholders with the live values.

@@ -426,6 +426,44 @@ a:hover {
   color: var(--ink-faint);
 }
 
+/* Password input with a show/hide "eye" toggle (login + reset forms).
+   The wrapper is position:relative so the toggle can sit inside the input's
+   right edge, matching the square, paper-theme form controls. */
+.password-field {
+  position: relative;
+  display: block;
+}
+
+/* Keep the typed value clear of the icon. */
+.password-field .form-control {
+  padding-right: 2.5rem;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.15rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.password-toggle:hover {
+  color: var(--brand);
+}
+
+
 textarea.form-control {
   resize: vertical;
   min-height: 90px;

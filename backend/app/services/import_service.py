@@ -142,6 +142,41 @@ RATING_KEYWORDS_BY_CATEGORY: dict[str, dict[str, list[str]]] = {
 
 VALID_CATEGORIES = {c.value for c in EvaluationCategory}
 
+# The four categories are spelled three different ways across the system, and
+# the importer has to accept all of them:
+#   * the admin UI's import dropdown sends   "Faculty" / "Payment"
+#   * the API enum stores                    "Professors" / "Payments"
+#     (app.models.evaluation.EvaluationCategory — FastAPI coerces the form
+#     value through its aliases before the service ever sees it)
+#   * the per-category keyword tables below are keyed on
+#                                            "Faculty" / "Payment"
+# Fold whatever we are handed onto the internal name those tables use.
+# Without this, a single-category Faculty/Payment file silently imported as a
+# comment-only evaluation: its rating questions resolved to nothing
+# (RATING_KEYWORDS_BY_CATEGORY has no "Professors"/"Payments" entry) and its
+# evaluatee was dropped by the `category != "Faculty"` rule.
+CATEGORY_ALIASES: dict[str, str] = {
+    "faculty": "Faculty",
+    "professor": "Faculty",
+    "professors": "Faculty",
+    "staff": "Staff",
+    "facility": "Facilities",
+    "facilities": "Facilities",
+    "payment": "Payment",
+    "payments": "Payment",
+}
+
+
+def normalise_category(value: str | None) -> str | None:
+    """Fold a category spelling from the UI, the API enum, or an uploaded
+    Category column onto the internal name the keyword tables are keyed by
+    ('Faculty', 'Staff', 'Facilities', 'Payment'). Returns None when the
+    value is not one of the four known categories."""
+    if value is None:
+        return None
+    return CATEGORY_ALIASES.get(str(value).strip().lower())
+
+
 # ---------------------------------------------------------------------------
 # Combined multi-category import support (auto-detected)
 # ---------------------------------------------------------------------------
@@ -410,15 +445,33 @@ def resolve_column_map(headers: list[str], category: str) -> dict[str, Any]:
             f"{COMMENT_COL_KEYWORDS[:5]}..."
         )
 
+    # Rating questions are resolved first so a rating column that merely
+    # mentions "professor" (e.g. Google Forms' "The professors demonstrate
+    # mastery of the subject matter.") can never be mistaken for the Evaluatee
+    # column — the same ordering the combined importer uses.
+    ratings = _find_rating_columns(headers, category)
+    rating_headers = set(ratings.values())
+
+    # Course is resolved before Evaluatee: EVALUATEE_COL_KEYWORDS contains
+    # "subject/course handled", and _find_column also matches in the reverse
+    # direction (a header contained in a keyword), so a plain "Course" column
+    # would otherwise be claimed by BOTH fields — and on a file with no
+    # professor column the course value would be rendered as the professor.
+    course_col = _find_column(headers, COURSE_COL_KEYWORDS)
+    evaluatee_pool = [
+        h for h in headers
+        if h != course_col and h not in rating_headers
+    ]
+
     return {
         "category": _find_column(headers, CATEGORY_COL_KEYWORDS),
         "comment": comment_col,
-        "evaluatee": _find_column(headers, EVALUATEE_COL_KEYWORDS),
+        "evaluatee": _find_column(evaluatee_pool, EVALUATEE_COL_KEYWORDS),
         "student_id": _find_column(headers, STUDENT_ID_COL_KEYWORDS),
-        "course": _find_column(headers, COURSE_COL_KEYWORDS),
+        "course": course_col,
         "year_level": _find_column(headers, YEAR_LEVEL_COL_KEYWORDS),
         "timestamp": _find_column(headers, TIMESTAMP_COL_KEYWORDS),
-                "ratings": _find_rating_columns(headers, category),
+        "ratings": ratings,
     }
 
 
@@ -749,10 +802,15 @@ def validate_imported_data(
             "was supplied. Resubmit with a category selected, or include "
             "columns from at least two of Staff_/Professor_/Facilities_/Payments_."
         )
-    if category not in VALID_CATEGORIES:
+    canonical_category = normalise_category(category)
+    if canonical_category is None:
         raise ImportValidationError(
-            f"'{category}' is not a valid category. Must be one of: {sorted(VALID_CATEGORIES)}"
+            f"'{category}' is not a valid category. Must be one of: "
+            f"{sorted(set(CATEGORY_ALIASES.values()))}"
         )
+    # Everything downstream (the rating keyword tables, the evaluatee rule,
+    # EvaluationCategory(...) at insert time) expects the internal name.
+    category = canonical_category
 
     col_map = resolve_column_map(headers, category)
 
@@ -791,7 +849,11 @@ def validate_imported_data(
         # miscategorized.
         if col_map["category"]:
             file_cat = (row.get(col_map["category"]) or "").strip()
-            if file_cat and file_cat.lower() != category.lower():
+            # Compare canonical names so a file whose Category column says
+            # "Faculty"/"Professor" is not flagged against the "Professors"
+            # enum value the API hands over (and vice-versa).
+            file_cat_key = normalise_category(file_cat) or file_cat.lower()
+            if file_cat and file_cat_key != category:
                 row_errors.append(
                     f"Row's Category column says '{file_cat}' but you selected "
                     f"'{category}' for this import — skipped to avoid miscategorizing it."

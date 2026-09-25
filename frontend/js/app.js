@@ -81,6 +81,36 @@ const APP = {
     },
 
 
+    // Show/hide toggle for a password input — the "eye" button on the login
+    // and reset forms. Flips the input type, swaps the icon, and leaves focus
+    // in the field with the caret at the end so typing continues naturally.
+    togglePassword(inputId, btn) {
+        const input = document.getElementById(inputId);
+        if (!input || !btn) return;
+
+        const isRevealed = input.type === 'text';
+        input.type = isRevealed ? 'password' : 'text';
+
+        const label = isRevealed ? 'Show password' : 'Hide password';
+        btn.setAttribute('aria-pressed', isRevealed ? 'false' : 'true');
+        btn.setAttribute('aria-label', label);
+        btn.setAttribute('title', label);
+
+        const icon = btn.querySelector('i');
+        if (icon) icon.className = isRevealed ? 'fas fa-eye' : 'fas fa-eye-slash';
+
+        input.focus();
+        if (typeof input.setSelectionRange === 'function') {
+            try {
+                const end = input.value.length;
+                input.setSelectionRange(end, end);
+            } catch (err) {
+                /* Input type does not support selection — harmless. */
+            }
+        }
+    },
+
+
     showForgotForm() {
         document.getElementById('login-form-credential').classList.add('hidden');
         document.getElementById('login-form-forgot').classList.remove('hidden');

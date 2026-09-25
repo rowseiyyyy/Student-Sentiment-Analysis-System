@@ -103,6 +103,10 @@ is no fallback model (a failed MiniLM load returns HTTP 503).
 
 ![SSAS System Architecture](https://github.com/user-attachments/assets/895a4fb8-eff1-4277-9ff8-1e7b603a275c)
 
+Full written architecture — layers, deployment topology, data model, request flows,
+security controls, environment-variable reference, and a PuTTY-based server
+access/deployment runbook — is in **[SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md)**.
+
 ---
 
 ## Installation
