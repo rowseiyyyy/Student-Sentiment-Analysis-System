@@ -201,6 +201,134 @@ def _compact(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", _normalise_header(value))
 
 
+# Full Google Form question text -> canonical aspect key, used ONLY by the
+# combined importer. A combined column can be named either as a short aspect
+# name ("Professor_TeachingQuality") or, far more commonly, as the ORIGINAL
+# form question a Google Forms / Responses CSV export produces
+# ("Professor_The professors deliver lessons with good teaching quality").
+# Both spellings must resolve to the same aspect key so ratings land in
+# Evaluation.ratings under the exact keys the live form uses.
+#
+# Matching is done on the de-punctuated, lower-cased text (see _compact), so
+# smart quotes, double spaces, and trailing periods from Forms are ignored.
+# Aspects are checked in declaration order and the first keyword hit wins, so
+# deliberately-overlapping questions resolve deterministically — e.g. the
+# Staff "registrar" question also contains "office staff", so "registrar" is
+# listed before "office_staff"; the Facilities monitor question also mentions
+# "classrooms", so "monitors" precedes "classrooms".
+COMBINED_QUESTION_KEYWORDS_BY_CATEGORY: dict[str, dict[str, list[str]]] = {
+    "Faculty": {
+        "teaching_quality": ["good teaching quality", "teaching quality"],
+        "mastery": ["mastery of the subject"],
+        "clarity": ["communicates and explains", "communicate and explain"],
+        "fairness": [
+            "grades and evaluates", "grade and evaluate",
+            "evaluates students fairly", "evaluate students fairly",
+        ],
+        "punctuality": ["punctuality and attendance", "punctual"],
+        "approachability": ["approachability", "approachable"],
+        "feedback": ["constructive feedback"],
+        "classroom_mgmt": ["classroom management", "manages the classroom"],
+        "teaching_style": ["teaching style"],
+    },
+    "Staff": {
+        "safety": ["make me feel safe", "feelsafe", "guards"],
+        "registrar": ["registrar"],
+        "cashier": ["cashier"],
+        "canteen": ["canteen"],
+        "substitute": [
+            "substitutes and temporary staff", "temporary staff", "substitute",
+        ],
+        "office_staff": ["office staff"],
+        "admin_comm": ["administration keeps us", "administration"],
+        "maintenance": ["maintenance"],
+    },
+    "Facilities": {
+        "spaces": ["great spaces", "hanging spots"],
+        "furniture": ["tables and chairs"],
+        "cleanliness": ["general cleanliness"],
+        "bathrooms": ["bathrooms"],
+        "cafeteria": ["cafeteria"],
+        "monitors": ["monitor systems", "monitors"],
+        "computers": ["lab computers", "computers"],
+        "classrooms": ["classrooms are always bright", "classrooms"],
+    },
+    "Payment": {
+        "accessibility": ["payment portal", "easily accessible"],
+        "processing": ["processed and posted"],
+        "queues": ["payment queues", "queues"],
+        "courteous": ["courteous"],
+        "accounting": ["accounting and registrar", "accounting"],
+        "security": ["information is secure"],
+        "info_clarity": ["clear and accurate information"],
+        "digital_trust": ["digital bank", "information is protected"],
+    },
+}
+
+# Compacted keyword lookup, built lazily on first use (built at call time so
+# it can rely on the module-level helpers defined further down).
+_COMBINED_QUESTION_LOOKUP_CACHE: dict[str, list[tuple[str, tuple[str, ...]]]] = {}
+
+
+def _combined_question_lookup(category: str) -> list[tuple[str, tuple[str, ...]]]:
+    cached = _COMBINED_QUESTION_LOOKUP_CACHE.get(category)
+    if cached is None:
+        cached = [
+            (aspect, tuple(_compact(kw) for kw in keywords))
+            for aspect, keywords in COMBINED_QUESTION_KEYWORDS_BY_CATEGORY.get(category, {}).items()
+        ]
+        _COMBINED_QUESTION_LOOKUP_CACHE[category] = cached
+    return cached
+
+
+def _resolve_combined_aspect(category: str, remainder: str) -> str | None:
+    """Map a combined column's post-prefix text to a canonical aspect key.
+
+    Accepts both a short aspect name (``TeachingQuality`` / ``teaching_quality``)
+    and the full Google Form question text
+    (``The professors deliver lessons with good teaching quality``).
+
+    Returns ``None`` when the text does not describe a rating question, so the
+    caller can then try the comment / evaluatee column checks.
+    """
+    compact = _compact(remainder)
+    if not compact:
+        return None
+
+    exact = _ASPECT_LOOKUP_BY_CATEGORY.get(category, {})
+    if compact in exact:
+        return exact[compact]
+
+    for aspect, keywords in _combined_question_lookup(category):
+        if any(keyword and keyword in compact for keyword in keywords):
+            return aspect
+    return None
+
+
+# Name-like combined headers that identify the professor evaluated.
+_EVALUATEE_EXACT_HEADERS = {
+    "professor", "professors", "professorname", "professorsname",
+    "instructor", "instructorname", "evaluatee", "nameofprofessor",
+    "name", "staffname",
+}
+
+
+def _looks_like_evaluatee_column(remainder: str) -> bool:
+    """True when a combined column names the professor evaluated.
+
+    Deliberately conservative: only a short, name-like header ("Professor",
+    "Professor Name", "Evaluatee") qualifies, so an unrecognised rating
+    question that merely mentions "professor" is not hijacked into the
+    evaluatee slot.
+    """
+    compact = _compact(remainder)
+    if not compact:
+        return False
+    if compact in _EVALUATEE_EXACT_HEADERS:
+        return True
+    return compact.endswith("name") and len(compact) <= 30
+
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
@@ -338,18 +466,21 @@ def _resolve_combined_columns(headers: list[str]) -> dict[str, Any]:
             # Preserve the original header's case for word-boundary recovery;
             # derive the aspect key from the portion after the prefix.
             remainder = h[len(prefix):]
-            compact_remainder = _compact(remainder)
             cat_cols = col_map["categories"].setdefault(
                 category, {"ratings": {}, "comment": None, "evaluatee": None}
             )
-            lookup = _ASPECT_LOOKUP_BY_CATEGORY.get(category, {})
-            if compact_remainder in ("comment", "comments"):
+            # A rating column is matched FIRST so a question that happens to
+            # contain a comment keyword ("...constructive feedback...") is
+            # never mistaken for the open-ended column.
+            aspect = _resolve_combined_aspect(category, remainder)
+            if aspect is not None:
+                cat_cols["ratings"][aspect] = h
+            # The open-ended column may be spelled "Comment(s)", "Feedback",
+            # or Google Forms' "Share your thoughts".
+            elif _find_column([remainder], COMMENT_COL_KEYWORDS) is not None:
                 cat_cols["comment"] = h
-            elif compact_remainder in lookup:
-                cat_cols["ratings"][lookup[compact_remainder]] = h
-            elif category == "Faculty" and compact_remainder in (
-                "professor", "professorname", "name"
-            ):
+            # An optional column naming the professor evaluated (Faculty only).
+            elif category == "Faculty" and _looks_like_evaluatee_column(remainder):
                 cat_cols["evaluatee"] = h
             # any other remainder is a stray/unknown column and is ignored
         else:
@@ -415,12 +546,19 @@ def _parse_combined_row(
         any_category_data = True
 
         if raw_comment and len(raw_comment) < 3:
-            errors.append({
-                "_row": row_idx,
-                "_errors": [f"{category} comment is too short (minimum 3 characters)."],
-                "_preview": raw_comment[:100],
-            })
-            continue
+            # A 1-2 character placeholder ("NA", ".", "N/", "Cr") is a
+            # non-answer, not real feedback. When the respondent did fill in
+            # the Likert scale, keep the row as a ratings-only evaluation
+            # instead of discarding the whole record over a throwaway comment.
+            if ratings:
+                raw_comment = ""
+            else:
+                errors.append({
+                    "_row": row_idx,
+                    "_errors": [f"{category} comment is too short (minimum 3 characters)."],
+                    "_preview": raw_comment[:100],
+                })
+                continue
         if len(raw_comment) > 5000:
             errors.append({
                 "_row": row_idx,
@@ -637,7 +775,13 @@ def validate_imported_data(
         if not raw_comment and not ratings:
             row_errors.append("Row has neither a comment nor any ratings filled in.")
         elif raw_comment and len(raw_comment) < 3:
-            row_errors.append("Comment is too short (minimum 3 characters).")
+            # A 1-2 character placeholder ("NA", ".", "N/") is a non-answer:
+            # keep the Likert ratings and drop the placeholder rather than
+            # rejecting an otherwise complete evaluation.
+            if ratings:
+                raw_comment = ""
+            else:
+                row_errors.append("Comment is too short (minimum 3 characters).")
         elif len(raw_comment) > 5000:
             row_errors.append("Comment exceeds the maximum length of 5000 characters.")
 
@@ -773,6 +917,12 @@ def process_imported_evaluations(
                 likert_sentiment=likert_label,
                 likert_average=likert_average,
                 sentiment=official_sentiment,
+                # Demographics carried by the uploaded row. Anonymous rows have
+                # no User record to fall back on, so — exactly like a live
+                # anonymous submission (see api/evaluation.submit_evaluation) —
+                # the row's own Course / Year Level are stored on the response.
+                course=row.get("course"),
+                year_level=row.get("year_level"),
             )
 
             if likert_label is not None and text_for_sentiment and official_confidence is not None:

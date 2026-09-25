@@ -1,0 +1,72 @@
+{
+  "label_map": { "0": "Negative", "1": "Neutral", "2": "Positive" },
+  "recommended_production_model": "minilm",
+  "models": {
+    "svm": {
+      "accuracy": 0.908,
+      "precision_weighted": 0.9081,
+      "recall_weighted": 0.908,
+      "weighted_f1": 0.908,
+      "macro_f1": 0.899,
+      "per_class": {
+        "Negative": { "precision": 0.9642, "recall": 0.9586, "f1": 0.9614, "support": 870 },
+        "Neutral": { "precision": 0.8395, "recall": 0.8333, "f1": 0.8364, "support": 546 },
+        "Positive": { "precision": 0.8944, "recall": 0.9041, "f1": 0.8992, "support": 834 }
+      },
+      "confusion_matrix": [[834, 20, 16], [22, 455, 69], [14, 62, 758]],
+      "training_time_seconds": 12.4,
+      "inference_time_ms": 0.9,
+      "memory_usage_mb": 41.2,
+      "hyperparameters": { "C": 1.0, "kernel": "linear" }
+    },
+    "naive_bayes": {
+      "accuracy": 0.871,
+      "precision_weighted": 0.871,
+      "recall_weighted": 0.871,
+      "weighted_f1": 0.871,
+      "macro_f1": 0.862,
+      "per_class": {
+        "Negative": { "precision": 0.91, "recall": 0.92, "f1": 0.915, "support": 870 },
+        "Neutral": { "precision": 0.78, "recall": 0.74, "f1": 0.76, "support": 546 },
+        "Positive": { "precision": 0.86, "recall": 0.88, "f1": 0.87, "support": 834 }
+      },
+      "confusion_matrix": [[800, 40, 30], [40, 404, 102], [20, 80, 734]],
+      "training_time_seconds": 1.1,
+      "inference_time_ms": 0.4,
+      "memory_usage_mb": 22.0
+    },
+    "logistic_regression": {
+      "accuracy": 0.914,
+      "precision_weighted": 0.914,
+      "recall_weighted": 0.914,
+      "weighted_f1": 0.914,
+      "macro_f1": 0.905,
+      "per_class": {
+        "Negative": { "precision": 0.95, "recall": 0.95, "f1": 0.95, "support": 870 },
+        "Neutral": { "precision": 0.83, "recall": 0.82, "f1": 0.825, "support": 546 },
+        "Positive": { "precision": 0.90, "recall": 0.91, "f1": 0.905, "support": 834 }
+      },
+      "confusion_matrix": [[826, 24, 20], [26, 448, 72], [16, 64, 754]],
+      "training_time_seconds": 3.2,
+      "inference_time_ms": 0.5,
+      "memory_usage_mb": 30.5
+    },
+    "minilm": {
+      "accuracy": 0.957,
+      "precision_weighted": 0.957,
+      "recall_weighted": 0.957,
+      "weighted_f1": 0.957,
+      "macro_f1": 0.951,
+      "per_class": {
+        "Negative": { "precision": 0.978, "recall": 0.972, "f1": 0.975, "support": 870 },
+        "Neutral": { "precision": 0.922, "recall": 0.916, "f1": 0.919, "support": 546 },
+        "Positive": { "precision": 0.952, "recall": 0.963, "f1": 0.957, "support": 834 }
+      },
+      "confusion_matrix": [[846, 14, 10], [12, 500, 34], [8, 23, 803]],
+      "training_time_seconds": 486.7,
+      "inference_time_ms": 12.8,
+      "memory_usage_mb": 612.0,
+      "hyperparameters": { "epochs": 4, "batch_size": 16, "learning_rate": 2e-05 }
+    }
+  }
+}

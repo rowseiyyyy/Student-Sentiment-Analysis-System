@@ -249,6 +249,120 @@ inference; the classical approaches are research/comparison entries.
    `GET /api/v1/ml/confusion-matrix?algorithm=SVM`,
    `GET /api/v1/ml/classification-report?algorithm=Multilingual%20MiniLM`, etc.
 
+#### Metrics JSON format (the `metrics_json` file)
+
+`POST /api/v1/ml/import-results` (administrator token) accepts a single
+`multipart/form-data` file field named **`metrics_json`** with a **2 MB** hard
+cap. `set_production` is an optional **query parameter**, not a form field. A
+complete, ready-to-use example ships at
+[`docs/sample_metrics_export.json`](docs/sample_metrics_export.json), and you
+can dry-run any export before uploading it:
+
+```bash
+python scripts/_validate_colab_export.py "path/to/dashboard_export.json"
+```
+
+Two payload shapes are accepted.
+
+**Shape A - Colab `dashboard_export.json`** (models nested under `models`):
+
+```json
+{
+  "label_map": { "0": "Negative", "1": "Neutral", "2": "Positive" },
+  "recommended_production_model": "minilm",
+  "models": {
+    "svm": {
+      "accuracy": 0.908,
+      "precision_weighted": 0.9081,
+      "recall_weighted": 0.908,
+      "weighted_f1": 0.908,
+      "macro_f1": 0.899,
+      "per_class": {
+        "Negative": { "precision": 0.9642, "recall": 0.9586, "f1": 0.9614, "support": 870 },
+        "Neutral": { "precision": 0.8395, "recall": 0.8333, "f1": 0.8364, "support": 546 },
+        "Positive": { "precision": 0.8944, "recall": 0.9041, "f1": 0.8992, "support": 834 }
+      },
+      "confusion_matrix": [[834, 20, 16], [22, 455, 69], [14, 62, 758]],
+      "training_time_seconds": 12.4,
+      "inference_time_ms": 0.9,
+      "memory_usage_mb": 41.2,
+      "hyperparameters": { "C": 1.0, "kernel": "linear" }
+    },
+    "naive_bayes": { },
+    "logistic_regression": { },
+    "minilm": { }
+  }
+}
+```
+
+**Shape B - already-flat rows** (what the admin UI and the tests send):
+
+```json
+{
+  "rows": {
+    "SVM": { "accuracy": 0.90, "precision": 0.90, "recall": 0.90, "f1_score": 0.90, "macro_f1": 0.89, "weighted_f1": 0.90 },
+    "Naive Bayes": { },
+    "Logistic Regression": { },
+    "Multilingual MiniLM": { }
+  },
+  "best_model": "Multilingual MiniLM"
+}
+```
+
+Top-level keys:
+
+| Key | Required | Notes |
+| --- | --- | --- |
+| `models` | Shape A | Object of `model_key -> metrics`. Read whenever it is an object. |
+| `rows` | Shape B | Flat `approach -> metrics` map; only read when `models` is absent. Keys must already be canonical (or an accepted alias). |
+| `label_map` | Optional (Shape A only) | `{"0": "Negative", ...}` (the **values** are used) or a list of names. Omitted -> `Negative, Neutral, Positive`. |
+| `recommended_production_model` / `best_model` | Optional | Report-only recommendation; never changes which model is live. |
+
+`models` keys are resolved case- and punctuation-insensitively
+(`colab_key_to_approach`):
+
+| Export key (normalised) | Canonical approach |
+| --- | --- |
+| `svm`, `svc`, `supportvectormachine` | SVM |
+| `naivebayes`, `nb`, `multinomialnb` | Naive Bayes |
+| `logisticregression`, `logreg`, `lr` | Logistic Regression |
+| anything containing `minilm` (`minilm`, `multilingualminilm`, ...) | Multilingual MiniLM |
+| anything else | skipped, with a warning in the log |
+
+Per-model fields (`_normalize_colab_model`):
+
+| Field | Notes |
+| --- | --- |
+| `accuracy` | Stored as-is. |
+| `precision_weighted` (fallback `precision`) | Fills the `precision` column. |
+| `recall_weighted` (fallback `recall`) | Fills the `recall` column. |
+| `weighted_f1` (fallback `f1_score`) | Fills `f1_score`; only `weighted_f1` fills the `weighted_f1` column. |
+| `macro_f1` | Stored as-is. |
+| `per_class.<label>.{precision,recall,f1,support}` | Builds the classification report. Use `f1` here (not `f1-score`), and `<label>` must match the resolved label names. |
+| `confusion_matrix` | 3x3 `list[list[int]]` in `Negative, Neutral, Positive` order; stored verbatim and labelled server-side, so order matters. Feeds `GET /ml/confusion-matrix`. |
+| `training_time_seconds`, `inference_time_ms`, `memory_usage_mb` | Optional; stored as-is. |
+| `hyperparameters` | Optional free-form object. |
+
+Things worth knowing:
+
+- `classification_report` is **not** a field you send - the server builds it
+  from `per_class`.
+- `set_production` can never promote a classical model. The importer always
+  pins `is_production_model` to Multilingual MiniLM and returns the
+  best-scoring import as `recommended_model` instead.
+- If no key resolves to an approved approach the request fails with **422**
+  (`No approved approaches found in the metrics payload.`).
+- The import records metrics only - it never uploads or replaces the live
+  MiniLM weights (those are pulled from the Hugging Face Hub at boot).
+
+| Response | Meaning |
+| --- | --- |
+| `200` | `{message, imported_algorithms, production_model, recommended_model, artifacts_updated}` (`artifacts_updated` is currently always `[]`) |
+| `400` | Body is not valid JSON |
+| `403` | Caller is not an administrator |
+| `413` | File larger than 2 MB |
+| `422` | No approved approach found in the payload |
+
 ### Option B — via the CLI script
 
 ```bash
@@ -419,3 +533,9 @@ auth, RBAC, and analytics aggregation logic are tested directly.
   importable Postman collection for every endpoint.
 - **Database schema**: see `app/models/` for ORM definitions and
   `alembic/versions/0001_initial_schema.py` for the canonical DDL.
+- **[docs/sample_metrics_export.json](docs/sample_metrics_export.json)**: a
+  validated example of the `metrics_json` payload accepted by
+  `POST /ml/import-results` (format documented under
+  [Training the Models](#training-the-models)).
+- **`scripts/_validate_colab_export.py`**: dry-run any Colab export against the
+  active import logic before uploading it (no DB or artifact writes).

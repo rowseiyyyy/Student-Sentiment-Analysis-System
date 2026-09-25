@@ -1,3 +1,5 @@
+import csv as _csv
+import io as _io
 from unittest.mock import patch
 
 PREDICTION_RESULT = {
@@ -153,3 +155,177 @@ def test_import_empty_file_rejected(mock_process, client, tmp_path):
             headers={"Authorization": f"Bearer {token}"},
         )
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Regression: a real Google Forms "Responses" export.
+#
+# The consolidated Ceite evaluation form exports every rating column as its
+# category prefix followed by the ORIGINAL question text (not a short aspect
+# name). The combined importer must resolve those full-question headers onto
+# the same aspect keys the live form writes to Evaluation.ratings, otherwise
+# every row is rejected with "Row has no feedback in any category".
+# ---------------------------------------------------------------------------
+
+GOOGLE_FORM_HEADERS = [
+    "Timestamp",
+    "Course",
+    "Professor_The professors deliver lessons with good teaching quality",
+    "Professor_The professors demonstrate mastery of the subject matter.",
+    "Professor_The professors communicate and explain lessons clearly.",
+    "Professor_The professors grade and evaluate students fairly.",
+    "Professor_Rate the professors punctuality and attendance",
+    "Professor_Rate the professors approachability and willingness to help students",
+    "Professor_The professors  provide timely and constructive feedback on students performance.",
+    "Professor_Rate the professors classroom management",
+    "Professor_The professors teaching style are effective this semester.",
+    "Professor_Share your thoughts",
+    "Staff_The guards make me feel safe and greet me warmly whenever I enter the campus",
+    "Staff_The registrar\u2019s office staff are patient and helpful when answering questions "
+    "about anything that concerns documents, records and enrollment",
+    "Staff_Transactions at the cashier or accounting window are stress-free and handled "
+    "with great professionalism.",
+    "Staff_The canteen staff serve us warmly and keep the food service area clean and organized.",
+    "Staff_Substitutes and temporary staff are well-prepared and keep our regular routines "
+    "going smoothly.",
+    "Staff_The office staff quickly replies whenever I ask for help or need paperwork done",
+    "Staff_The school administration keeps us well updated on everything through social media "
+    "about campus announcement and events.",
+    "Staff_The maintenance and hallway staff do a wonderful job keeping our school "
+    "surroundings safe and clean.",
+    "Staff_Share your thoughts",
+    "Facilities_The school has great spaces like hanging spots, benches, and trees.",
+    "Facilities_The classroom tables and chairs are all in good condition.",
+    "Facilities_General cleanliness in all facilities are observed.",
+    "Facilities_The bathrooms are always clean and smell fresh.",
+    "Facilities_The cafeteria or canteen has a clean dining space with plenty of room "
+    "to sit and eat.",
+    "Facilities_The monitor systems in the classrooms are all well-working.",
+    "Facilities_The lab computers are all easy to use and are well-managed.",
+    "Facilities_The classrooms are always bright, clean and well-maintained and makes me "
+    "comfortable to work properly.",
+    "Facilities_Share your thoughts",
+    "Payments_The payment portal/counter is easily accessible at convenient times for my schedule.",
+    "Payments_My payments or fee clearances are processed and posted to my account in a "
+    "timely manner.",
+    "Payments_The on-site payment queues move quickly and efficiently, even during peak days.",
+    "Payments_Payment personnel are courteous, helpful, and prompt in addressing "
+    "payment-related inquiries or concerns.",
+    "Payments_Accounting and registrar personnel are helpful, polite, and responsive when "
+    "addressing payment and document-related inquiries or issues.",
+    "Payments_I feel confident that my personal and financial information is secure when "
+    "making transactions.",
+    "Payments_The payments process provides clear and accurate information about my fees, "
+    "balances, and transactions.",
+    "Payments_I trust that my personal and financial information is protected when using the "
+    "digital bank information system for transactions.",
+    "Payments_Share your thoughts",
+]
+
+EXPECTED_ASPECTS = {
+    "Faculty": [
+        "teaching_quality", "mastery", "clarity", "fairness", "punctuality",
+        "approachability", "feedback", "classroom_mgmt", "teaching_style",
+    ],
+    "Staff": [
+        "safety", "registrar", "cashier", "canteen", "substitute",
+        "office_staff", "admin_comm", "maintenance",
+    ],
+    "Facilities": [
+        "spaces", "furniture", "cleanliness", "bathrooms", "cafeteria",
+        "monitors", "computers", "classrooms",
+    ],
+    "Payment": [
+        "accessibility", "processing", "queues", "courteous",
+        "accounting", "security", "info_clarity", "digital_trust",
+    ],
+}
+
+
+
+def _google_form_combined_csv(comment="A genuine open-ended comment."):
+    """One-row combined CSV using the real Google Forms header text."""
+    values = {"Timestamp": "8/25/2026 18:15:32", "Course": "BSCS"}
+    for header in GOOGLE_FORM_HEADERS:
+        if header in values:
+            continue
+        values[header] = comment if header.endswith("Share your thoughts") else "4"
+
+    buffer = _io.StringIO()
+    writer = _csv.writer(buffer)
+    writer.writerow(GOOGLE_FORM_HEADERS)
+    writer.writerow([values[h] for h in GOOGLE_FORM_HEADERS])
+    return buffer.getvalue()
+
+
+def _capture_process(captured):
+    """A stand-in for process_imported_evaluations that records its input."""
+    def _fake(db, clean_rows, run_prediction=True, **kwargs):
+        captured["clean_rows"] = clean_rows
+        return type(
+            "R", (),
+            {
+                "total_rows": len(clean_rows),
+                "imported": len(clean_rows),
+                "failed": 0,
+                "errors": [],
+            },
+        )()
+
+    return _fake
+
+
+def _post_google_form_csv(client, tmp_path, comment):
+    token = _register_admin_and_login(client)
+    csv_path = tmp_path / "google_form.csv"
+    csv_path.write_text(_google_form_combined_csv(comment), encoding="utf-8")
+
+    with open(csv_path, "rb") as f:
+        return client.post(
+            "/api/v1/imports/evaluations",
+            files={"file": ("google_form.csv", f, "text/csv")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_google_forms_full_question_headers(mock_process, client, tmp_path):
+    """Full-question Google Forms headers resolve to the live aspect keys."""
+    captured = {}
+    mock_process.side_effect = _capture_process(captured)
+
+    response = _post_google_form_csv(client, tmp_path, "A genuine open-ended comment.")
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["failed"] == 0
+    assert data["imported"] == 4
+
+    rows = {r["category"]: r for r in captured["clean_rows"]}
+    assert set(rows) == set(EXPECTED_ASPECTS)
+    for category, aspects in EXPECTED_ASPECTS.items():
+        row = rows[category]
+        assert row["ratings"] == {aspect: 4 for aspect in aspects}, category
+        assert row["share_your_thoughts"] == "A genuine open-ended comment."
+        assert row["course"] == "BSCS"
+
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_google_forms_placeholder_comment_kept_as_ratings(
+    mock_process, client, tmp_path
+):
+    """A 1-2 char placeholder ("NA") must not drop a fully-rated record."""
+    captured = {}
+    mock_process.side_effect = _capture_process(captured)
+
+    response = _post_google_form_csv(client, tmp_path, "NA")
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["failed"] == 0
+    assert data["imported"] == 4
+
+    for row in captured["clean_rows"]:
+        assert row["share_your_thoughts"] is None
+        assert len(row["ratings"]) == len(EXPECTED_ASPECTS[row["category"]])
+
