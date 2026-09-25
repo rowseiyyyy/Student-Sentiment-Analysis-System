@@ -18,6 +18,11 @@ sys.path.insert(0, ".")
 
 from app.core.database import SessionLocal
 from app.core.security import hash_password
+from app.models.action_update import ActionUpdate
+from app.models.evaluation import Evaluation
+from app.models.prediction import Prediction
+from app.models.training_history import TrainingHistory
+from app.models.voice_note import VoiceNote
 from app.models.user import User, UserRole
 
 ALLOWED_DOMAIN = "@asiatech.edu.ph"

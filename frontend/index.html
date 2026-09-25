@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
+        <script>window.ASIATECH_API_BASE = 'https://student-feedback.duckdns.org/api/v1';</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Asiatech Feedback Casefile - Student Feedback Sentiment Analysis</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
@@ -330,12 +331,11 @@
         </div>
     </div>
 
-    <!-- Deployment configuration: the exact backend the deployed frontend talks to.
-         No hardcoded fallback exists in utils.js any more - a deployment that
-         forgets this line fails loudly instead of silently calling production. -->
-    <script>
-        window.ASIATECH_API_BASE = 'https://student-sentiment-analysis-system.onrender.com/api/v1';
-    </script>
+    <!-- Deployment configuration lives in <head> (the
+         window.ASIATECH_API_BASE script above) — exactly one place, so a
+         deployment cannot end up with two conflicting backends. utils.js has
+         no hardcoded fallback: a deployment that forgets it fails loudly
+         instead of silently calling the wrong backend. -->
     <script src="js/utils.js"></script>
     <script src="js/api.js"></script>
     <script src="js/bulletin.js"></script>
