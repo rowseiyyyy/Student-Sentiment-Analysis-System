@@ -162,6 +162,104 @@ def test_widget_count_is_capped(client):
     assert response.status_code == 422
 
 
+# ----------------------------------------------------------------- order ----
+
+
+def test_order_round_trips(client):
+    """Reordering within a section is stored and read back: the point of the
+    feature is that the admin's arrangement survives a reload."""
+    admin = _admin(client)
+    faculty = _faculty(client)
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=admin,
+        json={
+            "name": "admin_analytics",
+            "widgets": {
+                "analytics:chart-b": {"w": 1, "h": 300, "order": 0},
+                "analytics:chart-a": {"w": 1, "h": 300, "order": 1},
+            },
+        },
+    )
+    assert response.status_code == 200
+    read = client.get("/api/v1/dashboard-layout/admin_analytics", headers=faculty)
+    assert read.json()["widgets"]["analytics:chart-b"]["order"] == 0
+    assert read.json()["widgets"]["analytics:chart-a"]["order"] == 1
+
+
+def test_order_is_optional_for_back_compatible_rows(client):
+    """A layout saved before reordering existed has no order. It must still be
+    accepted and read back as null, not rejected -- otherwise adding this field
+    would invalidate every layout already saved."""
+    admin = _admin(client)
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=admin,
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 2, "h": 300}}},
+    )
+    assert response.status_code == 200
+    assert response.json()["widgets"]["a"]["order"] is None
+
+
+def test_negative_order_is_rejected(client):
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=_admin(client),
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 1, "h": 300, "order": -1}}},
+    )
+    assert response.status_code == 422
+
+
+def test_absurd_order_is_rejected(client):
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=_admin(client),
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 1, "h": 300, "order": 99999}}},
+    )
+    assert response.status_code == 422
+
+
+# ------------------------------------------------------- widened geometry ----
+
+
+def test_full_width_and_tall_height_are_accepted(client):
+    """The editor now offers up to 6 columns and 1600px, so the server's old
+    4-column cap would have rejected a legitimate drag."""
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=_admin(client),
+        json={
+            "name": "admin_analytics",
+            "widgets": {
+                "wide": {"w": 6, "h": 1600, "order": 0},
+                "small": {"w": 1, "h": 120, "order": 1},
+            },
+        },
+    )
+    assert response.status_code == 200
+    widgets = response.json()["widgets"]
+    assert widgets["wide"] == {"w": 6, "h": 1600, "order": 0}
+    assert widgets["small"]["h"] == 120
+
+
+def test_width_above_six_is_still_rejected(client):
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=_admin(client),
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 7, "h": 300}}},
+    )
+    assert response.status_code == 422
+
+
+def test_height_above_1600_is_still_rejected(client):
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=_admin(client),
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 1, "h": 2000}}},
+    )
+    assert response.status_code == 422
+
+
 # ------------------------------------------------------------------ reset ----
 
 

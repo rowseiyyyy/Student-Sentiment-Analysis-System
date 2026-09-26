@@ -105,7 +105,10 @@ def save_dashboard_layout(
             detail="Layout name in the body must match the name in the path.",
         )
 
-    document = {key: {"w": size.w, "h": size.h} for key, size in payload.widgets.items()}
+    document = {
+        key: {"w": size.w, "h": size.h, "order": size.order}
+        for key, size in payload.widgets.items()
+    }
     row = db.query(DashboardLayout).filter(DashboardLayout.name == name).first()
     if row is None:
         row = DashboardLayout(

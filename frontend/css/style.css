@@ -1847,10 +1847,10 @@ tbody tr:last-child td {
 /* ============================================================
    WIDGET LAYOUT EDITOR (admin only)
 
-   The handles are injected by layout.js only when ADMIN.currentUser.role is
-   "administrator", so nothing here renders for faculty or students. They are
-   positioned outside the card's padding and sit above the content, so they
-   never shift a card's layout or cover a chart.
+   The handles are injected by layout.js only when the signed-in role is
+   "administrator", so nothing here renders for faculty or students. They sit
+   outside the card's padding and above its content, so they never shift a
+   card's layout or cover a chart.
 
    --widget-h is set inline per widget by layout.js; a card only honours it
    when a height actually means something (a chart canvas), so a text card is
@@ -1860,100 +1860,116 @@ tbody tr:last-child td {
   position: absolute;
   top: -11px;
   right: 10px;
-  z-index: 5;
+  z-index: 6;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
 }
 
-.widget-grip-width {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  padding: 0.1rem 0.2rem;
-  border: 1px solid var(--ink);
-  border-radius: 999px;
-  background: var(--paper-raised);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  line-height: 1;
-}
-
-.widget-grip-btn {
+/* Drag-to-reorder handle. The only control that starts a move drag. */
+.widget-grip-move {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 20px;
   padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  background: var(--paper-raised);
   color: var(--ink-soft);
-  cursor: pointer;
-  font-size: 0.55rem;
+  cursor: grab;
+  font-size: 0.7rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
-.widget-grip-btn:hover:not(:disabled) {
+.widget-grip-move:hover {
   background: var(--brand-soft);
   color: var(--brand-deep);
 }
 
-.widget-grip-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
+.widget-grip-move:active {
+  cursor: grabbing;
 }
 
-.widget-grip-btn:focus-visible,
-.widget-grip-resize:focus-visible {
+.widget-grip-move:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
-.widget-grip-val {
-  min-width: 1.4em;
-  text-align: center;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Bottom-edge drag handle. The tall hit area keeps a 6px visual line easy to
-   grab without a large invisible element over the chart below. */
-.widget-grip-resize {
+/* Edge resize handles. A generous transparent hit area around a small
+   visible nub, so the target is easy to grab without covering the card. */
+.widget-grip-edge {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: -5px;
-  height: 11px;
-  cursor: ns-resize;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  z-index: 7;
 }
 
-.widget-grip-resize::after {
+.widget-grip-edge::after {
   content: "";
-  display: block;
-  width: 46px;
-  height: 5px;
-  border-radius: 3px;
+  position: absolute;
   background: var(--ink);
-  opacity: 0.35;
+  opacity: 0;
+  border-radius: 2px;
+  transition: opacity 0.12s;
 }
 
-.widget-grip-resize:hover::after {
-  opacity: 0.75;
+.widget-grip-edge:hover::after,
+.widget-grip-edge:focus-visible::after {
+  opacity: 0.6;
+}
+
+.widget-grip-edge:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+/* Right edge: width only. */
+.widget-grip-edge-e {
+  top: 8px;
+  right: -4px;
+  bottom: 8px;
+  width: 12px;
+}
+
+.widget-grip-edge-e::after {
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 34px;
+}
+
+/* Bottom-right corner: width and height together. */
+.widget-grip-edge-se {
+  right: -4px;
+  bottom: -4px;
+  width: 18px;
+  height: 18px;
+}
+
+.widget-grip-edge-se::after {
+  right: 5px;
+  bottom: 5px;
+  width: 9px;
+  height: 9px;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
 
 /* While dragging, stop the sweep from selecting the dashboard text. */
 body.widget-resizing {
   user-select: none;
-  cursor: ns-resize;
 }
 
-body.widget-resizing .widget-grip-resize::after {
-  opacity: 0.9;
+/* Drop indicator: a line on the edge the widget would land against. */
+.widget-dragging {
+  opacity: 0.45;
+}
+
+.widget-drop-before {
+  box-shadow: -4px 0 0 0 var(--brand);
+}
+
+.widget-drop-after {
+  box-shadow: 4px 0 0 0 var(--brand);
 }
 
 /* A chart card honours an administrator-set height via --widget-h. The

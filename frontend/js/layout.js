@@ -30,9 +30,9 @@ const LAYOUT = {
     // Bounds. The server enforces the same numbers; these are the tighter,
     // design-driven limits the UI offers.
     MIN_W: 1,
-    MAX_W: 4,
-    MIN_H: 160,
-    MAX_H: 700,
+    MAX_W: 6,
+    MIN_H: 120,
+    MAX_H: 900,
     HEIGHT_STEP: 10,
 
     // Which layout document each page uses, keyed by page id so a page cannot
@@ -46,6 +46,11 @@ const LAYOUT = {
     // data tables are left alone: a stretched KPI strip reads as a bug
     // rather than a chosen layout.
     WIDGET_SELECTOR: '.chart-card, .card',
+
+    // The grid containers that group widgets into reorderable sections.
+    // A section is the reorder boundary: a widget can move within its own
+    // section but not between sections.
+    SECTION_SELECTOR: '.chart-grid, .two-col, .stats-grid',
 
     editing: false,
     _currentPage: null,
@@ -82,18 +87,109 @@ const LAYOUT = {
         return this.PAGE_FOR[pageId] || null;
     },
 
-    widgetKey(pageId, el, index) {
-        // Prefer a stable id on the widget or one of its descendants (the
-        // chart host divs all have ids). Fall back to the positional index,
-        // which is stable for a given page as long as its markup does not
-        // change -- a new widget inserted at the top would shift it, which is
-        // why the id path is tried first.
+    // (per-widget keys are produced by keyAt/entries below; there is no
+    // standalone widgetKey helper because the key depends on both the widget's
+    // own id AND its position within its section.)
+
+    // ---- sections & ordering ---------------------------------------------
+
+    // A "section" is one grid container (.chart-grid / .two-col / a bare
+    // wrapper) holding a run of sibling widgets. Reordering is scoped to a
+    // section: an admin can rearrange charts within the "Sentiment" group or
+    // within the "Ratings" group, but the groups themselves keep their
+    // authored order. That keeps the page's narrative intact -- you cannot
+    // drag a courses chart up into the header block.
+    _sectionOf(el) {
+        return el.parentElement;
+    },
+
+    // The widgets of a section, in their current DOM order. DOM order is the
+    // source of truth at render time; _sizes[key].order is what the admin's
+    // drag produced and is re-applied to the DOM by reorderSection().
+    _sectionWidgets(section) {
+        return Array.prototype.filter.call(
+            section.children,
+            (c) => c.matches && c.matches(this.WIDGET_SELECTOR)
+        );
+    },
+
+    // The key for a widget given its position. The section index is part of
+    // the identity because the positional fallback (no id on the widget) is
+    // only unique within its own section.
+    keyAt(pageId, el, widgetIndex, sectionIndex) {
         const idEl = el.id ? el : el.querySelector('[id]');
-        const id = idEl && idEl.id ? idEl.id : 'idx' + index;
+        const id = idEl && idEl.id ? idEl.id : 'idx' + widgetIndex + '_s' + sectionIndex;
         return pageId + ':' + id;
     },
 
+    // Every widget on the page with its key, element and section, in document
+    // order. Single source of truth for keying: the geometry pass, the
+    // reorder pass and the handle mounting all read this, so a key can never
+    // be computed two different ways.
+    entries(root, pageId) {
+        const self = this;
+        const out = [];
+        const sections = root.querySelectorAll(this.SECTION_SELECTOR);
+        sections.forEach((section, si) => {
+            self._sectionWidgets(section).forEach((el, wi) => {
+                out.push({
+                    key: self.keyAt(pageId, el, wi, si),
+                    el: el,
+                    section: section,
+                    sectionIndex: si,
+                    widgetIndex: wi,
+                });
+            });
+        });
+        return out;
+    },
+
+    // Reorder a section's DOM children to match the saved order values.
+    //
+    // Widgets with no saved order keep their authored position: sorting with a
+    // default of Infinity puts them last, which would silently move a layout
+    // saved before reordering existed. Instead they are given the order they
+    // already occupy, and only the explicitly-ordered widgets are moved.
+    // Reorder a section's widgets to match their saved order.
+    //
+    // A widget with no saved order keeps the position it already occupies, so
+    // a layout saved before reordering existed is not reshuffled. Sorting with
+    // a default of Infinity would push every untouched widget to the end --
+    // the opposite of what we want.
+    reorderSection(section, entriesInSection) {
+        const items = entriesInSection.map((e, i) => ({
+            el: e.el,
+            order: this._sizes[e.key] && this._sizes[e.key].order != null
+                ? this._sizes[e.key].order
+                : i,
+        }));
+        // Stable sort, so two widgets with equal order keep markup order.
+        const sorted = items.slice().sort((a, b) => a.order - b.order);
+        sorted.forEach((it) => section.appendChild(it.el));
+    },
+
+    reorderAll(root, pageId) {
+        const all = this.entries(root, pageId);
+        const bySection = new Map();
+        all.forEach((e) => {
+            if (!bySection.has(e.section)) bySection.set(e.section, []);
+            bySection.get(e.section).push(e);
+        });
+        bySection.forEach((entriesInSection, section) => {
+            this.reorderSection(section, entriesInSection);
+        });
+    },
+
     // ---- applying a layout ---------------------------------------------
+
+    // The page whose layout is loaded, or null if none is. Gestures resolve
+    // keys through this, so it is set by load() and by mount() alike: a
+    // caller that mounts without a preceding load would otherwise stamp
+    // records under a "null:" prefix that no read would ever match.
+    _page() {
+        return this._currentPage || null;
+    },
+
 
     // Clamp a stored width to what the current viewport can honour. Below the
     // two-column breakpoint the grid is one column wide, so every widget
@@ -105,10 +201,12 @@ const LAYOUT = {
 
     applyTo(root, pageId) {
         if (!root || !pageId) return;
-        const nodes = root.querySelectorAll(this.WIDGET_SELECTOR);
-        nodes.forEach((el, i) => {
-            const key = this.widgetKey(pageId, el, i);
-            const saved = this._sizes[key];
+        // Apply the saved order first, so the geometry below is written onto
+        // the widgets in their final positions.
+        this.reorderAll(root, pageId);
+        this.entries(root, pageId).forEach((entry) => {
+            const el = entry.el;
+            const saved = this._sizes[entry.key];
             el.style.gridColumn = 'span ' + this._effectiveW(saved ? saved.w : 1);
             if (saved && saved.h && el.classList.contains('chart-card')) {
                 const h = Math.max(this.MIN_H, Math.min(this.MAX_H, saved.h));
@@ -141,7 +239,7 @@ const LAYOUT = {
     // when a window is resized, not only on load.
     watchResize(root) {
         const self = this;
-        const onResize = function () { self.applyTo(root, self._currentPage); };
+        const onResize = function () { self.applyTo(root, self._page()); };
         window.addEventListener('resize', onResize);
         return function () { window.removeEventListener('resize', onResize); };
     },
@@ -254,6 +352,11 @@ const LAYOUT = {
     // the previous resize listener.
     mount(root, pageId) {
         if (!root || !this.layoutNameFor(pageId)) return function () {};
+        // Set the current page here too, not only in load(): mount is the
+        // entry point the pages actually call, and the resize/reorder
+        // gestures resolve widget keys against it.
+        this._currentPage = pageId;
+        this._root = root;
         this.applyTo(root, pageId);
         if (!this.canEdit()) {
             // Faculty and students: geometry only, no affordances at all.
@@ -272,124 +375,252 @@ const LAYOUT = {
     _mountHandles(root, pageId) {
         const self = this;
         root.classList.add('layout-editing');
-        const nodes = root.querySelectorAll(this.WIDGET_SELECTOR);
-        nodes.forEach((el, i) => {
+        // Remembered so the resize and reorder gestures can re-resolve a
+        // widget's key and re-apply the layout without a closure.
+        this._root = root;
+        this.entries(root, pageId).forEach((entry) => {
+            const el = entry.el;
             if (el.querySelector('.widget-grip')) return; // already mounted
-
-            const key = this.widgetKey(pageId, el, i);
             const isChart = el.classList.contains('chart-card');
 
+            // Set one field on this widget's record, creating it on first edit.
+            const set = function (field, value) {
+                const found = self._keyOf(el);
+                self._sizes[found] = Object.assign({}, self._sizes[found]);
+                self._sizes[found][field] = value;
+            };
+
+            // ---- move handle: drag to reorder within the section ----
             const grip = document.createElement('div');
             grip.className = 'widget-grip';
             grip.setAttribute('role', 'group');
             grip.setAttribute('aria-label', 'Layout controls for this widget');
 
-            const wWrap = document.createElement('div');
-            wWrap.className = 'widget-grip-width';
-            const dec = document.createElement('button');
-            dec.type = 'button';
-            dec.className = 'widget-grip-btn';
-            dec.innerHTML = '<i class="fas fa-minus"></i>';
-            dec.title = 'Narrower';
-            dec.setAttribute('aria-label', 'Make this widget narrower');
-            const val = document.createElement('span');
-            val.className = 'widget-grip-val';
-            const inc = document.createElement('button');
-            inc.type = 'button';
-            inc.className = 'widget-grip-btn';
-            inc.innerHTML = '<i class="fas fa-plus"></i>';
-            inc.title = 'Wider';
-            inc.setAttribute('aria-label', 'Make this widget wider');
-            wWrap.appendChild(dec);
-            wWrap.appendChild(val);
-            wWrap.appendChild(inc);
-
-            const curW = function () {
-                return self._effectiveW((self._sizes[key] || {}).w);
-            };
-            const sync = function () {
-                val.textContent = curW() + '×';
-                // Disable at the bounds rather than silently doing nothing.
-                dec.disabled = curW() <= self.MIN_W;
-                inc.disabled = curW() >= self.MAX_W;
-            };
-            const setW = function (w) {
-                self._sizes[key] = Object.assign({}, self._sizes[key], { w: w });
-                self.applyTo(root, pageId);
-                sync();
-            };
-            dec.addEventListener('click', function (e) {
-                e.stopPropagation();
-                setW(Math.max(self.MIN_W, curW() - 1));
-            });
-            inc.addEventListener('click', function (e) {
-                e.stopPropagation();
-                setW(Math.min(self.MAX_W, curW() + 1));
-            });
-
-            grip.appendChild(wWrap);
+            const move = document.createElement('button');
+            move.type = 'button';
+            move.className = 'widget-grip-move';
+            move.title = 'Drag to reorder';
+            move.setAttribute('aria-label', 'Drag to reorder this widget within its section');
+            grip.appendChild(move);
+            this._makeDraggable(move, el, entry.section, set);
+            this._makeReorderKeyboard(move, el, entry.section, set);
             el.appendChild(grip);
-            sync();
-            // Height: only offered where a height means something, i.e. a
-            // chart card with a canvas inside.
+
+            // ---- edge handles: width, and width+height on charts ----
+            this._addResizeHandle(el, 'e', 'ew-resize', 'Drag to change width', 'width', set);
             if (isChart) {
-                const handle = document.createElement('div');
-                handle.className = 'widget-grip-resize';
-                handle.title = 'Drag to change height';
-                handle.setAttribute('role', 'separator');
-                handle.setAttribute('aria-orientation', 'horizontal');
-                handle.setAttribute('aria-label', 'Drag to change this chart height');
-                handle.tabIndex = 0;
-
-                const applyH = function (px) {
-                    const h = Math.max(self.MIN_H, Math.min(self.MAX_H, px));
-                    self._sizes[key] = Object.assign({}, self._sizes[key], { h: h });
-                    self.applyTo(root, pageId);
-                };
-
-                handle.addEventListener('mousedown', function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const startY = e.clientY;
-                    const startH = el.getBoundingClientRect().height;
-                    // Suppress text selection for the duration of the drag,
-                    // otherwise the sweep highlights the whole dashboard.
-                    document.body.classList.add('widget-resizing');
-                    const onMove = function (ev) {
-                        // 10px steps, matching what is stored, so the saved
-                        // value is tidy rather than an arbitrary pixel.
-                        const delta = ev.clientY - startY;
-                        const snapped =
-                            Math.round((startH + delta) / self.HEIGHT_STEP) * self.HEIGHT_STEP;
-                        applyH(snapped);
-                    };
-                    const onUp = function () {
-                        document.removeEventListener('mousemove', onMove);
-                        document.removeEventListener('mouseup', onUp);
-                        document.body.classList.remove('widget-resizing');
-                    };
-                    document.addEventListener('mousemove', onMove);
-                    document.addEventListener('mouseup', onUp);
-                });
-
-                // Keyboard equivalent: a drag-only control would be
-                // unreachable without a mouse.
-                handle.addEventListener('keydown', function (e) {
-                    const step = e.shiftKey ? self.HEIGHT_STEP * 5 : self.HEIGHT_STEP;
-                    const current = (self._sizes[key] || {}).h ||
-                        el.getBoundingClientRect().height;
-                    if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        applyH(current - step);
-                    } else if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        applyH(current + step);
-                    }
-                });
-
-                grip.appendChild(handle);
+                this._addResizeHandle(el, 'se', 'nwse-resize',
+                    'Drag to change width and height', 'both', set);
             }
         });
     },
+
+    // Re-resolve a widget's key. The key is position-derived for widgets
+    // without an id, so it must be looked up at gesture time, not captured at
+    // mount time: a reorder can change a widget's position.
+    _keyOf(el) {
+        const page = this._page();
+        if (!page || !this._root) return null;
+        const found = this.entries(this._root, page).filter((e) => e.el === el)[0];
+        return found ? found.key : null;
+    },
+
+    // ---- drag to reorder ------------------------------------------------
+
+    // HTML5 drag-and-drop, scoped to one section. The dragged widget moves
+    // within its own section only, so a chart can never be dropped into a
+    // different group -- that section boundary is the requested constraint.
+    _makeDraggable(handle, el, section, set) {
+        const self = this;
+        el.draggable = true;
+        let dragging = false;
+
+        el.addEventListener('dragstart', function (e) {
+            // Only a drag that began on the move handle is a reorder, so
+            // text selection inside a card still behaves normally.
+            if (!e.target.classList.contains('widget-grip-move')) {
+                e.preventDefault();
+                return;
+            }
+            dragging = true;
+            el.classList.add('widget-dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            // Firefox refuses to start a drag with no payload set.
+            try { e.dataTransfer.setData('text/plain', 'widget'); } catch (err) { /* IE */ }
+        });
+
+        el.addEventListener('dragend', function () {
+            dragging = false;
+            el.classList.remove('widget-dragging');
+            self._clearDropMarkers();
+        });
+
+        this._sectionWidgets(section).forEach(function (target) {
+            target.addEventListener('dragover', function (e) {
+                if (!dragging || target === el) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                // Before the midpoint the widget goes before the target,
+                // after it goes after: the standard half-and-half rule.
+                const rect = target.getBoundingClientRect();
+                const after = (e.clientY - rect.top) > rect.height / 2;
+                self._clearDropMarkers();
+                target.classList.add(after ? 'widget-drop-after' : 'widget-drop-before');
+            });
+            target.addEventListener('dragleave', function () {
+                target.classList.remove('widget-drop-before', 'widget-drop-after');
+            });
+            target.addEventListener('drop', function (e) {
+                if (!dragging || target === el) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const rect = target.getBoundingClientRect();
+                const after = (e.clientY - rect.top) > rect.height / 2;
+                self._moveRelative(el, target, after, section, set);
+                self._clearDropMarkers();
+            });
+        });
+    },
+
+    _clearDropMarkers() {
+        Array.prototype.forEach.call(
+            document.querySelectorAll('.widget-drop-before, .widget-drop-after'),
+            (m) => m.classList.remove('widget-drop-before', 'widget-drop-after')
+        );
+    },
+
+    // Move `el` before or after `target`, then write an explicit order onto
+    // every widget in the section. Recording the whole section (rather than a
+    // from/to pair) keeps the stored record unambiguous and makes the next
+    // load a plain sort.
+    //
+    // Every widget in the section gets an order, not just the one that moved.
+    // If only the moved widget were stamped, the siblings would keep whatever
+    // order they already had and two of them could end up claiming the same
+    // slot, making the next load ambiguous.
+    _moveRelative(el, target, after, section, set) {
+        section.insertBefore(el, after ? target.nextSibling : target);
+        const widgets = this._sectionWidgets(section);
+        // Stamp by identity, resolving each key *after* the DOM move so
+        // position-derived keys match the new order.
+        widgets.forEach((w, i) => {
+            const setter = this._setterFor(w);
+            if (setter) setter('order', i);
+        });
+    },
+
+    // A bound setter for one widget element, for code that only has the
+    // element in hand.
+    _setterFor(el) {
+        const self = this;
+        const key = this._keyOf(el);
+        if (!key) return null;
+        return function (field, value) {
+            self._sizes[key] = Object.assign({}, self._sizes[key]);
+            self._sizes[key][field] = value;
+        };
+    },
+
+    // Keyboard equivalent for the drag handle: a drag-only control would be
+    // unreachable without a mouse. Alt+Arrow moves the widget within its
+    // section, stopping at the ends.
+    _makeReorderKeyboard(handle, el, section, set) {
+        const self = this;
+        handle.addEventListener('keydown', function (e) {
+            const back = e.key === 'ArrowLeft' || e.key === 'ArrowUp';
+            const fwd = e.key === 'ArrowRight' || e.key === 'ArrowDown';
+            if (!back && !fwd) return;
+            e.preventDefault();
+            const widgets = self._sectionWidgets(section);
+            const i = widgets.indexOf(el);
+            const j = back ? i - 1 : i + 1;
+            if (i === -1 || j < 0 || j >= widgets.length) return;
+            // Moving "back" means landing after the previous sibling.
+            self._moveRelative(el, widgets[j], back, section, set);
+        });
+    },
+
+    // Edge/corner resize drag. `mode` is 'width', 'height' or 'both'.
+    // Width is stored in grid units, so a horizontal drag snaps to whole
+    // columns rather than to an arbitrary pixel: the unit IS a column, and a
+    // fractional span would have no meaning on reload.
+    _addResizeHandle(el, corner, cursor, title, mode, set) {
+        const self = this;
+        const handle = document.createElement('div');
+        handle.className = 'widget-grip-edge widget-grip-edge-' + corner;
+        handle.style.cursor = cursor;
+        handle.title = title;
+        handle.setAttribute('role', 'separator');
+        handle.tabIndex = 0;
+        el.appendChild(handle);
+
+        // The width of one grid unit, measured from a sibling spanning a
+        // single column. Turns a pixel drag into column steps.
+        const unitWidth = function () {
+            const sibs = self._sectionWidgets(el.parentElement).filter((s) => s !== el);
+            const probe = sibs[0] || el;
+            const rect = probe.getBoundingClientRect();
+            const cs = window.getComputedStyle(probe);
+            const gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
+            return Math.max(80, rect.width + gap);
+        };
+
+        handle.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startW = self._effectiveW((self._sizes[self._keyOf(el)] || {}).w);
+            const startH = el.getBoundingClientRect().height;
+            const uw = unitWidth();
+            // Suppress text selection for the sweep, otherwise dragging
+            // highlights the whole dashboard.
+            document.body.classList.add('widget-resizing');
+            handle.classList.add('widget-resizing');
+
+            const onMove = function (ev) {
+                if (mode !== 'height') {
+                    const steps = Math.round((ev.clientX - startX) / uw);
+                    set('w', Math.max(self.MIN_W, Math.min(self.MAX_W, startW + steps)));
+                }
+                if (mode !== 'width') {
+                    const dy = ev.clientY - startY;
+                    set('h', Math.max(self.MIN_H, Math.min(self.MAX_H,
+                        Math.round((startH + dy) / self.HEIGHT_STEP) * self.HEIGHT_STEP)));
+                }
+                self.applyTo(self._root, self._page());
+            };
+            const onUp = function () {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.classList.remove('widget-resizing');
+                handle.classList.remove('widget-resizing');
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        // Arrow keys, so neither dimension is mouse-only. Shift moves faster.
+        handle.addEventListener('keydown', function (e) {
+            const step = e.shiftKey ? 3 : 1;
+            const s = self._sizes[self._keyOf(el)] || {};
+            const w = self._effectiveW(s.w);
+            const h = s.h || el.getBoundingClientRect().height;
+            if (e.key === 'ArrowLeft' && mode !== 'height') {
+                set('w', Math.max(self.MIN_W, w - step));
+            } else if (e.key === 'ArrowRight' && mode !== 'height') {
+                set('w', Math.min(self.MAX_W, w + step));
+            } else if (e.key === 'ArrowUp' && mode !== 'width') {
+                set('h', Math.max(self.MIN_H, h - self.HEIGHT_STEP * step));
+            } else if (e.key === 'ArrowDown' && mode !== 'width') {
+                set('h', Math.min(self.MAX_H, h + self.HEIGHT_STEP * step));
+            } else {
+                return;
+            }
+            e.preventDefault();
+            self.applyTo(self._root, self._page());
+        });
+    },
+
 };
 if (typeof window !== 'undefined') window.LAYOUT = LAYOUT;

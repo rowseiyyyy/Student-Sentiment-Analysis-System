@@ -7,8 +7,13 @@ from pydantic_core import PydanticCustomError
 # server is the last line of defence against a hand-crafted payload storing a
 # value that would render unusably (a zero-height chart, a 100000px column),
 # while the frontend clamps to a tighter, design-driven range.
-MIN_W, MAX_W = 1, 4
-MIN_H, MAX_H = 120, 1200
+# MAX_W is 6 because the editor now offers free width resizing up to a
+# half-page column; MAX_H is 1600 for a full-height chart on a tall monitor.
+MIN_W, MAX_W = 1, 6
+MIN_H, MAX_H = 120, 1600
+# Position within the widget's own section, 0-based. Sections are independent:
+# reordering is scoped to a section so the page's narrative order is preserved.
+MAX_ORDER = 500
 # A layout is a page of widgets; cap the key count so one request cannot be
 # used to write an unbounded document.
 MAX_WIDGETS = 200
@@ -16,15 +21,21 @@ MAX_KEY_LEN = 120
 
 
 class WidgetSize(BaseModel):
-    """Geometry for a single widget.
+    """Geometry and position for a single widget.
 
     ``w`` is a grid-unit count (how many of the page's current columns the
     widget spans), not pixels. Storing units rather than pixels is what lets a
     saved layout survive a change to the page container's max-width.
+
+    ``order`` is the widget's 0-based position within its own section. It is
+    optional: a layout saved before reordering existed has no order, and such a
+    widget keeps whatever position the page markup gives it rather than
+    snapping to the front.
     """
 
     w: int = Field(ge=MIN_W, le=MAX_W)
     h: int = Field(ge=MIN_H, le=MAX_H)
+    order: int | None = Field(default=None, ge=0, le=MAX_ORDER)
 
     @field_validator("h")
     @classmethod
