@@ -283,6 +283,10 @@ a:hover {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   padding: 1.5rem;
   margin-bottom: 1rem;
+  /* Anchors the layout editor's absolutely-positioned drag and resize
+     handles to this card. Without it a .card handle resolves against some
+     distant ancestor and lands off the card, where it cannot be grabbed. */
+  position: relative;
 }
 
 .card-header {
@@ -1896,8 +1900,16 @@ tbody tr:last-child td {
   outline-offset: 1px;
 }
 
-/* Edge resize handles. A generous transparent hit area around a small
-   visible nub, so the target is easy to grab without covering the card. */
+/* Edge resize handles.
+
+   The hit area sits INSIDE the card's border, not straddling it. A handle
+   centred on the edge (right: -6px) is half outside the card, where it lands
+   in a neighbouring widget's stacking context or is clipped by a scroll
+   container -- and then the drag silently does nothing, which is exactly the
+   "resize isn't working" symptom. Inside placement is also the convention
+   for a resize affordance that belongs to the thing it resizes.
+
+   The nub stays invisible until hover so a resting card looks untouched. */
 .widget-grip-edge {
   position: absolute;
   z-index: 7;
@@ -1912,43 +1924,48 @@ tbody tr:last-child td {
   transition: opacity 0.12s;
 }
 
+.widget-grip-edge:hover,
+.widget-grip-edge:focus-visible {
+  background: rgba(43, 58, 103, 0.10);
+}
+
 .widget-grip-edge:hover::after,
 .widget-grip-edge:focus-visible::after {
-  opacity: 0.6;
+  opacity: 0.65;
 }
 
 .widget-grip-edge:focus-visible {
   outline: 2px solid var(--brand);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 
-/* Right edge: width only. */
+/* Right edge: width only. 16px wide so it is an easy target. */
 .widget-grip-edge-e {
-  top: 8px;
-  right: -4px;
-  bottom: 8px;
-  width: 12px;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 16px;
 }
 
 .widget-grip-edge-e::after {
   top: 50%;
-  right: 4px;
+  right: 5px;
   transform: translateY(-50%);
   width: 5px;
-  height: 34px;
+  height: 40px;
 }
 
 /* Bottom-right corner: width and height together. */
 .widget-grip-edge-se {
-  right: -4px;
-  bottom: -4px;
-  width: 18px;
-  height: 18px;
+  right: 0;
+  bottom: 0;
+  width: 22px;
+  height: 22px;
 }
 
 .widget-grip-edge-se::after {
-  right: 5px;
-  bottom: 5px;
+  right: 6px;
+  bottom: 6px;
   width: 9px;
   height: 9px;
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
@@ -1957,6 +1974,19 @@ tbody tr:last-child td {
 /* While dragging, stop the sweep from selecting the dashboard text. */
 body.widget-resizing {
   user-select: none;
+}
+
+/* Edit mode: suppress pointer interaction with the cards themselves, so a
+   drag that wanders over a chart cannot be read as a click or a tooltip.
+   The handles set pointer-events back on for themselves. */
+.layout-editing .chart-card,
+.layout-editing .card {
+  pointer-events: none;
+}
+
+.layout-editing .widget-grip,
+.layout-editing .widget-grip-edge {
+  pointer-events: auto;
 }
 
 /* Drop indicator: a line on the edge the widget would land against. */
@@ -2045,6 +2075,35 @@ body.widget-resizing {
   .layout-toolbar-btn i {
     font-size: 0.72rem;
   }
+}
+
+/* The edit-mode toggle. Reads as a mode switch rather than an action: it is
+   the button that reveals the handles, so it gets the filled treatment when
+   that mode is active. */
+.layout-mode-btn.active {
+  background: #fff;
+  border-color: #fff;
+  color: var(--brand-deep);
+  font-weight: 600;
+}
+
+.layout-mode-btn.active:hover {
+  background: #fff;
+  color: var(--brand-deep);
+}
+
+/* While edit mode is on, mark every resizable widget so it is obvious which
+   boxes are draggable. A dashed outline rather than a solid one, so it reads
+   as an editor overlay and not as a change to the card's own styling. */
+.layout-editing .chart-card,
+.layout-editing .card {
+  outline: 1px dashed rgba(43, 58, 103, 0.35);
+  outline-offset: -1px;
+}
+
+.layout-editing .chart-card:hover,
+.layout-editing .card:hover {
+  outline-color: var(--brand);
 }
 
 .alert-bell-wrap {

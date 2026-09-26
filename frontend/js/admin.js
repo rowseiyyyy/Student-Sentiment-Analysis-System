@@ -300,7 +300,6 @@ var ADMIN = {
                 );
             });
         }
-
         switch(tab) {
             case 'overview': this.renderOverview(tabContent); break;
             case 'responses': this.renderResponses(tabContent); break;

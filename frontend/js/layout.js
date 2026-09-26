@@ -52,9 +52,50 @@ const LAYOUT = {
     // section but not between sections.
     SECTION_SELECTOR: '.chart-grid, .two-col, .stats-grid',
 
+    // ---- edit / live mode -----------------------------------------------
+
+    // Live mode is the default: the saved layout is applied and nothing else.
+    // Edit mode adds the drag and resize affordances.
+    //
+    // Separating the two matters for two reasons. A dashboard is mostly read,
+    // and permanent handles on every card are visual noise over that. More
+    // importantly the handles sit on top of the cards, so in live mode they
+    // would intercept clicks meant for the content underneath.
     editing: false,
     _currentPage: null,
-    _sizes: {},   // "<page>:<widget-id>" -> { w, h }
+    _sizes: {},   // "<page>:<widget-id>" -> { w, h, order }
+
+    // Switch modes. Turning edit mode on mounts the handles; turning it off
+    // removes them and leaves only the applied geometry, so a read-only view
+    // carries no editor chrome at all.
+    setEditing(on) {
+        const root = this._root;
+        const pageId = this._currentPage;
+        this.editing = !!on;
+        if (root && pageId) this.mount(root, pageId);
+        this.updateModeUI();
+    },
+
+    toggleEditing() {
+        this.setEditing(!this.editing);
+    },
+
+    // Reflect the current mode on the toolbar button. Kept separate from
+    // mountToolbar so both the initial render and a mode switch can call it.
+    updateModeUI() {
+        const btn = document.getElementById('layout-mode-btn');
+        if (!btn) return;
+        const label = btn.querySelector('.layout-mode-label');
+        const icon = btn.querySelector('i');
+        btn.classList.toggle('active', this.editing);
+        btn.setAttribute('aria-pressed', this.editing ? 'true' : 'false');
+        btn.title = this.editing
+            ? 'Edit mode is on — drag widgets to reorder, drag their edges to resize. Switch off to view the finished dashboard.'
+            : 'Switch to edit mode to rearrange and resize widgets';
+        if (label) label.textContent = this.editing ? 'Editing' : 'Edit layout';
+        if (icon) icon.className = this.editing ? 'fas fa-pen' : 'fas fa-pen-to-square';
+    },
+
 
     // ---- role gate ------------------------------------------------------
     // The single place deciding whether editing is offered, so there is one
@@ -126,20 +167,46 @@ const LAYOUT = {
     // order. Single source of truth for keying: the geometry pass, the
     // reorder pass and the handle mounting all read this, so a key can never
     // be computed two different ways.
+    //
+    // Widgets that are NOT inside a section are still included, each treated
+    // as its own single-widget section. Several pages render a bare .card as
+    // a direct child of the tab content; walking only section elements left
+    // those cards with no handles and no saved geometry at all.
     entries(root, pageId) {
         const self = this;
         const out = [];
+        const seen = new Set();
+
+        const add = function (el, section, si, wi) {
+            if (seen.has(el)) return;
+            seen.add(el);
+            out.push({
+                key: self.keyAt(pageId, el, wi, si),
+                el: el,
+                section: section,
+                sectionIndex: si,
+                widgetIndex: wi,
+            });
+        };
+
         const sections = root.querySelectorAll(this.SECTION_SELECTOR);
         sections.forEach((section, si) => {
-            self._sectionWidgets(section).forEach((el, wi) => {
-                out.push({
-                    key: self.keyAt(pageId, el, wi, si),
-                    el: el,
-                    section: section,
-                    sectionIndex: si,
-                    widgetIndex: wi,
-                });
-            });
+            self._sectionWidgets(section).forEach((el, wi) => add(el, section, si, wi));
+        });
+
+        // Any remaining widget is a loose card; group the siblings that share
+        // a parent so two loose cards in one wrapper can still reorder.
+        const looseGroups = new Map();
+        Array.prototype.forEach.call(root.querySelectorAll(this.WIDGET_SELECTOR), (el) => {
+            if (seen.has(el)) return;
+            const parent = el.parentElement;
+            if (!looseGroups.has(parent)) looseGroups.set(parent, []);
+            looseGroups.get(parent).push(el);
+        });
+        let offset = sections.length;
+        looseGroups.forEach((els, parent) => {
+            els.forEach((el, wi) => add(el, parent, offset, wi));
+            offset += 1;
         });
         return out;
     },
@@ -169,9 +236,10 @@ const LAYOUT = {
     },
 
     reorderAll(root, pageId) {
-        const all = this.entries(root, pageId);
+        // Grouped the same way entries() groups, so a reorder pass and the
+        // key pass always agree on which widgets share a section.
         const bySection = new Map();
-        all.forEach((e) => {
+        this.entries(root, pageId).forEach((e) => {
             if (!bySection.has(e.section)) bySection.set(e.section, []);
             bySection.get(e.section).push(e);
         });
@@ -289,6 +357,11 @@ const LAYOUT = {
         slot.dataset.mounted = '1';
         slot.innerHTML =
             '<span class="layout-toolbar">' +
+                '<button type="button" class="layout-toolbar-btn layout-mode-btn" ' +
+                    'id="layout-mode-btn" onclick="LAYOUT.toggleEditing()" aria-pressed="false" ' +
+                    'title="Switch to edit mode to rearrange and resize widgets">' +
+                    '<i class="fas fa-pen-to-square"></i> ' +
+                    '<span class="layout-mode-label">Edit layout</span></button>' +
                 '<button type="button" class="layout-toolbar-btn" id="layout-save-btn" ' +
                     'onclick="LAYOUT.saveAndReport()" title="Save this layout for everyone">' +
                     '<i class="fas fa-check"></i> Save layout</button>' +
@@ -296,6 +369,7 @@ const LAYOUT = {
                     'onclick="LAYOUT.resetAndReport()" title="Restore the default layout">' +
                     '<i class="fas fa-undo"></i> Reset</button>' +
             '</span>';
+        this.updateModeUI();
     },
 
     async saveAndReport() {
@@ -313,7 +387,6 @@ const LAYOUT = {
             document.getElementById(this._currentPage);
         if (ok) {
             this.applyTo(root, this._currentPage);
-            if (root && this.canEdit()) this._mountHandles(root, this._currentPage);
             showToast('Layout reset to default.', 'success');
         } else {
             showToast('Could not reset the layout. Please try again.', 'error');
@@ -358,15 +431,29 @@ const LAYOUT = {
         this._currentPage = pageId;
         this._root = root;
         this.applyTo(root, pageId);
-        if (!this.canEdit()) {
-            // Faculty and students: geometry only, no affordances at all.
-            // Nothing is inserted into the DOM, so there is no control to
-            // discover, style around, or trigger by keyboard.
+        this.updateModeUI();
+        if (!this.canEdit() || !this.editing) {
+            // Live mode, or a viewer (faculty / student): geometry only, no
+            // affordances at all. Nothing is inserted into the DOM, so there
+            // is no control to discover, style around, click through, or
+            // trigger by keyboard -- and the cards stay fully interactive.
+            this._unmountHandles(root);
             root.classList.remove('layout-editing');
             return function () {};
         }
         this._mountHandles(root, pageId);
         return this.watchResize(root);
+    },
+
+    // Remove every handle this module injected. Only touches elements it
+    // created (matched by the widget-grip / widget-grip-edge classes), so it
+    // cannot strip anything belonging to the page's own markup.
+    _unmountHandles(root) {
+        if (!root || !root.querySelectorAll) return;
+        Array.prototype.forEach.call(
+            root.querySelectorAll('.widget-grip, .widget-grip-edge'),
+            (el) => { if (el.parentElement) el.parentElement.removeChild(el); }
+        );
     },
 
     // A width stepper on every widget, plus a drag handle on chart widgets.
@@ -556,13 +643,31 @@ const LAYOUT = {
 
         // The width of one grid unit, measured from a sibling spanning a
         // single column. Turns a pixel drag into column steps.
+        //
+        // Guarded because getComputedStyle is not available in every host
+        // (and a throw here would kill the whole drag on mousedown). Falls
+        // back to the section's own width divided by an assumed column count,
+        // which is close enough to snap to sensible steps.
         const unitWidth = function () {
-            const sibs = self._sectionWidgets(el.parentElement).filter((s) => s !== el);
+            const section = el.parentElement;
+            const sibs = self._sectionWidgets(section).filter((s) => s !== el);
             const probe = sibs[0] || el;
-            const rect = probe.getBoundingClientRect();
-            const cs = window.getComputedStyle(probe);
-            const gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
-            return Math.max(80, rect.width + gap);
+            const probeRect = probe.getBoundingClientRect();
+            if (probeRect && probeRect.width) {
+                let gap = 0;
+                if (typeof window.getComputedStyle === 'function') {
+                    const cs = window.getComputedStyle(probe);
+                    gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
+                }
+                return Math.max(80, probeRect.width + gap);
+            }
+            // No measurable geometry (detached, or a stub DOM): assume the
+            // grid is the common 2-column case so the drag still responds.
+            const sectionRect = section.getBoundingClientRect
+                ? section.getBoundingClientRect()
+                : null;
+            const basis = sectionRect && sectionRect.width ? sectionRect.width : 800;
+            return Math.max(80, basis / 2);
         };
 
         handle.addEventListener('mousedown', function (e) {
