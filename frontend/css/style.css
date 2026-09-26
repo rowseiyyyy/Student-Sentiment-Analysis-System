@@ -77,6 +77,17 @@ a:hover {
   position: sticky;
   top: 0;
   z-index: 1000;
+  /* The nav is a single non-wrapping flex row holding the brand, five tabs,
+     the layout controls and the user cluster. Once the layout toolbar was
+     added, that row was wide enough to push past the viewport -- which made
+     the whole document scroll sideways and spilled "System Administrator"
+     and "Close file" off the dark background onto the white page, where
+     their light-on-white text was unreadable.
+     These three rules are the guard: the tab strip is allowed to shrink and
+     scroll instead of pushing, the user cluster is never shrunk, and the nav
+     never exceeds its container. */
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .nav-brand {
@@ -114,6 +125,13 @@ a:hover {
   display: flex;
   gap: 0.25rem;
   align-items: flex-end;
+  /* Let the tab strip give way rather than widening the nav. Combined with
+     overflow-x: auto this makes the tabs scrollable on a narrow window
+     instead of pushing the user cluster off screen. */
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .nav-links li button {
@@ -164,26 +182,35 @@ a:hover {
   padding: 0 1.25rem;   /* matches .navbar's left edge; see .page-layout */
   margin-left: auto;
   align-self: stretch;
+  /* Identity and logout must never be compressed or clipped: they are the
+     only way out of the app, and they sit on the dark background where they
+     have to stay legible. */
+  flex: 0 0 auto;
+  background: var(--brand-deep);
 }
 
+/* The badge was a muted grey that read as disabled against the navy. A
+   lighter tone restores the same weight as the logout button next to it. */
 .user-badge {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   letter-spacing: 0.04em;
-  color: #9aa4c4;
+  color: #dfe3f0;
+  white-space: nowrap;
 }
 
 .btn-logout {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   background: none;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #d8dbe8;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
   padding: 0.4rem 0.7rem;
   border-radius: 4px;
   cursor: pointer;
   letter-spacing: 0.03em;
-  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
 .btn-logout:hover {
@@ -1681,7 +1708,7 @@ tbody tr:last-child td {
     grid-template-columns: 1fr;
   }
   .page-layout {
-    padding: 1rem 1rem 2rem;   /* mirrors the tightened desktop rhythm */
+    padding: 1rem 0.75rem 1.5rem;   /* mirrors the tightened desktop rhythm */
   }
   .two-col {
     grid-template-columns: 1fr;
@@ -2019,11 +2046,14 @@ body.widget-resizing {
   .card {
     grid-column: span 1 !important;
   }
-  /* Height is dropped too: a height tuned for a wide two-column chart would
-     waste most of a phone screen. Important, because --widget-h is set as an
-     inline custom property and would otherwise win. */
+  /* An admin-set height is tuned for a wide two-column chart and would waste
+     most of a phone screen, so the mobile view overrides it. !important is
+     required because --widget-h arrives as an inline custom property.
+     The two theme charts that carry a literal inline height:300px are
+     overridden further down, in the phone media query, where that inline
+     style can be beaten. */
   .chart-card .chart-container {
-    height: var(--widget-h-mobile, 260px) !important;
+    height: var(--widget-h-mobile, 220px) !important;
   }
 }
 
@@ -2064,18 +2094,82 @@ body.widget-resizing {
   outline-offset: 1px;
 }
 
-/* Below the phone breakpoint the three navbar groups no longer fit on one
-   row, so the labels drop and only the icons remain. */
-@media (max-width: 900px) {
-  .layout-toolbar-btn {
-    padding: 0 0.5rem;
+/* Progressive label collapse.
+   The nav row is a fixed budget: brand + five tabs + alert bell + faculty
+   view + three layout buttons + badge + logout. Rather than let the excess
+   push the identity and logout controls off the end (which is what made them
+   unreadable), the button LABELS are surrendered in order of expendability as
+   the window narrows. Icons carry the meaning, and title/aria-label keep the
+   full wording for anyone who needs it.
+
+   Dropped in this order, least useful first:
+     "Save layout" / "Reset"  -> icons only   (mode toggle stays labelled,
+                                               since it is the one you need to
+                                               find)
+     "Faculty view"           -> icon only
+   The bar and logout keep their full text at every width: they are the
+   clearest way back out of the app and must never be ambiguous. */
+@media (max-width: 1680px) {
+  #layout-save-btn,
+  #layout-reset-btn {
+    font-size: 0;
     gap: 0;
-    font-size: 0;   /* label drops, icon carries the meaning */
+    padding: 0 0.55rem;
   }
-  .layout-toolbar-btn i {
+  #layout-save-btn i,
+  #layout-reset-btn i {
     font-size: 0.72rem;
   }
+  .layout-toolbar {
+    margin-right: 0.5rem;
+  }
 }
+
+@media (max-width: 1400px) {
+  .faculty-preview {
+    font-size: 0;
+    gap: 0;
+    padding: 0 0.6rem;
+  }
+  .faculty-preview i {
+    font-size: 0.72rem;
+  }
+  .layout-mode-label {
+    display: none;
+  }
+  .nav-user {
+    gap: 0.55rem;
+    padding: 0 0.75rem;
+  }
+}
+
+/* Below the phone breakpoint the navbar already wraps to two rows, so the
+   controls get their full labels back -- there is room for them now. */
+@media (max-width: 900px) {
+  #layout-save-btn,
+  #layout-reset-btn,
+  .faculty-preview,
+  .layout-mode-label {
+    font-size: 0.6rem;
+    gap: 0.3rem;
+  }
+  #layout-save-btn,
+  #layout-reset-btn {
+    padding: 0 0.6rem;
+  }
+  .faculty-preview {
+    padding: 0 0.7rem;
+  }
+  .layout-mode-label {
+    display: inline;
+  }
+  #layout-save-btn i,
+  #layout-reset-btn i,
+  .faculty-preview i {
+    font-size: inherit;
+  }
+}
+
 
 /* The edit-mode toggle. Reads as a mode switch rather than an action: it is
    the button that reveals the handles, so it gets the filled treatment when
@@ -2976,6 +3070,39 @@ body.widget-resizing {
   /* Slightly shorter charts keep donut/bar proportions pleasant */
   .chart-container {
     height: 240px;
+  }
+
+  /* Phone: 240px is still a lot of a short viewport, and a chart filling half
+     the screen makes the page feel like a stack of slides. The two theme
+     charts that set a literal inline height:300px need !important to be
+     brought down to match -- a plain rule loses to an inline style. */
+  .chart-container,
+  .chart-card .chart-container {
+    height: 210px !important;
+  }
+
+  /* Last-resort guard against any single element forcing the whole document
+     wider than the screen. A stray wide child previously made the entire page
+     scroll sideways, which dragged the sticky navbar's contents off the end
+     and made the identity/logout controls unreadable. Clipping at the page
+     level means one bad element degrades to being cut off on its own rather
+     than breaking the chrome for everything. */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* The KPI row and the chart grids carry a 1.1rem gap; on a phone that is a
+     lot of dead space repeated down a single column. */
+  .stats-grid,
+  .chart-grid,
+  .two-col {
+    gap: 0.85rem;
+  }
+
+  /* Chart cards are inset 1.35rem on desktop, generous once the card is the
+     full width of the screen. */
+  .chart-card {
+    padding: 1rem;
   }
 
   .modal-body {

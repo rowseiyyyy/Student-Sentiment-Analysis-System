@@ -2361,7 +2361,7 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the ONLY live inference model — its small quantized ONNX footprint runs on the free tier within the RAM budget. SVM, Naive Bayes and Logistic Regression are the offline research baselines and appear in the comparison table only. Weights are fetched from the private Hugging Face Hub repo at startup, so you do not upload model files here.</p>' +
+                '<p class="form-desc">After training in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the ONLY live inference model — SVM, Naive Bayes and Logistic Regression are the offline research baselines and appear in the comparison table only. Weights are fetched from the private Hugging Face Hub repo at startup, so you do not upload model files here.</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
