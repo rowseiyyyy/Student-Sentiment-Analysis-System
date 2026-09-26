@@ -52,7 +52,14 @@ var ADMIN = {
     // Global dashboard filters (Overview tab). '' means All-time / All
     // departments. Applied to every submission-data widget on the tab;
     // the Model Performance table is training-run data and is unaffected.
+    // Now applied to the Analytics tab too (see _qs / scopeLabel).
     overviewFilters: { days: '', category: '' },
+    // "Preview the faculty view": pin every submission chart to the Professors
+    // category, which is what the faculty role is served server-side.
+    facultyPreview: false,
+    // Last rendered tab, so a filter/preview change can re-render whichever tab
+    // is actually on screen rather than forcing the Overview.
+    currentTab: 'overview',
 
     // ---- Negative spike alerts (Feature 1) ----
     // Alerts recomputed by ADMIN.checkAlerts(); dismissal keys survive
@@ -157,13 +164,120 @@ var ADMIN = {
         APP.goToPage('page-admin-dashboard');
         document.getElementById('nav-admin').style.display = 'flex';
         document.getElementById('badge-admin').textContent = '\u{1F6E1} ' + (this.currentUser ? this.currentUser.full_name : 'Administrator');
+        this.updateFacultyPreviewButton();
         this.renderTab('overview');
         // Negative spike alerting: run once on load, then poll.
         this.checkAlerts();
         this.startAlertPolling();
     },
 
+    // ============================================================
+    // SCOPE — one query string for every submission chart on every
+    // tab, plus the "preview the faculty lens" mode.
+    //
+    // The Overview tab used to build its filter query inline while the
+    // Analytics tab passed nothing at all, so an admin who filtered to
+    // "Faculty · last 30 days" and then clicked Analytics was looking at
+    // unfiltered numbers with nothing on screen to say so.
+    // ============================================================
+
+    // _qs()             -> the current tab scope (preview-aware)
+    // _qs('Facilities') -> pin one department, keeping the date filter.
+    //                     Used by the per-department comparison panels.
+    _qs: function(forceCategory) {
+        var f = this.overviewFilters;
+        var params = [];
+        if (f.days) params.push('days=' + encodeURIComponent(f.days));
+        // Preview mode outranks the department dropdown: the whole point is to
+        // see what a faculty account is served.
+        var category = forceCategory || (this.facultyPreview ? 'Professors' : f.category);
+        if (category) params.push('category=' + encodeURIComponent(category));
+        return params.join('&');
+    },
+
+    // Plain-English description of what the charts currently cover. Never
+    // claim "all-time" while a filter is applied.
+    scopeLabel: function() {
+        var f = this.overviewFilters;
+        var dept = this.facultyPreview
+            ? 'Professors only (faculty preview)'
+            : (f.category ? this.getCategoryDisplayName(f.category) : 'all departments');
+        return dept + ' · ' + (f.days ? ('last ' + f.days + ' days') : 'all-time');
+    },
+
+    // The per-department comparison panels exist to put all four departments
+    // side by side, so they are meaningless the moment one is selected (or the
+    // faculty preview pins the scope to one).
+    departmentCompareSuppressed: function() {
+        return !!(this.facultyPreview || this.overviewFilters.category);
+    },
+
+    // One ratings + one aspect-averages call per department, in parallel, each
+    // pinned to that department but keeping the active date filter. Only called
+    // when the comparison is actually being shown.
+    fetchDepartmentRatings: function() {
+        var cats = ['Faculty', 'Staff', 'Facilities', 'Payment'];
+        var self = this;
+        return Promise.all(cats.map(function(c) {
+            return Promise.all([
+                API.getRatingDistribution(self._qs(c)),
+                API.getAspectAverages(self._qs(c))
+            ]).then(function(pair) {
+                return {
+                    category: c,
+                    label: self.getCategoryDisplayName(c),
+                    ratings: pair[0],
+                    aspects: pair[1]
+                };
+            });
+        })).catch(function() { return []; });
+    },
+
+    // Banner shown whenever the charts are not showing everything, so the
+    // admin can always tell which of two number sets they are looking at.
+    scopeBanner: function() {
+        var f = this.overviewFilters;
+        if (!this.facultyPreview && !f.days && !f.category) return '';
+        var text = this.facultyPreview
+            ? '<strong>Faculty preview</strong> — every submission chart below is scoped to the ' +
+              'Professors category, exactly as a faculty account is served it.'
+            : '<strong>Filtered</strong> — charts show ' + escapeHtml(this.scopeLabel()) + '.';
+        return '<div class="scope-banner' + (this.facultyPreview ? ' preview' : '') + '">' +
+            '<i class="fas ' + (this.facultyPreview ? 'fa-user-secret' : 'fa-filter') + '"></i> ' + text +
+            ' <button class="btn btn-sm btn-outline" onclick="ADMIN.clearOverviewFilters()"><i class="fas fa-times"></i> Reset</button>' +
+            (this.facultyPreview
+                ? ' <button class="btn btn-sm btn-outline" onclick="ADMIN.toggleFacultyPreview()">Exit preview</button>'
+                : '') +
+            '</div>';
+    },
+
+    // Re-render whichever tab is on screen: the filter bar and the preview
+    // toggle both live outside the tab body.
+    refreshCurrentTab: function() {
+        this.renderTab(this.currentTab || 'overview');
+    },
+
+    // Preview mode: show every submission chart exactly as a faculty account
+    // sees it. For that role the category is pinned server-side; an admin
+    // asks for the same slice explicitly, so both see one query.
+    toggleFacultyPreview: function() {
+        this.facultyPreview = !this.facultyPreview;
+        this.updateFacultyPreviewButton();
+        this.refreshCurrentTab();
+    },
+
+    updateFacultyPreviewButton: function() {
+        var btn = document.getElementById('faculty-preview-btn');
+        if (!btn) return;
+        btn.classList.toggle('active', this.facultyPreview);
+        btn.setAttribute('aria-pressed', this.facultyPreview ? 'true' : 'false');
+        btn.title = this.facultyPreview
+            ? 'Previewing the faculty view (Professors only) — click to exit'
+            : 'Preview every chart exactly as a faculty account sees it';
+    },
+
     renderTab: function(tab) {
+        this.currentTab = tab;
         var content = document.getElementById('admin-content');
         content.innerHTML = '';
         var tabContent = document.createElement('div');
@@ -187,10 +301,13 @@ var ADMIN = {
         container.innerHTML = '<div class="text-center mt-4"><div class="spinner"></div><p>Loading overview...</p></div>';
         try {
             var f = this.overviewFilters;
-            var filterParams = [];
-            if (f.days) filterParams.push('days=' + encodeURIComponent(f.days));
-            if (f.category) filterParams.push('category=' + encodeURIComponent(f.category));
-            var filterQs = filterParams.join('&');
+            // One shared scope for every submission chart on every tab, so the
+            // Overview and the Analytics tab can never disagree. Preview mode
+            // pins the category to Professors.
+            var filterQs = this._qs();
+            // Used by the per-card captions so no card claims "all-time" while a
+            // filter is actually applied.
+            var scopeNote = escapeHtml(this.scopeLabel());
 
             var overall = await API.getOverallAnalytics(filterQs || null);
             var perf = await API.getModelPerformance();
@@ -606,13 +723,14 @@ var ADMIN = {
                         }).join('') +
                     '</select>' +
                     (filterQs ? '<button class="btn btn-sm btn-outline" onclick="ADMIN.clearOverviewFilters()"><i class="fas fa-times"></i> Reset</button>' : '') +
-                    '<span class="filter-scope">Applies to all submission charts below. Model Performance reflects training runs and is unaffected.</span>' +
+                    '<span class="filter-scope">Applies to every submission chart, on this tab and the Analytics tab. Model Performance reflects training runs and is unaffected.</span>' +
                 '</div>' +
+                this.scopeBanner() +
                 '<div class="stats-grid">' +
-                    kpiCard({ tone: 'green', icon: 'fa-smile', value: overall.breakdown.positive || 0, label: 'Positive Feedbacks', spark: sparkPos, badge: trendPos, pct: pct(overall.breakdown.positive_pct), caption: 'All-time, all submissions' }) +
-                    kpiCard({ tone: 'yellow', icon: 'fa-meh', value: overall.breakdown.neutral || 0, label: 'Neutral Feedbacks', spark: sparkNeu, badge: trendNeu, pct: pct(overall.breakdown.neutral_pct), caption: 'All-time, all submissions' }) +
-                    kpiCard({ tone: 'red', icon: 'fa-frown', value: overall.breakdown.negative || 0, label: 'Negative Feedbacks', spark: sparkNeg, badge: trendNeg, pct: pct(overall.breakdown.negative_pct), caption: 'All-time, all submissions · badge compares ' + trendPeriod + ' vs prior month' }) +
-                    kpiCard({ tone: 'blue', icon: 'fa-file-alt', value: overall.evaluation_volume || 0, label: 'Total Evaluations', spark: sparkTot, badge: trendTot, caption: 'All-time count of submitted evaluation forms' }) +
+                    kpiCard({ tone: 'green', icon: 'fa-smile', value: overall.breakdown.positive || 0, label: 'Positive Feedbacks', spark: sparkPos, badge: trendPos, pct: pct(overall.breakdown.positive_pct), caption: scopeNote }) +
+                    kpiCard({ tone: 'yellow', icon: 'fa-meh', value: overall.breakdown.neutral || 0, label: 'Neutral Feedbacks', spark: sparkNeu, badge: trendNeu, pct: pct(overall.breakdown.neutral_pct), caption: scopeNote }) +
+                    kpiCard({ tone: 'red', icon: 'fa-frown', value: overall.breakdown.negative || 0, label: 'Negative Feedbacks', spark: sparkNeg, badge: trendNeg, pct: pct(overall.breakdown.negative_pct), caption: scopeNote + ' · badge compares ' + trendPeriod + ' vs prior month' }) +
+                    kpiCard({ tone: 'blue', icon: 'fa-file-alt', value: overall.evaluation_volume || 0, label: 'Total Evaluations', spark: sparkTot, badge: trendTot, caption: 'Counted in ' + scopeNote }) +
                     kpiCard({ tone: 'purple', icon: 'fa-chart-bar', value: overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A', label: 'Avg Confidence', caption: 'Avg. of each submission\'s prediction confidence at time of submission' }) +
                 '</div>' +
                 '<div class="chart-grid">' +
@@ -654,7 +772,7 @@ var ADMIN = {
                     '<div>' +
                         '<div class="card" id="overview-by-department" style="margin-bottom:1.1rem;">' +
                             '<div class="card-header"><h3><i class="fas fa-chart-bar"></i> By Department</h3></div>' +
-                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, all-time, stacked by predicted sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative; hover the count for the exact split)' +
+                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, in ' + scopeNote + ', stacked by predicted sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative; hover the count for the exact split)' +
                             '<div class="ledger-bars">' + ledgerRowsHtml + '</div>' +
                         '</div>' +
                         '<div class="card">' +
@@ -1654,57 +1772,207 @@ predictionHtml +
     // ANALYTICS TAB — Paper theme design
     // ============================================================
     async renderAnalytics(container) {
+        // Every figure on this tab is scoped by the same filter/preview state as
+        // the Overview (see _qs). The banner plus the per-card captions below
+        // make the active scope explicit, because these numbers used to ignore
+        // the filter entirely and silently disagree with the Overview tab.
+        var scopeQs = this._qs();
+        var scopeNote = escapeHtml(this.scopeLabel());
+        var deptCompareHidden = this.departmentCompareSuppressed();
         container.innerHTML = '' +
             '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span><h1>Trends &amp; top signals</h1></div></div>' +
+            this.scopeBanner() +
             '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
-                '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">— every section on this tab is drawn from evaluation-form submissions, all-time. Nothing here reflects ML training runs.</span>' +
+                '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">— every section on this tab is drawn from evaluation-form submissions. Nothing here reflects ML training runs.</span>' +
             '</div>' +
             '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">' +
-                '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div class="stat-info"><h3 id="ana-pos-pct">-</h3><p>Positive Rate</p><small class="source-note">All-time, all submissions</small></div></div>' +
-                '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3 id="ana-total">-</h3><p>Total Entries</p><small class="source-note">All-time count of submitted evaluation forms</small></div></div>' +
-                '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-bullseye"></i></div><div class="stat-info"><h3 id="ana-confidence">-</h3><p>Model Confidence</p><small class="source-note">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div class="stat-info"><h3 id="ana-pos-pct">-</h3><p>Positive Rate</p><small class="source-note">Scope: ' + scopeNote + '</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3 id="ana-total">-</h3><p>Total Entries</p><small class="source-note">Counted in ' + scopeNote + '</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-bullseye"></i></div><div class="stat-info"><h3 id="ana-confidence">-</h3><p>Model Confidence</p><small class="source-note">Mean prediction confidence, ' + scopeNote + '</small></div></div>' +
             '</div>' +
             '<div class="chart-grid">' +
-                '<div class="chart-card"><h3><i class="fas fa-chart-line"></i> Monthly Trend</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by the month they were submitted, all-time.</p><div class="chart-container"><canvas id="chart-monthly-trend"></canvas></div></div>' +
-                '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category, all-time.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-chart-line"></i> Monthly Trend</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by the month they were submitted, in ' + scopeNote + '.</p><div class="chart-container"><canvas id="chart-monthly-trend"></canvas></div></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category. This panel always compares all four departments, so the department filter does not apply to it.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
             '</div>' +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Volume and sentiment for each of the eight grading periods (Term 1 Prelim to Finals, then Term 2 Prelim to Finals), from each submission\'s month. Break / enrollment months (Nov, Dec, Jan, Jun) belong to no grading period and are intentionally not plotted.</p><div class="chart-container" id="chart-host-term-sentiment"></div></div>' +
                 '<div class="chart-card"><h3><i class="fas fa-project-diagram"></i> Sentiment Trend by Department</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Department positivity rate per month, size-normalized so trends compare fairly. Each point is tagged with that month\'s raw submission count (n=), so a swing backed by real volume can be told apart from one resting on a handful of low-traffic submissions.</p><div class="chart-container" id="chart-host-department-trend"></div></div>' +
             '</div>' +
+            // ---- Per-department rating panels -----------------------------
+            // Rating distribution and per-aspect means side by side across all
+            // four departments: the leadership-level "where are we weak" view.
+            // Suppressed — with the reason shown — whenever the scope is pinned
+            // to a single department, because then there is nothing to compare.
+            (deptCompareHidden
+                ? '<div class="chart-grid"><div class="chart-card">' +
+                    '<h3><i class="fas fa-table"></i> Rating Breakdown by Department</h3>' +
+                    '<p class="text-muted" style="font-size:.85rem;">Department comparison is hidden while the scope is narrowed to one department (' + scopeNote + '). Clear the department filter — or switch off the faculty preview — to compare all four.</p>' +
+                  '</div></div>'
+                : '<div class="chart-grid">' +
+                    '<div class="chart-card">' +
+                        '<h3><i class="fas fa-chart-bar"></i> Rating Distribution by Department</h3>' +
+                        '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Where each department\'s submissions land on the 1-5 scale, all four side by side. Mass at the right-hand end means satisfied students; mass at the left means the opposite. Only submissions that answered the scale are counted.</p>' +
+                        '<div class="chart-container" id="chart-host-rating-by-dept"></div>' +
+                    '</div>' +
+                    '<div class="chart-card">' +
+                        '<h3><i class="fas fa-table"></i> Average Rating by Aspect &amp; Department</h3>' +
+                        '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per rating aspect, one column per department — &ldquo;Staff are weakest on punctuality, Facilities on cleanliness&rdquo;. Departments ask different questions, so a blank cell means that department never asked it. Hover a cell for how many students answered.</p>' +
+                        '<div id="aspect-heatmap"></div>' +
+                    '</div>' +
+                  '</div>') +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>' +
             '</div>' +
             '<div class="chart-card">' +
                 '<h3><i class="fas fa-tags"></i> Word / Theme Frequency</h3>' +
-                '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Most frequent keywords in comments, split by the sentiment they came from.</p>' +
+                '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Most frequent keywords in comments, split by the sentiment they came from. This panel has no department filter server-side, so it always covers all four departments — unlike the charts around it.</p>' +
                 '<div class="two-col" style="grid-template-columns:1fr 1fr;gap:1.25rem;">' +
                     '<div><h4 style="color:var(--neg);margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas fa-exclamation-circle"></i> Complaint Themes</h4><div class="chart-container" style="height:300px;" id="chart-host-theme-complaints"></div></div>' +
                     '<div><h4 style="color:var(--pos);margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas fa-star"></i> Appreciation Themes</h4><div class="chart-container" style="height:300px;" id="chart-host-theme-appreciations"></div></div>' +
                 '</div>' +
             '</div>' +
             '<div class="two-col">' +
-                '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, all-time, drawn verbatim from submitted evaluations.</p><div id="top-complaints-list"></div></div>' +
-                '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, all-time, drawn verbatim from submitted evaluations.</p><div id="top-appreciations-list"></div></div>' +
+                '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-complaints-list"></div></div>' +
+                '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-appreciations-list"></div></div>' +
             '</div>';
 
         showLoading('Loading analytics...');
         this.compressNotes(container);
+        // null lets the API client omit the "?" entirely when nothing is filtered.
+        var qs = scopeQs || null;
         try {
             var results = await Promise.all([
-                API.getOverallAnalytics(),
-                API.getMonthlyTrend(),
-                API.getTopComplaints(5),
-                API.getTopAppreciations(5)
+                API.getOverallAnalytics(qs),
+                API.getMonthlyTrend(qs),
+                API.getTopComplaints(5, qs),
+                API.getTopAppreciations(5, qs),
+                // Per-department rating panels. Suppressed when the scope is
+                // already narrowed to a single department, so they are not
+                // fetched at all in that case.
+                deptCompareHidden ? Promise.resolve(null) : this.fetchDepartmentRatings()
             ]);
             var overall = results[0];
             var monthly = results[1];
             var complaints = results[2];
             var appreciations = results[3];
+            var deptRatings = results[4];
 
             document.getElementById('ana-pos-pct').textContent = (overall.breakdown.positive_pct || 0).toFixed(1) + '%';
             document.getElementById('ana-total').textContent = overall.evaluation_volume || 0;
             document.getElementById('ana-confidence').textContent = overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A';
+
+            // ---- Per-department rating panels -----------------------------
+            // deptRatings is null when the scope is already one department; the
+            // markup explains that case instead of drawing a one-bar chart.
+            if (deptRatings && deptRatings.length) {
+                var DEPT_COLORS = ['#2b3a67', '#2f6f4e', '#b7791f', '#b33a3a'];
+                var bandLabels = (((deptRatings[0].ratings) || {}).points || [])
+                    .map(function(p) { return p.band + ' · ' + p.label; });
+                var anyRated = deptRatings.some(function(d) { return d.ratings && d.ratings.total; });
+                var ratingHost = document.getElementById('chart-host-rating-by-dept');
+                if (ratingHost) {
+                    if (!anyRated) {
+                        ratingHost.style.display = 'flex';
+                        ratingHost.style.alignItems = 'center';
+                        ratingHost.style.justifyContent = 'center';
+                        ratingHost.innerHTML = '<p class="text-muted text-center">No rating data available.</p>';
+                    } else {
+                        setTimeout(function() {
+                            var canvas = document.createElement('canvas');
+                            ratingHost.innerHTML = '';
+                            ratingHost.appendChild(canvas);
+                            ADMIN.charts.ratingByDept = new Chart(canvas, {
+                                type: 'bar',
+                                data: {
+                                    labels: bandLabels,
+                                    // One dataset per department, so the bands
+                                    // can be compared side by side.
+                                    datasets: deptRatings.map(function(d, i) {
+                                        var pts = (d.ratings && d.ratings.points) || [];
+                                        return {
+                                            label: d.label,
+                                            data: pts.map(function(p) { return p.total || 0; }),
+                                            backgroundColor: DEPT_COLORS[i % DEPT_COLORS.length]
+                                        };
+                                    })
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    scales: {
+                                        // Five long band captions: keep them on
+                                        // one line rather than smearing the axis.
+                                        x: { ticks: { autoSkip: false, maxRotation: 0, minRotation: 0, font: { size: 9 } } },
+                                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                                    },
+                                    plugins: {
+                                        legend: { position: 'bottom' },
+                                        tooltip: {
+                                            callbacks: {
+                                                // The bar is already the band
+                                                // total; add that department's
+                                                // overall mean for context.
+                                                footer: function(items) {
+                                                    var d = deptRatings[items[0].datasetIndex];
+                                                    return d && d.ratings && d.ratings.average
+                                                        ? d.label + ' mean: ' + d.ratings.average.toFixed(2) + ' / 5'
+                                                        : '';
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        }, 100);
+                    }
+                }
+
+                // ---- Average rating by aspect x department (heat grid) ------
+                // Rows are every aspect any department asked; columns are the
+                // four departments. Blanks are expected and meaningful: a
+                // department never asks the questions that don't apply to it.
+                var grid = document.getElementById('aspect-heatmap');
+                if (grid) {
+                    var byAspect = {};
+                    var aspectOrder = [];
+                    deptRatings.forEach(function(d, di) {
+                        ((d.aspects && d.aspects.points) || []).forEach(function(p) {
+                            if (!byAspect[p.label]) {
+                                byAspect[p.label] = {};
+                                aspectOrder.push(p.label);
+                            }
+                            byAspect[p.label][di] = p;
+                        });
+                    });
+                    if (!aspectOrder.length) {
+                        grid.innerHTML = '<p class="text-muted text-center">No aspect data available.</p>';
+                    } else {
+                        var heatCell = function(p) {
+                            if (!p) {
+                                return '<td class="t-empty" title="Not asked by this department">—</td>';
+                            }
+                            // Tint on the shared 1-5 bands, and carry n so a
+                            // 4.90 from three students is legible as thin.
+                            var band = Math.max(1, Math.min(5, Math.round(p.average)));
+                            return '<td class="t' + band + '" title="' + escapeHtml(p.label) + ': ' +
+                                p.average.toFixed(2) + ' / 5 from ' + p.responses + ' student' +
+                                (p.responses === 1 ? '' : 's') + '">' + p.average.toFixed(2) + '</td>';
+                        };
+                        grid.innerHTML = '<table class="aspect-heatmap"><thead><tr><th>Aspect</th>' +
+                            deptRatings.map(function(d) {
+                                return '<th>' + escapeHtml(d.label) + '</th>';
+                            }).join('') +
+                            '</tr></thead><tbody>' +
+                            aspectOrder.map(function(label) {
+                                return '<tr><th>' + escapeHtml(label) + '</th>' +
+                                    deptRatings.map(function(d, di) {
+                                        return heatCell(byAspect[label][di]);
+                                    }).join('') + '</tr>';
+                            }).join('') +
+                            '</tbody></table>';
+                    }
+                }
+            }
 
             var categories = ['Faculty', 'Staff', 'Facilities', 'Payment'];
             var catData = await Promise.all(categories.map(function(c) { return API.getCategoryAnalytics(c).catch(function() { return null; }); }));
@@ -1714,13 +1982,18 @@ predictionHtml +
             // that chart's "No data available." caption instead of blanking
             // the whole tab via the catch block below.
             var extra = await Promise.all([
-                API.getTermAnalytics().catch(function() { return null; }),
+                API.getTermAnalytics(qs).catch(function() { return null; }),
                 Promise.all(categories.map(function(c) {
-                    return API.getMonthlyTrend('category=' + encodeURIComponent(c)).catch(function() { return null; });
+                    // _qs(c) keeps the date filter while pinning one department:
+                    // this chart always compares all four, so only the date part
+                    // of the scope applies here.
+                    return API.getMonthlyTrend(ADMIN._qs(c)).catch(function() { return null; });
                 })),
+                // Word frequency has no department filter server-side, so it is
+                // deliberately left unscoped and says so in its own caption.
                 API.getWordFrequency('Negative', 12).catch(function() { return null; }),
                 API.getWordFrequency('Positive', 12).catch(function() { return null; }),
-                API.getCourseAnalytics().catch(function() { return null; })
+                API.getCourseAnalytics(qs).catch(function() { return null; })
             ]);
             var termData = extra[0];
             var deptTrends = extra[1];

@@ -1724,6 +1724,120 @@ tbody tr:last-child td {
   margin-bottom: .3rem;
 }
 
+/* Scope banner — shown on a tab whenever the charts are not showing
+   everything (a date/department filter, or the faculty preview). Without it
+   the admin cannot tell which of two number sets they are looking at. */
+.scope-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  background: var(--paper-alt, #f1f1ec);
+  border: 1px solid #E5E7EB;
+  border-left: 3px solid var(--neu);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+/* The preview lens gets its own colour so it can never be mistaken for an
+   ordinary filter — it changes what every chart means. */
+.scope-banner.preview {
+  border-left-color: var(--brand);
+  color: var(--brand-deep);
+  background: var(--brand-soft);
+}
+
+.scope-banner strong {
+  font-weight: 600;
+}
+
+/* Navbar "Faculty view" lens toggle. Sized like the alert bell so the two
+   controls read as a pair. */
+.faculty-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 34px;
+  padding: 0 0.7rem;
+  margin-right: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.faculty-preview:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.faculty-preview.active {
+  background: #fff;
+  border-color: #fff;
+  color: var(--brand-deep);
+  font-weight: 600;
+}
+
+/* ============================================================
+   ASPECT x DEPARTMENT HEAT GRID
+   The per-department Likert comparison: one row per rating aspect,
+   one column per department, cell tinted on the shared 1-5 scale.
+   Departments ask different questions (Faculty rates clarity, Staff rates
+   safety), so blanks are expected and shown as an em dash.
+   ============================================================ */
+.aspect-heatmap {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.aspect-heatmap th,
+.aspect-heatmap td {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--paper-line);
+  text-align: center;
+}
+
+.aspect-heatmap thead th {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: var(--paper-alt, #f1f1ec);
+  white-space: nowrap;
+}
+
+.aspect-heatmap tbody th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.aspect-heatmap td {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cell tints follow the same 1-5 bands as the aspect bar chart. */
+.aspect-heatmap .t5,
+.aspect-heatmap .t4 { background: rgba(47, 111, 78, 0.16); color: var(--pos); }
+.aspect-heatmap .t3      { background: rgba(183, 121, 31, 0.16); color: var(--neu); }
+.aspect-heatmap .t2,
+.aspect-heatmap .t1      { background: rgba(179, 58, 58, 0.16); color: var(--neg); }
+.aspect-heatmap .t-empty { color: var(--ink-faint); }
+
 .alert-bell-wrap {
   position: relative;
   display: none; /* shown via .visible once alerts init for a signed-in admin */
