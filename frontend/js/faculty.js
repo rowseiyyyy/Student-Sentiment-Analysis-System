@@ -141,11 +141,7 @@ const FACULTY = {
                     <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per rating aspect, strongest at the top — the &ldquo;strong on clarity, weak on punctuality&rdquo; view. Hover a bar for how many students answered that aspect.</p>
                     <div class="chart-container" id="faculty-chart-aspects"></div>
                 </div>
-                <div class="chart-card">
-                    <h3><i class="fas fa-chart-line"></i> Monthly Trend</h3>
-                    <div class="chart-container"><canvas id="faculty-chart-monthly"></canvas></div>
-                </div>
-                <div class="chart-card span-2">
+                <div class="chart-card span-3">
                     <h3><i class="fas fa-book"></i> Sentiment by Courses</h3>
                     <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so bars to the right of zero are net-positive courses. Bars are sorted best to worst, and only submissions that named a course are counted.</p>
                     <div class="chart-container" id="faculty-chart-courses"></div>
@@ -166,9 +162,8 @@ const FACULTY = {
             // panel in this tab, so none of these charts can mix in Staff /
             // Facilities / Payments rows.
             const scope = `category=${encodeURIComponent(this.SCOPED_CATEGORY)}`;
-            const [monthly, complaints, appreciations, courses, split, ratings, aspects] =
+            const [complaints, appreciations, courses, split, ratings, aspects] =
                 await Promise.all([
-                    API.getMonthlyTrend(scope),
                     API.getTopComplaints(5, scope),
                     API.getTopAppreciations(5, scope),
                     // Individually guarded: a failure in one panel must degrade
@@ -353,29 +348,6 @@ const FACULTY = {
                     }, 100);
                 }
             }
-
-            setTimeout(() => {
-                const ctx = document.getElementById('faculty-chart-monthly');
-                if (!ctx) return;
-                const points = monthly.points || [];
-                this.charts.monthly = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: points.map(p => p.period),
-                        datasets: [
-                            { label: 'Positive', data: points.map(p => p.positive), borderColor: '#2f6f4e', backgroundColor: 'rgba(47,111,78,0.1)', fill: true, tension: 0.4 },
-                            { label: 'Neutral', data: points.map(p => p.neutral), borderColor: '#b7791f', backgroundColor: 'rgba(183,121,31,0.1)', fill: true, tension: 0.4 },
-                            { label: 'Negative', data: points.map(p => p.negative), borderColor: '#b33a3a', backgroundColor: 'rgba(179,58,58,0.1)', fill: true, tension: 0.4 }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        interaction: { intersect: false, mode: 'index' },
-                        plugins: { legend: { position: 'bottom' } }
-                    }
-                });
-            }, 100);
 
             // Sentiment by Courses: one horizontal bar per course, scored
             // (Positive - Negative) / total x 100 on a fixed -100..+100 axis so

@@ -1872,7 +1872,6 @@ predictionHtml +
                 '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-bullseye"></i></div><div class="stat-info"><h3 id="ana-confidence">-</h3><p>Model Confidence</p><small class="source-note">Mean prediction confidence, ' + scopeNote + '</small></div></div>' +
             '</div>' +
             '<div class="chart-grid">' +
-                '<div class="chart-card"><h3><i class="fas fa-chart-line"></i> Monthly Trend</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by the month they were submitted, in ' + scopeNote + '.</p><div class="chart-container"><canvas id="chart-monthly-trend"></canvas></div></div>' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category. This panel always compares all four departments, so the department filter does not apply to it.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
                 '<div class="chart-card"><h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Volume and sentiment for each of the eight grading periods (Term 1 Prelim to Finals, then Term 2 Prelim to Finals), from each submission\'s month. Break / enrollment months (Nov, Dec, Jan, Jun) belong to no grading period and are intentionally not plotted.</p><div class="chart-container" id="chart-host-term-sentiment"></div></div>' +
             '</div>' +
@@ -1900,10 +1899,10 @@ predictionHtml +
                     '<div id="aspect-tables"></div>' +
                   '</div>' +
                 '<div class="chart-card"><h3><i class="fas fa-project-diagram"></i> Sentiment Trend by Department</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Department positivity rate per month, size-normalized so trends compare fairly. Each point is tagged with that month\'s raw submission count (n=), so a swing backed by real volume can be told apart from one resting on a handful of low-traffic submissions.</p><div class="chart-container" id="chart-host-department-trend"></div></div>' +
-                  // A bar per course reads better wide, and as the last card
-                  // before the comments the dense flow has nothing to backfill
-                  // beside it, so it takes the full row.
-                  '<div class="chart-card span-2"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>') +
+                  // A bar per course reads better wide, and it is the last
+                  // chart before the comment lists, so nothing follows to
+                  // backfill beside it: it takes the full row.
+                  '<div class="chart-card span-3"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>') +
             '</div>' +
             '<div class="two-col">' +
                 '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-complaints-list"></div></div>' +
@@ -1917,7 +1916,6 @@ predictionHtml +
         try {
             var results = await Promise.all([
                 API.getOverallAnalytics(qs),
-                API.getMonthlyTrend(qs),
                 API.getTopComplaints(5, qs),
                 API.getTopAppreciations(5, qs),
                 // Per-department rating panels. Suppressed when the scope is
@@ -1926,10 +1924,9 @@ predictionHtml +
                 deptCompareHidden ? Promise.resolve(null) : this.fetchDepartmentRatings()
             ]);
             var overall = results[0];
-            var monthly = results[1];
-            var complaints = results[2];
-            var appreciations = results[3];
-            var deptRatings = results[4];
+            var complaints = results[1];
+            var appreciations = results[2];
+            var deptRatings = results[3];
 
             document.getElementById('ana-pos-pct').textContent = (overall.breakdown.positive_pct || 0).toFixed(1) + '%';
             document.getElementById('ana-total').textContent = overall.evaluation_volume || 0;
@@ -2087,24 +2084,6 @@ predictionHtml +
                         ]
                     },
                     options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' } } }
-                });
-            }, 100);
-
-            setTimeout(function() {
-                var ctx2 = document.getElementById('chart-monthly-trend');
-                if (!ctx2) return;
-                var points = monthly.points || [];
-                ADMIN.charts.monthlyTrend = new Chart(ctx2, {
-                    type: 'line',
-                    data: {
-                        labels: points.map(function(p) { return p.period; }),
-                        datasets: [
-                            { label: 'Positive', data: points.map(function(p) { return p.positive; }), borderColor: '#2f6f4e', backgroundColor: 'rgba(47,111,78,0.1)', fill: true, tension: 0.4 },
-                            { label: 'Neutral', data: points.map(function(p) { return p.neutral; }), borderColor: '#b7791f', backgroundColor: 'rgba(183,121,31,0.1)', fill: true, tension: 0.4 },
-                            { label: 'Negative', data: points.map(function(p) { return p.negative; }), borderColor: '#b33a3a', backgroundColor: 'rgba(179,58,58,0.1)', fill: true, tension: 0.4 }
-                        ]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' }, plugins: { legend: { position: 'bottom' } } }
                 });
             }, 100);
 
