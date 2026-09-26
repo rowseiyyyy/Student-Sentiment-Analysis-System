@@ -15,9 +15,16 @@
    survive a change to the page container's max-width: "span 2" means two
    columns of whatever the grid is today, so widening the container re-flows
    the layout instead of leaving stranded fixed-width columns. Height is
-   stored in pixels, snapped to a 10px step, and only ever applied to
-   widgets with a fixed-height body (a chart canvas) -- forcing a height onto
-   a text card just clips it.
+   stored in pixels, snapped to a 10px step, and every widget honours it -- a
+   chart canvas takes it as an exact height, because a fixed height is what
+   makes a plot readable, while a text or table card takes it as a MINIMUM so
+   that making a card taller can never clip a row or a paragraph.
+
+   Both axes are editable three ways: drag the right edge (width), the bottom
+   edge (height), or the bottom-right corner (both); use the -/+ steppers in
+   the card's grip; or focus a handle and use the arrow keys. The two axes are
+   deliberately independent -- a corner drag that moved both at once left no way
+   to change one without the other.
 
    Responsiveness
    -------------
@@ -437,7 +444,15 @@ const LAYOUT = {
                 ? this._effectiveW(saved.w, el)
                 : this._effectiveW(this._defaultSpan(el), el);
             el.style.gridColumn = 'span ' + w;
-            if (saved && saved.h && el.classList.contains('chart-card')) {
+            // Height is honoured on every card, not only chart cards.
+            //
+            // It used to be gated on .chart-card because a fixed height on a
+            // text card clips its content. That is still true of an exact
+            // height, which is why .card honours --widget-h as a MIN-height
+            // below (content may grow past it) while a chart's canvas takes it
+            // as an exact height. The upshot is that a table card can be made
+            // taller to line up with its neighbours without losing a row.
+            if (saved && saved.h) {
                 const h = Math.max(this.MIN_H, Math.min(this.MAX_H, saved.h));
                 el.style.setProperty('--widget-h', h + 'px');
             } else {
@@ -672,73 +687,101 @@ const LAYOUT = {
             this._makeReorderKeyboard(move, el, entry.section, set);
             el.appendChild(grip);
 
-            // ---- edge handles: width, and width+height on charts ----
+            // ---- edge handles: width, height, or both ----
+            // All three exist on every card. Height used to hang off the
+            // bottom-RIGHT corner only, and only on chart cards, so there was
+            // no way to change a card's height without also changing its width
+            // -- you had to drag the corner, watch the width jump a column, and
+            // then undo it. A dedicated bottom edge makes height independent.
             this._addResizeHandle(el, 'e', 'ew-resize', 'Drag to change width', 'width', set);
-            if (isChart) {
-                this._addResizeHandle(el, 'se', 'nwse-resize',
-                    'Drag to change width and height', 'both', set);
-            }
+            this._addResizeHandle(el, 's', 'ns-resize', 'Drag to change height', 'height', set);
+            this._addResizeHandle(el, 'se', 'nwse-resize',
+                'Drag to change width and height', 'both', set);
 
-            // ---- width stepper: exact sizes in one click ----
-            // Dragging can only ever land on whole columns, and the drag target
-            // is a 16px strip on the card's right edge. For "make this exactly
-            // two columns wide" that is a fiddly thing to do with a mouse, so
-            // the grip also carries a -/+ stepper and a live readout. Clicking
+            // ---- size controls: exact width and height, one click each ----
+            // Dragging can only land on whole columns, and the drag targets are
+            // thin strips on the card's edges. For "exactly two columns wide,
+            // 300px tall" that is a fiddly thing to do with a mouse, so the grip
+            // also carries a -/+ stepper per axis and a live readout. Clicking
             // is precise, keyboard-reachable, and needs no drag at all.
-            el.__layoutStepper = this._makeWidthStepper(el, grip, set);
+            el.__layoutStepper = this._makeSizeControls(el, grip, set, isChart);
         });
     },
 
-    // The -/+ width control shown in a widget's grip. Returns a small object
-    // with sync(), which applyTo() calls after every geometry pass so the
-    // readout reflects the width the grid ACTUALLY applied (which can be less
-    // than the width requested, when the viewport is narrower).
-    _makeWidthStepper(el, grip, set) {
+    // The -/+ size controls shown in a widget's grip: one pair for the width
+    // (in grid columns) and one for the height (in pixels). Returns a small
+    // object with sync(), which applyTo() calls after every geometry pass so
+    // the readouts reflect what the grid ACTUALLY applied -- which can be less
+    // than what was asked for when the viewport is narrower.
+    _makeSizeControls(el, grip, set, isChart) {
         const self = this;
 
-        const stepper = document.createElement('span');
-        stepper.className = 'widget-stepper';
+        // One -/+ group with a readout in the middle.
+        const build = function (label) {
+            const box = document.createElement('span');
+            box.className = 'widget-stepper';
 
-        const dec = document.createElement('button');
-        dec.type = 'button';
-        dec.className = 'widget-stepper-btn';
-        dec.innerHTML = '&minus;';
-        dec.title = 'Narrower';
-        dec.setAttribute('aria-label', 'Make this widget narrower');
+            const dec = document.createElement('button');
+            dec.type = 'button';
+            dec.className = 'widget-stepper-btn';
+            dec.innerHTML = '&minus;';
 
-        const readout = document.createElement('span');
-        readout.className = 'widget-stepper-readout';
+            const readout = document.createElement('span');
+            readout.className = 'widget-stepper-readout';
 
-        const inc = document.createElement('button');
-        inc.type = 'button';
-        inc.className = 'widget-stepper-btn';
-        inc.innerHTML = '+';
-        inc.title = 'Wider';
-        inc.setAttribute('aria-label', 'Make this widget wider');
+            const inc = document.createElement('button');
+            inc.type = 'button';
+            inc.className = 'widget-stepper-btn';
+            inc.innerHTML = '+';
 
-        stepper.appendChild(dec);
-        stepper.appendChild(readout);
-        stepper.appendChild(inc);
-        grip.appendChild(stepper);
+            dec.setAttribute('aria-label', 'Decrease the ' + label + ' of this widget');
+            inc.setAttribute('aria-label', 'Increase the ' + label + ' of this widget');
+            box.title = label;
+            box.appendChild(dec);
+            box.appendChild(readout);
+            box.appendChild(inc);
+            grip.appendChild(box);
+            return { box: box, dec: dec, inc: inc, readout: readout };
+        };
 
-        // The width currently in effect. Falls back to the authored span when
-        // nothing has been saved yet, so the first click on "+" takes a card
-        // from its designed width to one step wider rather than always
-        // starting from 1.
+        const widthCtl = build('width');
+        const heightCtl = build('height');
+
+        // ---- width, in grid columns ----
+        // Falls back to the authored span when nothing has been saved yet, so
+        // the first click takes a card from its designed width one step wider
+        // rather than always starting from 1.
         const currentW = function () {
             const saved = self._sizes[self._keyOf(el)] || {};
             return saved.w
                 ? self._effectiveW(saved.w, el)
                 : self._effectiveW(self._defaultSpan(el), el);
         };
-        const nudge = function (delta) {
+        const nudgeW = function (delta) {
             const metrics = self._gridMetrics(el);
             const next = Math.max(self.MIN_W, Math.min(metrics.cols, currentW() + delta));
             set('w', next);
             self.applyTo(self._root, self._page());
         };
-        dec.addEventListener('click', function (e) { e.stopPropagation(); nudge(-1); });
-        inc.addEventListener('click', function (e) { e.stopPropagation(); nudge(1); });
+        widthCtl.dec.addEventListener('click', function (e) { e.stopPropagation(); nudgeW(-1); });
+        widthCtl.inc.addEventListener('click', function (e) { e.stopPropagation(); nudgeW(1); });
+
+        // ---- height, in pixels ----
+        // The saved height is authoritative when there is one. Otherwise the
+        // card is measured, so the readout starts at the height the card is
+        // actually rendering at rather than an arbitrary minimum.
+        const currentH = function () {
+            const saved = self._sizes[self._keyOf(el)] || {};
+            if (saved.h) return Math.max(self.MIN_H, Math.min(self.MAX_H, saved.h));
+            return Math.round(el.getBoundingClientRect().height / self.HEIGHT_STEP) * self.HEIGHT_STEP;
+        };
+        const nudgeH = function (delta) {
+            const next = Math.max(self.MIN_H, Math.min(self.MAX_H, currentH() + delta));
+            set('h', next);
+            self.applyTo(self._root, self._page());
+        };
+        heightCtl.dec.addEventListener('click', function (e) { e.stopPropagation(); nudgeH(-self.HEIGHT_STEP * 2); });
+        heightCtl.inc.addEventListener('click', function (e) { e.stopPropagation(); nudgeH(self.HEIGHT_STEP * 2); });
 
         const self_ = {
             sync: function (appliedW) {
@@ -747,12 +790,29 @@ const LAYOUT = {
                 // argument, so the readout can never disagree with the layout.
                 const actual = parseInt(String(el.style.gridColumn || '').replace(/\D+/g, ''), 10);
                 const w = isNaN(actual) ? (appliedW || currentW()) : actual;
-                readout.textContent = w + '/' + metrics.cols;
-                stepper.title = 'Width: ' + w + ' of ' + metrics.cols + ' columns';
+                // Columns AND the pixel width they come to, so the admin can
+                // see both the responsive unit and the real size.
+                const px = Math.round(metrics.unit * w + metrics.gap * (w - 1));
+                widthCtl.readout.textContent = w + '/' + metrics.cols;
+                widthCtl.box.title = 'Width: ' + w + ' of ' + metrics.cols +
+                    ' columns (' + px + 'px). Drag the right edge to resize.';
                 // Disable at the ends, so the control explains itself instead of
                 // appearing to be broken.
-                dec.disabled = w <= self.MIN_W;
-                inc.disabled = w >= metrics.cols;
+                widthCtl.dec.disabled = w <= self.MIN_W;
+                widthCtl.inc.disabled = w >= metrics.cols;
+
+                const h = currentH();
+                heightCtl.readout.textContent = h + 'px';
+                // On a text/table card the height is a minimum, so say so:
+                // promising an exact height there would be a lie the card
+                // would immediately break by growing past it.
+                heightCtl.box.title = 'Height: ' + h + 'px' + (isChart ? '' :
+                    ' (minimum - this card holds text or a table, so it grows if it needs to)');
+
+                const raw = el.style.getPropertyValue('--widget-h');
+                const appliedH = parseInt(raw, 10);
+                heightCtl.dec.disabled = !isNaN(appliedH) && appliedH <= self.MIN_H;
+                heightCtl.inc.disabled = !isNaN(appliedH) && appliedH >= self.MAX_H;
             },
         };
         self_.sync();
@@ -967,8 +1027,16 @@ const LAYOUT = {
                     set('h', Math.max(self.MIN_H, Math.min(self.MAX_H,
                         Math.round((startH + dy) / self.HEIGHT_STEP) * self.HEIGHT_STEP)));
                 }
-                showBadge(lastW + ' of ' + metrics.cols +
-                    (metrics.cols === 1 ? ' column' : ' columns'));
+                if (mode === 'height') {
+                    // A height drag should report the axis being dragged, not
+                    // the width it is leaving alone.
+                    const h = Math.max(self.MIN_H, Math.min(self.MAX_H,
+                        Math.round((startH + (ev.clientY - startY)) / self.HEIGHT_STEP) * self.HEIGHT_STEP));
+                    showBadge(h + 'px tall');
+                } else {
+                    showBadge(lastW + ' of ' + metrics.cols +
+                        (metrics.cols === 1 ? ' column' : ' columns'));
+                }
                 self.applyTo(self._root, self._page());
             };
             const onUp = function () {

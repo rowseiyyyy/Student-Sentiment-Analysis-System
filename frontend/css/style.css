@@ -2101,6 +2101,26 @@ tbody tr:last-child td {
   height: 40px;
 }
 
+/* Bottom edge: height only.
+
+   Height used to be reachable only from the bottom-right corner, and only on
+   chart cards, so changing a card's height always changed its width too. This
+   is a separate target so the two axes are independently grabbable. */
+.widget-grip-edge-s {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16px;
+}
+
+.widget-grip-edge-s::after {
+  left: 50%;
+  bottom: 5px;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 5px;
+}
+
 /* Bottom-right corner: width and height together. */
 .widget-grip-edge-se {
   right: 0;
@@ -2252,6 +2272,18 @@ body.widget-resizing {
   height: var(--widget-h, unset);
 }
 
+/* A chart's canvas takes --widget-h as an EXACT height, because the canvas is
+   the card's whole body: a fixed height is what makes the plot readable.
+
+   A text or table card cannot do that -- a fixed height would clip a row or a
+   paragraph -- so it takes the same value as a MIN-height. The card can then be
+   made taller to line up with the cards beside it, while still growing if its
+   own content needs more room. `unset` means "no minimum", which is the state
+   of every card the admin has not given a height to. */
+.card {
+  min-height: var(--widget-h, unset);
+}
+
 /* The two-column collapse is the responsiveness backstop: even if an inline
    span were somehow set, a widget cannot stay wider than its grid. */
 @media (max-width: 900px) {
@@ -2267,6 +2299,11 @@ body.widget-resizing {
      style can be beaten. */
   .chart-card .chart-container {
     height: var(--widget-h-mobile, 220px) !important;
+  }
+  /* Same reasoning for a card's minimum height: a height chosen on a desktop
+     would waste most of a phone screen. */
+  .card {
+    min-height: var(--widget-h-mobile, unset) !important;
   }
 }
 
