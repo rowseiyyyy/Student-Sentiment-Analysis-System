@@ -32,7 +32,17 @@ from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api import analytics, auth, evaluation, imports, ml, prediction, action_updates, voice_notes
+from app.api import (
+    analytics,
+    auth,
+    dashboard_layout,
+    evaluation,
+    imports,
+    ml,
+    prediction,
+    action_updates,
+    voice_notes,
+)
 from app.core.config import settings, assert_production_readiness
 from app.core.database import Base, engine
 from app.core.limiter import limiter
@@ -320,5 +330,6 @@ app.include_router(ml.router, prefix=settings.API_V1_PREFIX)
 app.include_router(imports.router, prefix=settings.API_V1_PREFIX)
 app.include_router(action_updates.router, prefix=settings.API_V1_PREFIX)
 app.include_router(voice_notes.router, prefix=settings.API_V1_PREFIX)
+app.include_router(dashboard_layout.router, prefix=settings.API_V1_PREFIX)
 
 logger.info(f"{settings.PROJECT_NAME} v{settings.VERSION} started in {settings.ENVIRONMENT} mode.")

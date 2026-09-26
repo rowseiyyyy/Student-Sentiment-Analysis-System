@@ -284,6 +284,23 @@ var ADMIN = {
         tabContent.id = 'admin-tab-content';
         content.appendChild(tabContent);
 
+        // Apply the shared, admin-editable layout. LAYOUT.mount() reads the
+        // saved geometry and, for an administrator only, attaches the resize
+        // handles. Faculty and students get the same geometry with no
+        // controls in the DOM at all. mount() is async because the geometry
+        // comes from the API, but the tab renders immediately and the layout
+        // settles in behind it -- a slow or failed layout fetch must never
+        // delay or blank the dashboard.
+        if (typeof LAYOUT !== 'undefined') {
+            LAYOUT.mountToolbar();
+            LAYOUT.load('page-admin-dashboard').then(function () {
+                LAYOUT.mountWhenReady(
+                    document.getElementById('admin-tab-content'),
+                    'page-admin-dashboard'
+                );
+            });
+        }
+
         switch(tab) {
             case 'overview': this.renderOverview(tabContent); break;
             case 'responses': this.renderResponses(tabContent); break;

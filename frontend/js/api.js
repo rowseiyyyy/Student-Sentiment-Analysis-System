@@ -280,6 +280,33 @@ async getEvaluations(params = {}) {
         return this.get('/analytics/ratings/aspects' + this._buildQuery(params));
     },
 
+    // ---- Shared dashboard layout -----------------------------------------
+    // The per-widget width/height an administrator sets. Readable by faculty
+    // (they render the finalized layout) and writable by admins only; the
+    // server enforces that, the UI just avoids offering the controls.
+
+    // `name` is a layout id such as "admin_analytics". Resolves to
+    // { name, widgets: {}, updated_at, updated_by } — an EMPTY widgets map
+    // when nothing has been saved yet, which is the "use the default layout"
+    // case rather than an error.
+    async getDashboardLayout(name) {
+        return this.get(`/dashboard-layout/${encodeURIComponent(name)}`);
+    },
+
+    // `widgets` is { "<tab>:<widget-id>": { w, h }, ... } and REPLACES the
+    // saved layout wholesale.
+    async saveDashboardLayout(name, widgets) {
+        return this.put(`/dashboard-layout/${encodeURIComponent(name)}`, {
+            name: name,
+            widgets: widgets,
+        });
+    },
+
+    // Drops the saved layout so the page falls back to its built-in default.
+    async resetDashboardLayout(name) {
+        return this.del(`/dashboard-layout/${encodeURIComponent(name)}`);
+    },
+
     async getDailyTrend(params) {
         return this.get('/analytics/daily' + this._buildQuery(params));
     },

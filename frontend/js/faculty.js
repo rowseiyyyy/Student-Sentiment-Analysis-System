@@ -76,6 +76,19 @@ const FACULTY = {
         content.id = 'faculty-tab-content';
         container.appendChild(content);
 
+        // Apply the shared layout. Faculty get the geometry an administrator
+        // finalized and no controls: LAYOUT.mount() checks the role and
+        // returns before inserting any markup. Loading is what makes the
+        // finalized layout visible here at all.
+        if (typeof LAYOUT !== 'undefined') {
+            LAYOUT.load('page-faculty-dashboard').then(() => {
+                LAYOUT.mountWhenReady(
+                    document.getElementById('faculty-tab-content'),
+                    'page-faculty-dashboard'
+                );
+            });
+        }
+
         // Analytics is the only faculty view (the Overview tab was removed).
         // Anything else falls back to it rather than rendering a blank page —
         // e.g. a stale data-ftab value in a cached index.html.
