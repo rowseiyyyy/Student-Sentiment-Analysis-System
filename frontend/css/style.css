@@ -1006,12 +1006,73 @@ tbody tr:last-child td {
 
 /* ============================================================
    CHARTS
+
+   Three charts per row by default. A card that genuinely needs more room
+   opts into a wider span (.span-2 / .span-full) and the dense auto-flow
+   pulls the following cards back into the gap it leaves, so a wide card
+   never leaves a hole beside it.
+
+   The previous `repeat(auto-fit, minmax(340px, 1fr))` could not do this:
+   every .chart-grid was an independent grid, so a section holding one card
+   stretched that card to 100% and left the rest of the page empty, and a
+   section holding two cards was locked to two-up regardless of how much
+   space was actually free.
    ============================================================ */
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  /* Explicit 3-up, not auto-fit: the old auto-fit produced 2 columns on a
+     1800px page because 340px minimum x 3 leaves a remainder, and 4+ columns
+     on very wide ones. Fixed tracks make the row rhythm predictable. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Dense: a span-2 card is followed by single cards that backfill beside it
+     instead of dropping to the next row. This is what removes the empty
+     space. */
+  grid-auto-flow: row dense;
   gap: 1.1rem;
-  margin-bottom: 0.85rem;   /* was 1.1rem — rhythm between stacked chart sections */
+  margin-bottom: 0.85rem;
+  align-items: start;
+}
+
+/* Wide cards. --span is a plain custom property so a card can be told to take
+   two columns (or the whole row) from the markup that emits it. */
+.chart-card[style*="--span:2"],
+.chart-card.span-2 {
+  grid-column: span 2;
+}
+
+.chart-card[style*="--span:3"],
+.chart-card.span-3 {
+  grid-column: span 3;
+}
+
+/* Two columns on a tablet: three would leave each chart too narrow to read
+   the axis labels. */
+@media (max-width: 1200px) {
+  .chart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .chart-card[style*="--span:2"],
+  .chart-card.span-2 {
+    grid-column: span 2;
+  }
+  .chart-card[style*="--span:3"],
+  .chart-card.span-3 {
+    grid-column: span 2;
+  }
+}
+
+/* One column on a phone. A span-2 card must collapse to 1 too, or it would
+   overflow a single-column grid. */
+@media (max-width: 780px) {
+  .chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chart-card[style*="--span:2"],
+  .chart-card.span-2,
+  .chart-card[style*="--span:3"],
+  .chart-card.span-3 {
+    grid-column: span 1;
+  }
 }
 
 /* Faculty "Top Comments": complaints and appreciations side by side, so both

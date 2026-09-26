@@ -1874,10 +1874,7 @@ predictionHtml +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-line"></i> Monthly Trend</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by the month they were submitted, in ' + scopeNote + '.</p><div class="chart-container"><canvas id="chart-monthly-trend"></canvas></div></div>' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category. This panel always compares all four departments, so the department filter does not apply to it.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
-            '</div>' +
-            '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Volume and sentiment for each of the eight grading periods (Term 1 Prelim to Finals, then Term 2 Prelim to Finals), from each submission\'s month. Break / enrollment months (Nov, Dec, Jan, Jun) belong to no grading period and are intentionally not plotted.</p><div class="chart-container" id="chart-host-term-sentiment"></div></div>' +
-                '<div class="chart-card"><h3><i class="fas fa-project-diagram"></i> Sentiment Trend by Department</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Department positivity rate per month, size-normalized so trends compare fairly. Each point is tagged with that month\'s raw submission count (n=), so a swing backed by real volume can be told apart from one resting on a handful of low-traffic submissions.</p><div class="chart-container" id="chart-host-department-trend"></div></div>' +
             '</div>' +
             // ---- Per-department rating panels -----------------------------
             // Rating distribution and per-aspect means side by side across all
@@ -1885,29 +1882,28 @@ predictionHtml +
             // Suppressed — with the reason shown — whenever the scope is pinned
             // to a single department, because then there is nothing to compare.
             (deptCompareHidden
-                ? '<div class="chart-grid"><div class="chart-card">' +
+                ? '<div class="chart-card">' +
                     '<h3><i class="fas fa-table"></i> Rating Breakdown by Department</h3>' +
                     '<p class="text-muted" style="font-size:.85rem;">Department comparison is hidden while the scope is narrowed to one department (' + scopeNote + '). Clear the department filter — or switch off the faculty preview — to compare all four.</p>' +
-                  '</div></div>'
-                : '<div class="chart-grid">' +
-                    '<div class="chart-card">' +
+                  '</div>'
+                : '<div class="chart-card">' +
                         '<h3><i class="fas fa-chart-bar"></i> Rating Distribution by Department</h3>' +
                         '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Where each department\'s submissions land on the 1-5 scale, all four side by side. Mass at the right-hand end means satisfied students; mass at the left means the opposite. Only submissions that answered the scale are counted.</p>' +
                         '<div class="chart-container" id="chart-host-rating-by-dept"></div>' +
                     '</div>' +
-                  '</div>' +
-                  // One table per department rather than a single combined
-                  // cross-tab. Each department asks a different set of
-                  // questions, so the combined table was mostly em-dashes —
-                  // one filled cell per row and three dead ones. Full width
-                  // below so each table gets room to breathe.
-                  '<div class="chart-card">' +
+                  // Four per-department tables, one department each. Two columns
+                  // wide: one column would crush them, and the dense flow
+                  // backfills the remaining column with the next card.
+                  '<div class="chart-card span-2">' +
                     '<h3><i class="fas fa-table"></i> Average Rating by Aspect</h3>' +
                     '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per question, listed strongest first, split into one table per department — &ldquo;Staff are weakest on safety, Facilities on cleanliness&rdquo;. Every department asks a different set of questions, so each table shows only what that department actually asked. n is how many students answered; a high score resting on very few answers is thin evidence.</p>' +
                     '<div id="aspect-tables"></div>' +
-                  '</div>') +
-            '<div class="chart-grid">' +
-                '<div class="chart-card"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>' +
+                  '</div>' +
+                '<div class="chart-card"><h3><i class="fas fa-project-diagram"></i> Sentiment Trend by Department</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Department positivity rate per month, size-normalized so trends compare fairly. Each point is tagged with that month\'s raw submission count (n=), so a swing backed by real volume can be told apart from one resting on a handful of low-traffic submissions.</p><div class="chart-container" id="chart-host-department-trend"></div></div>' +
+                  // A bar per course reads better wide, and as the last card
+                  // before the comments the dense flow has nothing to backfill
+                  // beside it, so it takes the full row.
+                  '<div class="chart-card span-2"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>') +
             '</div>' +
             '<div class="two-col">' +
                 '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-complaints-list"></div></div>' +

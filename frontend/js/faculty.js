@@ -119,6 +119,11 @@ const FACULTY = {
                     <i class="fas fa-download"></i> Download Report
                 </button>
             </div>
+            <!-- One grid for every panel below, not one per panel: separate
+                 grids each resolved their own auto-fit, so a lone card
+                 stretched to the full page width and left dead space beside
+                 it. Wide cards opt into span-2 / span-3 and the dense flow
+                 backfills the columns they leave free. -->
             <div class="chart-grid">
                 <div class="chart-card">
                     <h3><i class="fas fa-chart-pie"></i> Sentiment Split</h3>
@@ -131,29 +136,21 @@ const FACULTY = {
                     <div class="chart-container" id="faculty-chart-ratings"></div>
                     <p class="source-note" id="faculty-ratings-summary" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.5rem 0 0;text-align:center;"></p>
                 </div>
-            </div>
-            <div class="chart-grid">
                 <div class="chart-card">
                     <h3><i class="fas fa-star"></i> Average by Aspect</h3>
                     <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per rating aspect, strongest at the top — the &ldquo;strong on clarity, weak on punctuality&rdquo; view. Hover a bar for how many students answered that aspect.</p>
                     <div class="chart-container" id="faculty-chart-aspects"></div>
                 </div>
-            </div>
-            <div class="chart-grid">
                 <div class="chart-card">
                     <h3><i class="fas fa-chart-line"></i> Monthly Trend</h3>
                     <div class="chart-container"><canvas id="faculty-chart-monthly"></canvas></div>
                 </div>
-            </div>
-            <div class="chart-grid">
-                <div class="chart-card">
+                <div class="chart-card span-2">
                     <h3><i class="fas fa-book"></i> Sentiment by Courses</h3>
                     <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so bars to the right of zero are net-positive courses. Bars are sorted best to worst, and only submissions that named a course are counted.</p>
                     <div class="chart-container" id="faculty-chart-courses"></div>
                 </div>
-            </div>
-            <div class="chart-grid">
-                <div class="chart-card">
+                <div class="chart-card span-3">
                     <h3><i class="fas fa-comment-dots"></i> Top Comments</h3>
                     <!-- Complaints on the left, appreciations on the right
                          (.faculty-comments-grid); each column scrolls on its
