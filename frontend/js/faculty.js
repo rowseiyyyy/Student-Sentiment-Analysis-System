@@ -9,6 +9,12 @@ const FACULTY = {
     currentUser: null,
     charts: {},
 
+    // A faculty member only ever reviews professor feedback, so every
+    // Analytics query is scoped to the Professors category. The backend pins
+    // the same scope for the faculty role (app/api/analytics.py
+    // _scoped_category), so this is explicit rather than load-bearing.
+    SCOPED_CATEGORY: 'Professors',
+
     init() {
         const user = API.getUser();
         if (user && (user.role === 'faculty' || user.role === 'administrator')) {
@@ -60,7 +66,7 @@ const FACULTY = {
         APP.goToPage('page-faculty-dashboard');
         document.getElementById('nav-faculty').style.display = 'flex';
         document.getElementById('badge-faculty').textContent = '\u{1F3EB} ' + (this.currentUser ? this.currentUser.full_name : 'Faculty');
-        this.renderFacultyTab('overview');
+        this.renderFacultyTab('analytics');
     },
 
     renderFacultyTab(tab) {
@@ -70,199 +76,15 @@ const FACULTY = {
         content.id = 'faculty-tab-content';
         container.appendChild(content);
 
-        switch(tab) {
-            case 'overview':
-                this.renderOverview(content);
-                break;
+        // Analytics is the only faculty view (the Overview tab was removed).
+        // Anything else falls back to it rather than rendering a blank page —
+        // e.g. a stale data-ftab value in a cached index.html.
+        switch (tab) {
             case 'analytics':
                 this.renderAnalytics(content);
                 break;
-        }
-    },
-
-    // ============================================================
-    // OVERVIEW TAB — Paper theme design
-    // ============================================================
-    async renderOverview(container) {
-        container.innerHTML = `<div class="text-center mt-4"><div class="spinner"></div><p>Loading overview...</p></div>`;
-
-        try {
-            const overall = await API.getOverallAnalytics();
-            const perf = await API.getModelPerformance();
-
-            container.innerHTML = `
-                <div class="page-header">
-                    <div>
-                        <span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Faculty Overview</span>
-                        <h1><i class="fas fa-chart-pie"></i> Sentiment Overview</h1>
-                    </div>
-                    <button class="btn btn-success" onclick="FACULTY.exportCSV()">
-                        <i class="fas fa-download"></i> Download Report
-                    </button>
-                </div>
-
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon green"><i class="fas fa-smile"></i></div>
-                        <div class="stat-info">
-                            <h3>${overall.breakdown.positive || 0}</h3>
-                            <p>Positive Feedbacks</p>
-                            <small>${overall.breakdown.positive_pct ? overall.breakdown.positive_pct.toFixed(1) + '%' : ''}</small>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon yellow"><i class="fas fa-meh"></i></div>
-                        <div class="stat-info">
-                            <h3>${overall.breakdown.neutral || 0}</h3>
-                            <p>Neutral Feedbacks</p>
-                            <small>${overall.breakdown.neutral_pct ? overall.breakdown.neutral_pct.toFixed(1) + '%' : ''}</small>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon red"><i class="fas fa-frown"></i></div>
-                        <div class="stat-info">
-                            <h3>${overall.breakdown.negative || 0}</h3>
-                            <p>Negative Feedbacks</p>
-                            <small>${overall.breakdown.negative_pct ? overall.breakdown.negative_pct.toFixed(1) + '%' : ''}</small>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon blue"><i class="fas fa-file-alt"></i></div>
-                        <div class="stat-info">
-                            <h3>${overall.evaluation_volume || 0}</h3>
-                            <p>Total Evaluations</p>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon purple"><i class="fas fa-chart-bar"></i></div>
-                        <div class="stat-info">
-                            <h3>${overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A'}</h3>
-                            <p>Avg Confidence</p>
-                        </div>
-                    </div>
-                    </div>
-
-                <div class="chart-grid">
-                    <div class="chart-card">
-                        <h3><i class="fas fa-chart-pie"></i> Sentiment Distribution</h3>
-                        <div class="chart-container"><canvas id="faculty-chart-sentiment"></canvas></div>
-                    </div>
-                    <div class="chart-card">
-                        <h3><i class="fas fa-chart-bar"></i> Category Breakdown</h3>
-                        <div class="chart-container"><canvas id="faculty-chart-category"></canvas></div>
-                    </div>
-                </div>
-
-                <div class="card mt-3">
-                    <div class="card-header">
-                        <h3><i class="fas fa-table"></i> Model Performance</h3>
-                    </div>
-                    <div class="table-container">
-                        <table class="perf-table">
-                            <thead>
-                                <tr>
-                                    <th>Model</th>
-                                    <th>Accuracy</th>
-                                    <th>Precision</th>
-                                    <th>Recall</th>
-                                    <th>F1-Score</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${filterModelPerfRows(perf.rows).map(r => `
-                                    <tr>
-                                        <td><strong>${modelPerfDisplayName(r.algorithm)}</strong></td>
-                                        <td>${formatNumber(r.accuracy)}</td>
-                                        <td>${formatNumber(r.precision)}</td>
-                                        <td>${formatNumber(r.recall)}</td>
-                                        <td>${formatNumber(r.f1_score)}</td>
-                                    </tr>
-                                `).join('')}
-                                ${filterModelPerfRows(perf.rows).length === 0 ? '<tr><td colspan="5" class="text-center text-muted">No training data available.</td></tr>' : ''}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-
-            // Render sentiment doughnut chart
-            setTimeout(() => {
-                const ctx = document.getElementById('faculty-chart-sentiment');
-                if (!ctx) return;
-                this.charts.sentiment = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Positive', 'Neutral', 'Negative'],
-                        datasets: [{
-                            data: [
-                                overall.breakdown.positive || 0,
-                                overall.breakdown.neutral || 0,
-                                overall.breakdown.negative || 0
-                            ],
-                            backgroundColor: ['#2f6f4e', '#b7791f', '#b33a3a'],
-                            borderWidth: 2,
-                            borderColor: '#f8f9f5'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { position: 'bottom' },
-                            tooltip: {
-                                callbacks: {
-                                    label: (ctx) => {
-                                        const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                                        const pct = ((ctx.parsed / total) * 100).toFixed(1);
-                                        return `${ctx.label}: ${ctx.parsed} (${pct}%)`;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            }, 100);
-
-            // Category breakdown chart
-            setTimeout(async () => {
-                const ctx = document.getElementById('faculty-chart-category');
-                if (!ctx) return;
-                const categories = ['Faculty', 'Staff', 'Facilities', 'Payment'];
-                const catData = await Promise.all(
-                    categories.map(c => API.getCategoryAnalytics(c).catch(() => null))
-                );
-                this.charts.category = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: categories,
-                        datasets: [
-                            { label: 'Positive', data: catData.map(d => d?.breakdown?.positive || 0), backgroundColor: '#2f6f4e' },
-                            { label: 'Neutral', data: catData.map(d => d?.breakdown?.neutral || 0), backgroundColor: '#b7791f' },
-                            { label: 'Negative', data: catData.map(d => d?.breakdown?.negative || 0), backgroundColor: '#b33a3a' }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
-                        plugins: { legend: { position: 'bottom' } }
-                    }
-                });
-            }, 200);
-
-        } catch (error) {
-            container.innerHTML = `
-                <div class="page-header">
-                    <h1><i class="fas fa-chart-pie"></i> Sentiment Overview</h1>
-                </div>
-                <div class="card">
-                    <div class="empty-state">
-                        <div class="empty-icon"><i class="fas fa-database"></i></div>
-                        <h3>No Data Available</h3>
-                        <p>${escapeHtml(error.message)}</p>
-                    </div>
-                </div>
-            `;
+            default:
+                this.renderAnalytics(content);
         }
     },
 
@@ -275,7 +97,14 @@ const FACULTY = {
                 <div>
                     <span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span>
                     <h1><i class="fas fa-chart-line"></i> Trends &amp; insights</h1>
+                    <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.3rem 0 0;">Faculty view — Professors-category responses only.</p>
                 </div>
+                <!-- Lived on the (removed) Overview tab; moved here so the
+                     report download survives the tab removal. Scoped to
+                     Professors on the server for faculty accounts. -->
+                <button class="btn btn-success" onclick="FACULTY.exportCSV()">
+                    <i class="fas fa-download"></i> Download Report
+                </button>
             </div>
             <div class="chart-grid">
                 <div class="chart-card">
@@ -284,7 +113,10 @@ const FACULTY = {
                 </div>
                 <div class="chart-card">
                     <h3><i class="fas fa-comment-dots"></i> Top Comments</h3>
-                    <div id="faculty-top-comments" style="max-height:400px;overflow-y:auto;"></div>
+                    <!-- Complaints on the left, appreciations on the right
+                         (.faculty-comments-grid); each column scrolls on its
+                         own, so neither list has to be scrolled past. -->
+                    <div id="faculty-top-comments" class="faculty-comments-grid"></div>
                 </div>
             </div>
             <div class="chart-grid">
@@ -298,13 +130,18 @@ const FACULTY = {
 
         showLoading('Loading analytics...');
         try {
+            // Professors-only view: the category filter rides along on every
+            // panel in this tab, so the Monthly Trend, Top Comments and
+            // Sentiment by Courses charts can never mix in Staff /
+            // Facilities / Payments rows.
+            const scope = `category=${encodeURIComponent(this.SCOPED_CATEGORY)}`;
             const [monthly, complaints, appreciations, courses] = await Promise.all([
-                API.getMonthlyTrend(),
-                API.getTopComplaints(5),
-                API.getTopAppreciations(5),
+                API.getMonthlyTrend(scope),
+                API.getTopComplaints(5, scope),
+                API.getTopAppreciations(5, scope),
                 // Individually guarded: a failure here must degrade to this one
                 // chart's "No course data available." caption, not blank the tab.
-                API.getCourseAnalytics().catch(() => null)
+                API.getCourseAnalytics(scope).catch(() => null)
             ]);
 
             setTimeout(() => {
@@ -402,34 +239,35 @@ const FACULTY = {
                 }, 100);
             }
 
+            // Two side-by-side columns: complaints on the left, appreciations
+            // on the right. Each column scrolls on its own (.faculty-comments-col)
+            // so a long appreciation list no longer pushes the complaints list
+            // off-screen. Card styling is unchanged — same h4 headings, same
+            // dashed dividers, same truncated quote.
             const commentsDiv = document.getElementById('faculty-top-comments');
-            let html = '';
+            const complaintItems = (complaints && complaints.items) || [];
+            const appreciationItems = (appreciations && appreciations.items) || [];
 
-            if (complaints.items && complaints.items.length > 0) {
-                html += '<h4 style="color:var(--neg);margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas fa-exclamation-circle"></i> Top Complaints</h4>';
-                html += complaints.items.map(c => `
-                    <div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);">
-                        <p style="font-size:.85rem;">"${escapeHtml(c.comment.substring(0, 120))}"</p>
-                        <small style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">${escapeHtml(c.category)}</small>
-                    </div>
-                `).join('');
+            const commentColumn = (title, color, icon, items) => `
+                <div class="faculty-comments-col">
+                    <h4 style="color:${color};margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas ${icon}"></i> ${title}</h4>
+                    ${items.length ? items.map(c => `
+                        <div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);">
+                            <p style="font-size:.85rem;">"${escapeHtml(c.comment.substring(0, 120))}"</p>
+                            <small style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">${escapeHtml(c.category)}</small>
+                        </div>
+                    `).join('') : '<p class="text-muted">No comments available.</p>'}
+                </div>
+            `;
+
+            if (!complaintItems.length && !appreciationItems.length) {
+                commentsDiv.innerHTML =
+                    '<p class="text-muted text-center">No comment data available.</p>';
+            } else {
+                commentsDiv.innerHTML =
+                    commentColumn('Top Complaints', 'var(--neg)', 'fa-exclamation-circle', complaintItems) +
+                    commentColumn('Top Appreciations', 'var(--pos)', 'fa-star', appreciationItems);
             }
-
-            if (appreciations.items && appreciations.items.length > 0) {
-                html += '<h4 style="color:var(--pos);margin:1rem 0 .5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas fa-star"></i> Top Appreciations</h4>';
-                html += appreciations.items.map(a => `
-                    <div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);">
-                        <p style="font-size:.85rem;">"${escapeHtml(a.comment.substring(0, 120))}"</p>
-                        <small style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">${escapeHtml(a.category)}</small>
-                    </div>
-                `).join('');
-            }
-
-            if (!complaints.items || !complaints.items.length && (!appreciations.items || !appreciations.items.length)) {
-                html += '<p class="text-muted text-center">No comment data available.</p>';
-            }
-
-            commentsDiv.innerHTML = html;
 
         } catch (error) {
             container.innerHTML += `

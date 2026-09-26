@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_staff
 from app.core.database import get_db, retry_on_disconnect
-from app.models.evaluation import Evaluation
+from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction, SentimentLabel
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.analytics import (
     CategoryAnalyticsResponse,
     CourseAnalyticsResponse,
@@ -35,6 +35,29 @@ def _days_param(days: Optional[int]) -> Optional[int]:
     if not 1 <= days <= 3650:
         raise ValueError("days must be between 1 and 3650")
     return days
+
+
+# A faculty account reviews professor feedback only: its dashboard panels
+# (Monthly Trend, Sentiment by Courses, Top Comments) are scoped to the
+# Professors category and must never mix in Staff / Facilities / Payments rows.
+# Enforced server-side as well as in the UI, so a faculty token cannot widen
+# its own view by hand-crafting ?category=Staff. Administrators are untouched:
+# they keep the all-categories view (or whatever category they ask for).
+FACULTY_SCOPE_CATEGORY = EvaluationCategory.PROFESSOR
+
+
+def _scoped_category(
+    category: Optional[NormalizedCategory],
+    current_user: User,
+) -> Optional[NormalizedCategory]:
+    """Pin the category for faculty accounts; pass it through for everyone else.
+
+    ``None`` (no filter) is a valid request for an administrator and means
+    "all categories", so it is only ever overridden for the faculty role.
+    """
+    if current_user.role == UserRole.FACULTY:
+        return FACULTY_SCOPE_CATEGORY
+    return category
 
 
 @router.get("/overall", response_model=OverallAnalyticsResponse)
@@ -67,7 +90,12 @@ def get_monthly_trend(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.trend_analytics(db, granularity="monthly", days=_days_param(days), category=category)
+    return analytics_service.trend_analytics(
+        db,
+        granularity="monthly",
+        days=_days_param(days),
+        category=_scoped_category(category, current_user),
+    )
 
 
 @router.get("/daily", response_model=TrendResponse)
@@ -118,7 +146,11 @@ def get_course_analytics(
     horizontal bar chart (course names on the Y axis, score on the X axis).
     Rows come back sorted by descending score, which is the order the chart
     plots them in: the best-scoring course sits at the top."""
-    return analytics_service.course_analytics(db, days=_days_param(days), category=category)
+    return analytics_service.course_analytics(
+        db,
+        days=_days_param(days),
+        category=_scoped_category(category, current_user),
+    )
 
 
 @router.get("/word-frequency", response_model=WordFrequencyResponse)
@@ -136,32 +168,61 @@ def get_word_frequency(
 @retry_on_disconnect()
 def get_top_complaints(
     limit: int = Query(10, ge=1, le=100),
+    category: Optional[NormalizedCategory] = Query(
+        None, description="Restrict to one category. Pinned to Professors for faculty accounts."
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.top_comments(db, kind="complaints", limit=limit)
+    return analytics_service.top_comments(
+        db,
+        kind="complaints",
+        limit=limit,
+        category=_scoped_category(category, current_user),
+    )
 
 
 @router.get("/top-appreciations", response_model=TopCommentsResponse)
 @retry_on_disconnect()
 def get_top_appreciations(
     limit: int = Query(10, ge=1, le=100),
+    category: Optional[NormalizedCategory] = Query(
+        None, description="Restrict to one category. Pinned to Professors for faculty accounts."
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.top_comments(db, kind="appreciations", limit=limit)
+    return analytics_service.top_comments(
+        db,
+        kind="appreciations",
+        limit=limit,
+        category=_scoped_category(category, current_user),
+    )
 
 
 @router.get("/export/csv")
 @retry_on_disconnect()
-def export_evaluations_csv(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
-    """Streams all evaluations + predictions as a downloadable CSV report."""
-    rows = (
-        db.query(Evaluation, Prediction)
-        .join(Prediction, Prediction.evaluation_id == Evaluation.id)
-        .order_by(Evaluation.created_at.desc())
-        .all()
+def export_evaluations_csv(
+    category: Optional[NormalizedCategory] = Query(
+        None, description="Restrict to one category. Pinned to Professors for faculty accounts."
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    """Streams evaluations + predictions as a downloadable CSV report.
+
+    Faculty accounts are pinned to the Professors category (same scope as the
+    rest of their dashboard — see _scoped_category), so the report cannot be
+    used as a back door to the Staff / Facilities / Payments comments.
+    Administrators get every category unless they narrow it themselves.
+    """
+    query = db.query(Evaluation, Prediction).join(
+        Prediction, Prediction.evaluation_id == Evaluation.id
     )
+    scoped = _scoped_category(category, current_user)
+    if scoped is not None:
+        query = query.filter(Evaluation.category == scoped)
+    rows = query.order_by(Evaluation.created_at.desc()).all()
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)

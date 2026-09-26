@@ -921,6 +921,24 @@ tbody tr:last-child td {
   margin-bottom: 1.1rem;
 }
 
+/* Faculty "Top Comments": complaints and appreciations side by side, so both
+   lists are readable at once instead of one stacked above the other. The
+   auto-fit/minmax pair (same idiom as .chart-grid) collapses to a single
+   column on its own when the card gets too narrow — no breakpoint needed.
+   Each column scrolls independently. */
+.faculty-comments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.1rem;
+  align-items: start;
+}
+
+.faculty-comments-col {
+  min-width: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 .chart-card {
   background: var(--paper-raised);
   border: 1px solid #E5E7EB;

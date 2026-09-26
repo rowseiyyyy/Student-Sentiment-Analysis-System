@@ -277,12 +277,15 @@ async getEvaluations(params = {}) {
         return this.get(`/analytics/word-frequency?sentiment=${encodeURIComponent(sentiment)}&top_n=${topN}`);
     },
 
-    async getTopComplaints(limit = 10) {
-        return this.get(`/analytics/top-complaints?limit=${limit}`);
+    // Top Comments panels. ``params`` is an optional query string (e.g.
+    // "category=Professors"); the Admin panel omits it and keeps the
+    // all-categories view, the Faculty panel passes its scope.
+    async getTopComplaints(limit = 10, params) {
+        return this.get(`/analytics/top-complaints?limit=${limit}${this._buildQuery(params, '&')}`);
     },
 
-    async getTopAppreciations(limit = 10) {
-        return this.get(`/analytics/top-appreciations?limit=${limit}`);
+    async getTopAppreciations(limit = 10, params) {
+        return this.get(`/analytics/top-appreciations?limit=${limit}${this._buildQuery(params, '&')}`);
     },
 
     async exportCsv() {

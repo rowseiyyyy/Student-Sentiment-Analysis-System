@@ -102,8 +102,12 @@ def test_csv_export_with_data(client):
 # Academic-term analytics (Sentiment by Academic Term chart)
 # ============================================================
 
-def _seed_evaluation(db_session, *, evaluation_id, category, sentiment, created_at):
-    """Insert one evaluation + its prediction so analytics joins can see it."""
+def _seed_evaluation(db_session, *, evaluation_id, category, sentiment, created_at, course=None):
+    """Insert one evaluation + its prediction so analytics joins can see it.
+
+    ``course`` is optional: the "Sentiment by Courses" chart only counts rows
+    that named a course, so pass it when that panel is under test.
+    """
     from app.models.evaluation import Evaluation, EvaluationCategory
     from app.models.prediction import AlgorithmName, Prediction, SentimentLabel
 
@@ -112,6 +116,7 @@ def _seed_evaluation(db_session, *, evaluation_id, category, sentiment, created_
             id=evaluation_id,
             category=EvaluationCategory(category),
             comment=f"Comment for {evaluation_id}",
+            course=course,
             created_at=created_at,
         )
     )
@@ -454,3 +459,174 @@ def test_course_analytics_rejects_out_of_range_days(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 422
+
+
+# ============================================================
+# Faculty scoping — the Faculty dashboard is Professors-only.
+#
+# A faculty account reviews professor feedback only, so the three panels on
+# its Analytics tab (Monthly Trend, Sentiment by Courses, Top Comments) must
+# never mix in Staff / Facilities / Payments rows — not even when the request
+# explicitly asks for another category. The Admin dashboard is unaffected.
+# ============================================================
+
+
+def _login_faculty(client, email="scoped_faculty@asiatech.edu.ph"):
+    client.make_user(email, role="faculty", full_name="Scoped Faculty")
+    login = client.post(
+        "/api/v1/auth/login", json={"email": email, "password": "SecurePass123"}
+    )
+    return login.json()["access_token"]
+
+
+def _seed_mixed_categories(db_session):
+    """Two Professors rows (one per sentiment) plus one row in every other
+    category, all in the same month so a monthly bucket can be compared."""
+    _seed_evaluation(
+        db_session, evaluation_id="scope-prof-pos", category="Professors",
+        sentiment="Positive", course="BSCS",
+        created_at=datetime(2026, 7, 15, 9, 0, 0),
+    )
+    _seed_evaluation(
+        db_session, evaluation_id="scope-prof-neg", category="Professors",
+        sentiment="Negative", course="BSCS",
+        created_at=datetime(2026, 7, 15, 10, 0, 0),
+    )
+    for category in ("Staff", "Facilities", "Payments"):
+        _seed_evaluation(
+            db_session, evaluation_id=f"scope-{category.lower()}", category=category,
+            sentiment="Negative", course="BSIT",
+            created_at=datetime(2026, 7, 16, 9, 0, 0),
+        )
+
+
+def test_faculty_monthly_trend_is_scoped_to_professors(client, db_session):
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.get("/api/v1/analytics/monthly", headers=headers)
+    assert response.status_code == 200
+    points = response.json()["points"]
+    # Only the two Professors rows land in the bucket; the other three
+    # categories are not summed into it.
+    assert [p["total"] for p in points] == [2]
+    assert points[0]["positive"] == 1
+    assert points[0]["negative"] == 1
+
+
+def test_faculty_cannot_widen_its_own_scope(client, db_session):
+    """Hand-crafting ?category=Staff must not hand faculty that category."""
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    asked_for_staff = client.get(
+        "/api/v1/analytics/monthly", params={"category": "Staff"}, headers=headers
+    )
+    assert asked_for_staff.status_code == 200
+    # Pinned back to Professors by the server.
+    assert [p["total"] for p in asked_for_staff.json()["points"]] == [2]
+
+    comments = client.get(
+        "/api/v1/analytics/top-complaints",
+        params={"category": "Staff", "limit": 10},
+        headers=headers,
+    )
+    assert comments.status_code == 200
+    assert {item["category"] for item in comments.json()["items"]} == {"Professors"}
+
+
+def test_faculty_top_comments_are_scoped_to_professors(client, db_session):
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    complaints = client.get(
+        "/api/v1/analytics/top-complaints", params={"limit": 10}, headers=headers
+    )
+    assert complaints.status_code == 200
+    assert [item["category"] for item in complaints.json()["items"]] == ["Professors"]
+
+    appreciations = client.get(
+        "/api/v1/analytics/top-appreciations", params={"limit": 10}, headers=headers
+    )
+    assert appreciations.status_code == 200
+    assert [item["category"] for item in appreciations.json()["items"]] == ["Professors"]
+
+
+def test_faculty_course_analytics_is_scoped_to_professors(client, db_session):
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+
+    response = client.get(
+        "/api/v1/analytics/courses", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    # BSCS is the only program that appears on a Professors row; BSIT only
+    # appears on Staff / Facilities / Payments rows, so it is filtered out.
+    assert [p["course"] for p in response.json()["points"]] == ["BSCS"]
+
+
+def test_admin_analytics_still_sees_every_category(client, db_session):
+    token = _register_admin_and_login(client, email="scoped_admin@asiatech.edu.ph")
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    monthly = client.get("/api/v1/analytics/monthly", headers=headers)
+    assert monthly.status_code == 200
+    assert [p["total"] for p in monthly.json()["points"]] == [5]
+
+    complaints = client.get(
+        "/api/v1/analytics/top-complaints", params={"limit": 10}, headers=headers
+    )
+    assert complaints.status_code == 200
+    assert len(complaints.json()["items"]) == 4
+    assert {item["category"] for item in complaints.json()["items"]} == {
+        "Professors", "Staff", "Facilities", "Payments",
+    }
+
+    # An admin may still narrow the panel explicitly.
+    staff_only = client.get(
+        "/api/v1/analytics/top-complaints",
+        params={"limit": 10, "category": "Staff"},
+        headers=headers,
+    )
+    assert staff_only.status_code == 200
+    assert [item["category"] for item in staff_only.json()["items"]] == ["Staff"]
+
+    courses = client.get("/api/v1/analytics/courses", headers=headers)
+    assert courses.status_code == 200
+    assert sorted(p["course"] for p in courses.json()["points"]) == ["BSCS", "BSIT"]
+
+def test_faculty_csv_export_is_scoped_to_professors(client, db_session):
+    """The 'Download Report' button lives on the faculty dashboard, so the
+    export must be pinned to Professors too — otherwise it is a back door to
+    the other three categories' raw comments."""
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+
+    response = client.get(
+        "/api/v1/analytics/export/csv", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    body = response.text
+    assert "scope-prof-neg" in body
+    for hidden in ("scope-staff", "scope-facilities", "scope-payments"):
+        assert hidden not in body
+    # Every exported row is a Professors row.
+    data_rows = body.strip().splitlines()[1:]
+    assert data_rows and {r.split(",")[1] for r in data_rows} == {"Professors"}
+
+
+def test_admin_csv_export_still_includes_every_category(client, db_session):
+    token = _register_admin_and_login(client, email="scoped_export_admin@asiatech.edu.ph")
+    _seed_mixed_categories(db_session)
+
+    response = client.get(
+        "/api/v1/analytics/export/csv", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    for expected in ("scope-prof-neg", "scope-staff", "scope-facilities", "scope-payments"):
+        assert expected in response.text
+

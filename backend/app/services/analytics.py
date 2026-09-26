@@ -491,9 +491,18 @@ def word_frequency(db: Session, sentiment: SentimentLabel, top_n: int = 30) -> d
     return {"sentiment": sentiment.value, "words": top_words}
 
 
-def top_comments(db: Session, kind: str, limit: int = 10) -> dict:
+def top_comments(
+    db: Session,
+    kind: str,
+    limit: int = 10,
+    category: Optional[EvaluationCategory] = None,
+) -> dict:
     """kind='complaints' -> highest-confidence, purely Negative comments.
     kind='appreciations' -> highest-confidence, purely Positive comments.
+
+    ``category`` narrows the panel to a single evaluation category (the Faculty
+    dashboard is scoped to Professors). ``None`` keeps every category, which is
+    what the Admin panel wants.
 
     "Purely" means the comment's ML sentiment is NOT contradicted by the
     same submission's Likert rating (Evaluation.is_mismatch is False).
@@ -505,15 +514,15 @@ def top_comments(db: Session, kind: str, limit: int = 10) -> dict:
     """
     target = SentimentLabel.NEGATIVE if kind == "complaints" else SentimentLabel.POSITIVE
 
-    rows = (
+    query = (
         db.query(Evaluation, Prediction)
         .join(Prediction, Prediction.evaluation_id == Evaluation.id)
         .filter(Prediction.official_prediction == target)
         .filter(Evaluation.is_mismatch.is_(False))
-        .order_by(Prediction.confidence_score.desc())
-        .limit(limit)
-        .all()
     )
+    if category is not None:
+        query = query.filter(Evaluation.category == category)
+    rows = query.order_by(Prediction.confidence_score.desc()).limit(limit).all()
 
     items = [
         {
