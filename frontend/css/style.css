@@ -304,7 +304,7 @@ a:hover {
    ============================================================ */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
   gap: 1.1rem;
   margin-bottom: 2.25rem;
 }
@@ -314,19 +314,53 @@ a:hover {
   border: 1px solid #E5E7EB;
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  padding: 1.15rem 1.1rem 1rem;
+  padding: 1rem 0.95rem 0.9rem;
   position: relative;
   display: flex;
-  align-items: stretch;   /* equal-height content column in every card */
-  min-height: 124px;      /* uniform card height across the KPI grid */
-  gap: 1rem;
+  align-items: flex-start;   /* the 44px icon hugs the top; the text column may be taller */
+  min-height: 124px;         /* a floor only — the grid row supplies equal height */
+  gap: 0.9rem;
 }
 
 .stat-info {
   flex: 1;
+  min-width: 0;              /* let a long caption wrap instead of widening the card */
   display: flex;
   flex-direction: column;
-  justify-content: space-between; /* pins number/title to top, caption & badge to bottom */
+  /* Top-aligned on purpose. `space-between` used to fling the label into the
+     middle of the card whenever a sibling had more rows than it did (a badge
+     that wrapped, a four-line caption), leaving a dead void above and below
+     it. Height differences now settle at the bottom of the card instead. */
+  justify-content: flex-start;
+}
+
+/* The trend badge and the percentage share one row: one line shorter per card,
+   and the row lines up across all five. The min-height keeps a card that has
+   neither (Avg Confidence) exactly as tall as the rest. */
+.stat-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  min-height: 1.55rem;
+  margin-top: 0.2rem;
+}
+
+/* KPI captions, clamped to two lines. One long sentence rendered four lines,
+   and because grid rows are equal height that single card stretched every
+   other card in the row to ~400px. The full sentence stays in the title
+   attribute, and two lines are reserved so the captions align across cards. */
+.stat-info small.source-note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.2em;
+  margin-top: 0.3rem;
+  font-size: 0.62rem;
+  line-height: 1.6;
+  color: var(--ink-faint);
 }
 
 .stat-icon {
@@ -979,6 +1013,7 @@ tbody tr:last-child td {
   border: 1px solid transparent;
   vertical-align: middle;
   cursor: default;
+  white-space: nowrap;   /* was wrapping to two lines ("new this / month") in a KPI card */
 }
 .trend-badge.good {
   color: var(--pos);

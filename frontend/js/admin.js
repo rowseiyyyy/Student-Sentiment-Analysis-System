@@ -5,7 +5,7 @@
  * All data fetching, export, CRUD logic preserved.
  *
  * FIXES APPLIED (this version):
- * 1. Chart race condition â€” destroyCharts() was being called inside
+ * 1. Chart race condition — destroyCharts() was being called inside
  *    renderSentimentChart's setTimeout, which could wipe out the
  *    Model Performance chart if its timeout fired first. Charts are
  *    now destroyed exactly once, before either chart is (re)drawn.
@@ -18,7 +18,7 @@
  * 3. Added small "source" captions under Overview cards so it's clear
  *    where each number/chart comes from (which API endpoint / what
  *    it's counting), since that was the root of the "confusing" complaint.
- * 4. DATA-LINEAGE LABELING â€” the dashboard silently mixed two unrelated
+ * 4. DATA-LINEAGE LABELING — the dashboard silently mixed two unrelated
  *    data sources on one screen: (a) live evaluation-form submissions,
  *    all-time, from the evaluations/predictions tables, and (b) ML
  *    training-run metrics, per-algorithm latest run, from the model
@@ -29,7 +29,7 @@
  *    have explicit section banners ("Live Submission Data" vs "Latest
  *    Model Training Results") plus precise per-widget captions stating
  *    exactly what's counted and over what time range.
- * 5. BULK DELETE â€” the Responses tab only supported deleting one
+ * 5. BULK DELETE — the Responses tab only supported deleting one
  *    evaluation at a time. Each row now has a selection checkbox, plus
  *    a "select all on this page" header checkbox, and a bulk-action
  *    toolbar that appears once at least one row is selected, letting
@@ -181,7 +181,7 @@ var ADMIN = {
     },
 
     // ============================================================
-    // OVERVIEW TAB â€” Paper theme design
+    // OVERVIEW TAB — Paper theme design
     // ============================================================
     renderOverview: async function(container) {
         container.innerHTML = '<div class="text-center mt-4"><div class="spinner"></div><p>Loading overview...</p></div>';
@@ -196,7 +196,7 @@ var ADMIN = {
             var perf = await API.getModelPerformance();
             var perfRows = filterModelPerfRows(perf.rows);
             // Best-performing row: the model with the highest metrics
-            // (max F1-score, accuracy as tie-break) â€” independent of the
+            // (max F1-score, accuracy as tie-break) — independent of the
             // backend's production/best_model declaration, which may
             // point at a different row than the metric leader.
             var winnerAlgo = null;
@@ -240,7 +240,7 @@ var ADMIN = {
                 };
                 var displayLabel = r.label === 'Payment' ? 'Payments' : r.label;
                 var countLabel = r.total > 0
-                    ? r.counts.pos + ' pos Â· ' + r.counts.neu + ' neu Â· ' + r.counts.neg + ' neg'
+                    ? r.counts.pos + ' pos · ' + r.counts.neu + ' neu · ' + r.counts.neg + ' neg'
                     : 'No submissions';
                 return '<div class="ledger-row"><span class="label">' + displayLabel + '</span><div class="ledger-track">' +
                     seg(r.counts.pos, 'pos', 'Positive') + seg(r.counts.neu, 'neu', 'Neutral') + seg(r.counts.neg, 'neg', 'Negative') +
@@ -273,9 +273,33 @@ var ADMIN = {
                 }
                 var cls = pct > 0 ? upCls : downCls;
                 var arrow = pct > 0 ? 'fa-arrow-up' : 'fa-arrow-down';
-                var tooltip = (pct > 0 ? '+' : '') + pct.toFixed(1) + '% vs last month (' + prev + ' â†’ ' + cur + ')';
+                var tooltip = (pct > 0 ? '+' : '') + pct.toFixed(1) + '% vs last month (' + prev + ' → ' + cur + ')';
                 return '<span class="trend-badge ' + cls + '" title="' + tooltip + '"><i class="fas ' + arrow + '"></i> ' +
                     (pct > 0 ? '+' : '') + Math.round(pct) + '%</span>';
+            }
+
+            // Percentage line under a KPI number. Empty string when there is
+            // no data, so the meta row still holds its height.
+            function pct(value) {
+                return value ? '<small>' + value.toFixed(1) + '%</small>' : '';
+            }
+
+            // One KPI card. The caption is clamped to two lines by CSS (a long
+            // sentence used to wrap to four and stretch every card in the row),
+            // so the full text rides along in title= for hover/screen readers.
+            // The badge + percentage share one .stat-meta row, which keeps the
+            // cards short and lines that row up across all five.
+            function kpiCard(opts) {
+                return '<div class="stat-card">' +
+                    '<div class="stat-icon ' + opts.tone + '"><i class="fas ' + opts.icon + '"></i></div>' +
+                    '<div class="stat-info">' +
+                        '<h3>' + opts.value + '</h3>' +
+                        '<p>' + opts.label + '</p>' +
+                        (opts.spark || '') +
+                        '<div class="stat-meta">' + (opts.badge || '') + (opts.pct || '') + '</div>' +
+                        '<small class="source-note" title="' + opts.caption + '">' + opts.caption + '</small>' +
+                    '</div>' +
+                '</div>';
             }
 
             function sparkline(series, color) {
@@ -553,18 +577,18 @@ var ADMIN = {
                         shortDate(overall.last_submission_at), 'neutral',
                         'Date of the most recent submission in this filter scope') +
                     '</div>';
-            var trendPeriod = (byPeriod[nowKey] ? nowKey : (mPoints.length ? mPoints[mPoints.length - 1].period : '')) || 'â€”';
+            var trendPeriod = (byPeriod[nowKey] ? nowKey : (mPoints.length ? mPoints[mPoints.length - 1].period : '')) || '—';
 
             container.innerHTML = '' +
                 '<div class="page-header">' +
                     '<div>' +
-                        '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Casefile Overview â€” All Departments</span>' +
+                        '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Casefile Overview — All Departments</span>' +
                         '<h1>Dashboard Overview</h1>' +
                     '</div>' +
                     '<div class="date-note">Compiled ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '</div>' +
                 '</div>' +
                 '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
-                    '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">â€” every card and chart below, up to and including the "Model Performance" table row for status, reflects ALL evaluation-form submissions ever received (not filtered by dataset or date), except where noted.</span>' +
+                    '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">— every card and chart below, up to and including the "Model Performance" table row for status, reflects ALL evaluation-form submissions ever received (not filtered by dataset or date), except where noted.</span>' +
                 '</div>' +
                 '<div class="filter-bar">' +
                     '<span class="filter-label"><i class="fas fa-filter"></i> Filter:</span>' +
@@ -585,11 +609,11 @@ var ADMIN = {
                     '<span class="filter-scope">Applies to all submission charts below. Model Performance reflects training runs and is unaffected.</span>' +
                 '</div>' +
                 '<div class="stats-grid">' +
-                    '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-smile"></i></div><div class="stat-info"><h3>' + (overall.breakdown.positive || 0) + '</h3><p>Positive Feedbacks</p>' + sparkPos + trendPos + '<small>' + (overall.breakdown.positive_pct ? overall.breakdown.positive_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time, all submissions</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-meh"></i></div><div class="stat-info"><h3>' + (overall.breakdown.neutral || 0) + '</h3><p>Neutral Feedbacks</p>' + sparkNeu + trendNeu + '<small>' + (overall.breakdown.neutral_pct ? overall.breakdown.neutral_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time, all submissions</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon red"><i class="fas fa-frown"></i></div><div class="stat-info"><h3>' + (overall.breakdown.negative || 0) + '</h3><p>Negative Feedbacks</p>' + sparkNeg + trendNeg + '<small>' + (overall.breakdown.negative_pct ? overall.breakdown.negative_pct.toFixed(1) + '%' : '') + '</small><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time, all submissions Â· badge compares ' + trendPeriod + ' vs prior month</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3>' + (overall.evaluation_volume || 0) + '</h3><p>Total Evaluations</p>' + sparkTot + trendTot + '<small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time count of submitted evaluation forms</small></div></div>' +
-                    '<div class="stat-card"><div class="stat-icon purple"><i class="fas fa-chart-bar"></i></div><div class="stat-info"><h3>' + (overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A') + '</h3><p>Avg Confidence</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
+                    kpiCard({ tone: 'green', icon: 'fa-smile', value: overall.breakdown.positive || 0, label: 'Positive Feedbacks', spark: sparkPos, badge: trendPos, pct: pct(overall.breakdown.positive_pct), caption: 'All-time, all submissions' }) +
+                    kpiCard({ tone: 'yellow', icon: 'fa-meh', value: overall.breakdown.neutral || 0, label: 'Neutral Feedbacks', spark: sparkNeu, badge: trendNeu, pct: pct(overall.breakdown.neutral_pct), caption: 'All-time, all submissions' }) +
+                    kpiCard({ tone: 'red', icon: 'fa-frown', value: overall.breakdown.negative || 0, label: 'Negative Feedbacks', spark: sparkNeg, badge: trendNeg, pct: pct(overall.breakdown.negative_pct), caption: 'All-time, all submissions · badge compares ' + trendPeriod + ' vs prior month' }) +
+                    kpiCard({ tone: 'blue', icon: 'fa-file-alt', value: overall.evaluation_volume || 0, label: 'Total Evaluations', spark: sparkTot, badge: trendTot, caption: 'All-time count of submitted evaluation forms' }) +
+                    kpiCard({ tone: 'purple', icon: 'fa-chart-bar', value: overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A', label: 'Avg Confidence', caption: 'Avg. of each submission\'s prediction confidence at time of submission' }) +
                 '</div>' +
                 '<div class="chart-grid">' +
                     '<div class="chart-card">' +
@@ -623,7 +647,7 @@ var ADMIN = {
                         '</div>' +
                         '<div class="chart-card">' +
                             '<h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3>' +
-                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> Accuracy &amp; F1 score measured on the held-out test split from each algorithm\'s most recent training run â€” one bar pair per algorithm\'s latest run, independent of how many students have submitted evaluations since.' +
+                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> Accuracy &amp; F1 score measured on the held-out test split from each algorithm\'s most recent training run — one bar pair per algorithm\'s latest run, independent of how many students have submitted evaluations since.' +
                             '<div class="chart-container"><canvas id="chart-model-perf"></canvas></div>' +
                         '</div>' +
                     '</div>' +
@@ -653,7 +677,7 @@ var ADMIN = {
             // (re)drawing either chart. Previously destroyCharts() lived
             // inside renderSentimentChart's own setTimeout, so whichever
             // chart's 100ms timer fired second could wipe out the chart
-            // that had just been drawn by the other timer â€” a race
+            // that had just been drawn by the other timer — a race
             // condition that made the bar chart randomly vanish.
             this.compressNotes(container);
             this.destroyCharts();
@@ -830,7 +854,7 @@ var ADMIN = {
     },
 
     // ============================================================
-    // RESPONSES TAB â€” Paper theme design
+    // RESPONSES TAB — Paper theme design
     // ============================================================
         async renderResponses(container) {
         // Fresh entry into the tab starts with a clean selection.
@@ -1152,7 +1176,7 @@ var ADMIN = {
         var card = function(icon, iconCls, value, label, sub) {
             return '<div class="stat-card"><div class="stat-icon ' + iconCls + '"><i class="fas ' + icon + '"></i></div>' +
                 '<div class="stat-info"><h3>' + value + '</h3><p>' + label + '</p>' +
-                (sub ? '<small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">' + sub + '</small>' : '') +
+                (sub ? '<small class="source-note">' + sub + '</small>' : '') +
                 '</div></div>';
         };
         var pct = function(n) { return b.total ? ((n / b.total) * 100).toFixed(1) + '%' : '0%'; };
@@ -1356,13 +1380,13 @@ var ADMIN = {
     },
 
         // ------------------------------------------------------------
-    // RESPONSES TAB â€” Import Dataset (Google Form export)
+    // RESPONSES TAB — Import Dataset (Google Form export)
     // ------------------------------------------------------------
 
     openImportPanel: function() {
         var html = '' +
             '<div style="margin-bottom:1rem;">' +
-                '<p style="font-size:.88rem;color:var(--ink-soft);">Import a compiled spreadsheet of student responses â€” e.g. the Excel/CSV export of your Google Form â€” instead of typing them in one by one. This bulk-loads them exactly as if each student had submitted the live form.</p>' +
+                '<p style="font-size:.88rem;color:var(--ink-soft);">Import a compiled spreadsheet of student responses — e.g. the Excel/CSV export of your Google Form — instead of typing them in one by one. This bulk-loads them exactly as if each student had submitted the live form.</p>' +
             '</div>' +
             '<div class="form-group">' +
                 '<label for="import-category-select"><i class="fas fa-list"></i> Which form is this file from?</label>' +
@@ -1377,11 +1401,11 @@ var ADMIN = {
             '<div style="background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.75rem .9rem;margin-bottom:1rem;font-size:.82rem;line-height:1.65;">' +
                 '<strong style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.4rem;"><i class="fas fa-circle-info"></i> Column checklist for this file</strong>' +
                 '<ul style="margin-left:1.1rem;">' +
-                    '<li><strong>Required:</strong> a column with the student\'s open-ended answer â€” header should contain a word like "thoughts", "comment", or "feedback".</li>' +
-                    '<li><strong>Recommended:</strong> Student ID, Course, Year Level â€” if included, these show up on the response the same as a normal submission. Leave a row\'s Student ID blank to import it anonymously.</li>' +
+                    '<li><strong>Required:</strong> a column with the student\'s open-ended answer — header should contain a word like "thoughts", "comment", or "feedback".</li>' +
+                    '<li><strong>Recommended:</strong> Student ID, Course, Year Level — if included, these show up on the response the same as a normal submission. Leave a row\'s Student ID blank to import it anonymously.</li>' +
                     '<li><strong>Faculty only:</strong> a column naming the professor evaluated.</li>' +
-                    '<li><strong>Rating questions</strong> (the 1â€“5 scale questions) â€” keep Google Forms\' original question text as the column header; they\'re matched automatically.</li>' +
-                    '<li style="color:var(--neg);"><strong>Leave Sentiment out entirely.</strong> The system always calculates Positive / Neutral / Negative itself â€” a Sentiment column in your file is ignored, never read.</li>' +
+                    '<li><strong>Rating questions</strong> (the 1–5 scale questions) — keep Google Forms\' original question text as the column header; they\'re matched automatically.</li>' +
+                    '<li style="color:var(--neg);"><strong>Leave Sentiment out entirely.</strong> The system always calculates Positive / Neutral / Negative itself — a Sentiment column in your file is ignored, never read.</li>' +
                     '<li>Accepted files: <strong>.csv, .xlsx, .xls</strong>. Use <strong>Auto-detect</strong>: a single-category export (one Google Form) is detected and imported into that category, while a combined multi-category file (columns prefixed Staff_ / Professor_ / Facilities_ / Payments_*) expands each spreadsheet row into up to four evaluations. Picking a specific category is only needed for single-category files.</li>' +
                 '</ul>' +
             '</div>' +
@@ -1401,7 +1425,7 @@ var ADMIN = {
         var category = catSelect ? catSelect.value : '';
         var resultDiv = document.getElementById('import-resp-result');
         var categoryLabel = category ? category + ' ' : '';
-        showLoading('Importing ' + categoryLabel + 'responses â€” this can take a moment while each one is scored...');
+        showLoading('Importing ' + categoryLabel + 'responses — this can take a moment while each one is scored...');
         try {
             var result = await API.importEvaluations(file, category);
             var errorsHtml = '';
@@ -1435,7 +1459,7 @@ var ADMIN = {
     },
 
     // ============================================================
-    // VIEW EVALUATION (Modal) â€” Paper theme design
+    // VIEW EVALUATION (Modal) — Paper theme design
     // ============================================================
     async viewEval(id) {
         showLoading('Loading evaluation details...');
@@ -1453,7 +1477,7 @@ var ADMIN = {
             mismatchHtml = '<div class="form-section" style="margin-top:1rem;border-left:3px solid var(--neu, #b7791f);padding-left:.75rem;">' +
             '<h4 style="color:var(--neu, #b7791f);"><i class="fas fa-triangle-exclamation"></i> Likert / Sentiment Mismatch</h4>' +
             '<p style="font-size:.85rem;">Type: <strong>' + escapeHtml((item.mismatch_type || '').replace(/_/g, ' ')) + '</strong></p>' +
-        '<p style="font-size:.8rem;color:var(--ink-faint);">The numeric ratings and the written comment\'s sentiment point in different directions for this submission â€” worth a closer read.</p>' +
+        '<p style="font-size:.8rem;color:var(--ink-faint);">The numeric ratings and the written comment\'s sentiment point in different directions for this submission — worth a closer read.</p>' +
     '</div>';
 }
             var ratingsHtml = '';
@@ -1508,7 +1532,7 @@ var ADMIN = {
                 }).join('');
 
                 predictionHtml = '<div class="form-section" style="margin-top:1rem;">' +
-                    '<h4 style="margin-bottom:0.5rem;">Text Sentiment â€” Model Breakdown</h4>' +
+                    '<h4 style="margin-bottom:0.5rem;">Text Sentiment — Model Breakdown</h4>' +
                     '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody>' + modelRows + '</tbody></table></div>' +
                     (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> The live model (Multilingual MiniLM) has not produced a result for this submission. Its weights are fetched from the private Hugging Face repo at startup.</p>' : '') +
                     '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> The official result comes from the live production model, Multilingual MiniLM. The SVM, Naive Bayes and Logistic Regression research models are trained and evaluated offline for the model comparison and never run during live inference.</p>' +
@@ -1627,18 +1651,18 @@ predictionHtml +
     },
 
     // ============================================================
-    // ANALYTICS TAB â€” Paper theme design
+    // ANALYTICS TAB — Paper theme design
     // ============================================================
     async renderAnalytics(container) {
         container.innerHTML = '' +
             '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span><h1>Trends &amp; top signals</h1></div></div>' +
             '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
-                '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">â€” every section on this tab is drawn from evaluation-form submissions, all-time. Nothing here reflects ML training runs.</span>' +
+                '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">— every section on this tab is drawn from evaluation-form submissions, all-time. Nothing here reflects ML training runs.</span>' +
             '</div>' +
             '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">' +
-                '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div class="stat-info"><h3 id="ana-pos-pct">-</h3><p>Positive Rate</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time, all submissions</small></div></div>' +
-                '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3 id="ana-total">-</h3><p>Total Entries</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">All-time count of submitted evaluation forms</small></div></div>' +
-                '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-bullseye"></i></div><div class="stat-info"><h3 id="ana-confidence">-</h3><p>Model Confidence</p><small class="source-note" style="display:block;color:var(--ink-faint);font-size:.62rem;margin-top:.15rem;">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div class="stat-info"><h3 id="ana-pos-pct">-</h3><p>Positive Rate</p><small class="source-note">All-time, all submissions</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3 id="ana-total">-</h3><p>Total Entries</p><small class="source-note">All-time count of submitted evaluation forms</small></div></div>' +
+                '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-bullseye"></i></div><div class="stat-info"><h3 id="ana-confidence">-</h3><p>Model Confidence</p><small class="source-note">Avg. of each submission\'s prediction confidence at time of submission</small></div></div>' +
             '</div>' +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-line"></i> Monthly Trend</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by the month they were submitted, all-time.</p><div class="chart-container"><canvas id="chart-monthly-trend"></canvas></div></div>' +
@@ -2013,7 +2037,7 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Model Results</span><h1>Model on duty</h1></div></div>' +
             '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
-                '<i class="fas fa-flask"></i>&nbsp; Latest Model Training Results <span style="opacity:.6;">â€” models are trained in Google Colab, then imported here. This panel never trains anything locally.</span>' +
+                '<i class="fas fa-flask"></i>&nbsp; Latest Model Training Results <span style="opacity:.6;">— models are trained in Google Colab, then imported here. This panel never trains anything locally.</span>' +
             '</div>' +
             '<div class="tabs" id="ml-tabs">' +
                 '<button class="tab-btn active" data-mltab="import"><i class="fas fa-file-import"></i> Import from Colab</button>' +
@@ -2137,7 +2161,7 @@ predictionHtml +
             container.innerHTML = '' +
                 '<div class="card">' +
                     '<div class="card-header"><h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3></div>' +
-                    '<p class="source-note" style="color:var(--ink-faint);margin:0 .75rem .5rem;">One row per model, its most recent training run only â€” measured on that run\'s own held-out test split, not on live submissions.</p>' +
+                    '<p class="source-note" style="color:var(--ink-faint);margin:0 .75rem .5rem;">One row per model, its most recent training run only — measured on that run\'s own held-out test split, not on live submissions.</p>' +
                     '<div class="table-container"><table class="perf-table"><thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th><th>Actions</th></tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="6" class="text-center text-muted">No training data available.</td></tr>') + '</tbody></table></div>' +
                 '</div>';
         } catch (error) {
