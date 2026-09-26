@@ -237,17 +237,43 @@
                     </button>
                     <div class="alert-panel hidden" id="alert-panel"></div>
                 </div>
-                <!-- Scope lens: shows every submission chart exactly as a
-                     faculty account is served it (Professors only). The
-                     faculty role is pinned to that category server-side; this
-                     asks an admin for the same slice explicitly. -->
-                <button class="faculty-preview" id="faculty-preview-btn"
-                    onclick="ADMIN.toggleFacultyPreview()" aria-pressed="false"
-                    title="Preview every chart exactly as a faculty account sees it">
-                    <i class="fas fa-user-secret"></i> Faculty view
-                </button>
-                <span class="user-badge" id="badge-admin"></span>
-                <button class="btn-logout" onclick="ADMIN.logout()"><i class="fas fa-sign-out-alt"></i> Close file</button>
+
+                <!-- Account menu: identity plus the three per-session controls
+                     (faculty lens, layout editor, close file). They were inline
+                     in the nav row and consumed ~300px, which left the five
+                     tabs scrolling sideways with the active tab off screen.
+                     A single menu button gives the tabs their width back. -->
+                <div class="account-menu" id="account-menu">
+                    <button class="account-menu-btn" id="account-menu-btn"
+                        onclick="ADMIN.toggleAccountMenu(event)" aria-haspopup="true"
+                        aria-expanded="false" title="Account and view options">
+                        <i class="fas fa-user-circle"></i>
+                        <span class="account-menu-name" id="badge-admin"></span>
+                        <i class="fas fa-chevron-down account-menu-caret"></i>
+                    </button>
+                    <div class="account-menu-panel hidden" id="account-menu-panel">
+                        <div class="account-menu-header" id="account-menu-name">Signed in</div>
+                        <!-- Scope lens: shows every submission chart exactly as a
+                             faculty account is served it (Professors only). The
+                             faculty role is pinned to that category server-side;
+                             this asks an admin for the same slice explicitly. -->
+                        <button class="account-menu-item" id="faculty-preview-btn"
+                            onclick="ADMIN.toggleFacultyPreview()" aria-pressed="false">
+                            <i class="fas fa-user-secret"></i>
+                            <span>Faculty view</span>
+                            <span class="account-menu-state" id="faculty-preview-state">Off</span>
+                        </button>
+                        <!-- Layout editor: rendered by LAYOUT.mountToolbar() for
+                             administrators only, so faculty never see it. -->
+                        <span id="layout-toolbar-slot"></span>
+                        <div class="account-menu-sep"></div>
+                        <button class="account-menu-item account-menu-danger"
+                            onclick="ADMIN.logout()">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>Close file</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </nav>
 

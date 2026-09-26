@@ -163,7 +163,16 @@ var ADMIN = {
     showDashboard: function() {
         APP.goToPage('page-admin-dashboard');
         document.getElementById('nav-admin').style.display = 'flex';
-        document.getElementById('badge-admin').textContent = '\u{1F6E1} ' + (this.currentUser ? this.currentUser.full_name : 'Administrator');
+        // The name sits inside the account menu button now, so it gets the
+        // name only -- the shield glyph and the "Administrator" fallback label
+        // belonged to the old standalone badge and would be redundant against
+        // the button's own person icon.
+        const name = this.currentUser ? this.currentUser.full_name : 'Administrator';
+        const badge = document.getElementById('badge-admin');
+        if (badge) badge.textContent = name;
+        const header = document.getElementById('account-menu-name');
+        if (header) header.textContent = 'Signed in as ' + name;
+        this.setAccountMenuOpen(false);
         this.updateFacultyPreviewButton();
         this.renderTab('overview');
         // Negative spike alerting: run once on load, then poll.
@@ -274,6 +283,48 @@ var ADMIN = {
         btn.title = this.facultyPreview
             ? 'Previewing the faculty view (Professors only) — click to exit'
             : 'Preview every chart exactly as a faculty account sees it';
+        // The menu item carries an explicit On/Off readout: inside a dropdown
+        // the pressed styling is easy to miss, and this toggle changes what
+        // every number on the page means.
+        var state = document.getElementById('faculty-preview-state');
+        if (state) state.textContent = this.facultyPreview ? 'On' : 'Off';
+    },
+
+    // ---- account menu ---------------------------------------------------
+    // Holds identity plus the faculty lens, the layout editor and Close file.
+    // These were inline in the nav row and consumed ~300px, which left the tab
+    // strip scrolling sideways with the active tab off screen.
+    //
+    // Closes on outside click and on Escape, which is the behaviour people
+    // expect from a menu and is what makes it usable one-handed.
+    toggleAccountMenu(event) {
+        if (event) event.stopPropagation();
+        this.setAccountMenuOpen(
+            document.getElementById('account-menu-panel').classList.contains('hidden')
+        );
+    },
+
+    setAccountMenuOpen(open) {
+        const panel = document.getElementById('account-menu-panel');
+        const btn = document.getElementById('account-menu-btn');
+        if (!panel) return;
+        panel.classList.toggle('hidden', !open);
+        if (btn) {
+            btn.classList.toggle('open', open);
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        // One global listener rather than one per open, so a reopened menu
+        // does not stack duplicate handlers.
+        if (open && !this._accountMenuBound) {
+            this._accountMenuBound = true;
+            document.addEventListener('click', (e) => {
+                const menu = document.getElementById('account-menu');
+                if (menu && !menu.contains(e.target)) this.setAccountMenuOpen(false);
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') this.setAccountMenuOpen(false);
+            });
+        }
     },
 
     // Keep the active tab visible in the scrollable tab strip. The scrollbar
@@ -294,16 +345,6 @@ var ADMIN = {
         var tabContent = document.createElement('div');
         tabContent.id = 'admin-tab-content';
         content.appendChild(tabContent);
-
-        // The layout editor lives HERE, above the tab content, rather than in
-        // the navbar. It is a per-page control, not app navigation: it acts on
-        // the widgets on this screen, so it belongs with them. In the navbar it
-        // consumed ~250px of the nav's width, which overran the row, scrolled
-        // the tab strip sideways and buried the active tab behind a scrollbar.
-        var layoutBar = document.createElement('div');
-        layoutBar.id = 'layout-toolbar-slot';
-        layoutBar.className = 'layout-toolbar-bar';
-        tabContent.appendChild(layoutBar);
 
         // Apply the shared, admin-editable layout. LAYOUT.mount() reads the
         // saved geometry and, for an administrator only, attaches the resize

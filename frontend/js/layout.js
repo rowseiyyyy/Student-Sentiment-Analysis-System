@@ -343,13 +343,14 @@ const LAYOUT = {
 
     // ---- toolbar (admin only) ---------------------------------------------
 
-    // Renders the Save / Reset controls. Kept out of index.html and injected
-    // here so a non-admin never receives the markup at all -- the buttons are
-    // not merely hidden with CSS, they are never created.
+    // Renders the Edit / Save / Reset controls inside the account menu. Kept
+    // out of index.html's static markup and injected here so a non-admin never
+    // receives it at all -- the buttons are not merely hidden with CSS, they
+    // are never created.
     //
-    // The host is the slim bar above the page content, not the navbar: these
-    // act on the widgets on this screen, so they belong with them. In the
-    // navbar they overran the row and scrolled the tab strip sideways.
+    // The host is the account menu in the navbar, not a bar on the page: these
+    // are per-session controls, and inline in the nav row they overran the
+    // width and scrolled the tab strip sideways.
     mountToolbar() {
         const slot = document.getElementById('layout-toolbar-slot');
         if (!slot) return;
@@ -360,18 +361,18 @@ const LAYOUT = {
         if (slot.dataset.mounted === '1') return;
         slot.dataset.mounted = '1';
         slot.innerHTML =
+            '<div class="account-menu-group">Edit &amp; arrange</div>' +
             '<span class="layout-toolbar">' +
                 '<button type="button" class="layout-toolbar-btn layout-mode-btn" ' +
-                    'id="layout-mode-btn" onclick="LAYOUT.toggleEditing()" aria-pressed="false" ' +
-                    'title="Switch to edit mode to rearrange and resize widgets">' +
+                    'id="layout-mode-btn" onclick="LAYOUT.toggleEditing()" aria-pressed="false">' +
                     '<i class="fas fa-pen-to-square"></i> ' +
                     '<span class="layout-mode-label">Edit layout</span></button>' +
                 '<button type="button" class="layout-toolbar-btn" id="layout-save-btn" ' +
-                    'onclick="LAYOUT.saveAndReport()" title="Save this layout for everyone">' +
-                    '<i class="fas fa-check"></i> Save layout</button>' +
+                    'onclick="LAYOUT.saveAndReport()">' +
+                    '<i class="fas fa-check"></i> <span>Save layout</span></button>' +
                 '<button type="button" class="layout-toolbar-btn" id="layout-reset-btn" ' +
-                    'onclick="LAYOUT.resetAndReport()" title="Restore the default layout">' +
-                    '<i class="fas fa-undo"></i> Reset</button>' +
+                    'onclick="LAYOUT.resetAndReport()">' +
+                    '<i class="fas fa-undo"></i> <span>Reset to default</span></button>' +
             '</span>';
         this.updateModeUI();
     },

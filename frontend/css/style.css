@@ -1803,38 +1803,8 @@ tbody tr:last-child td {
   font-weight: 600;
 }
 
-/* Navbar "Faculty view" lens toggle. Sized like the alert bell so the two
-   controls read as a pair. */
-.faculty-preview {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  height: 34px;
-  padding: 0 0.7rem;
-  margin-right: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.82);
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.faculty-preview:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-}
-
-.faculty-preview.active {
-  background: #fff;
-  border-color: #fff;
-  color: var(--brand-deep);
-  font-weight: 600;
-}
+/* The "Faculty view" lens toggle now lives in the account menu as an
+   .account-menu-item, so the old navbar-pill styling is gone. */
 
 /* ============================================================
    ASPECT x DEPARTMENT HEAT GRID
@@ -2069,70 +2039,191 @@ body.widget-resizing {
   }
 }
 
-/* Layout editor controls.
+/* ============================================================
+   ACCOUNT MENU
 
-   These live in a slim bar above the page content, NOT in the navbar. They are
-   per-page controls -- they act on the widgets on this screen -- and in the
-   navbar they consumed ~250px of the nav's width, which overran the row,
-   scrolled the tab strip sideways and buried the active tab behind a
-   scrollbar.
-
-   The bar sits on the paper background rather than the navy navbar, so the
-   buttons use ink tones instead of the light-on-dark treatment they had. */
-.layout-toolbar-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.75rem;
+   Identity plus the three per-session controls (faculty lens, layout editor,
+   close file) behind one button. Inline in the nav row they consumed ~300px,
+   which left the five tabs scrolling sideways with the active tab off screen;
+   as a menu the nav row needs only the one button.
+   ============================================================ */
+.account-menu {
+  position: relative;
+  flex: 0 0 auto;
 }
 
-/* The bar is empty for anyone but an administrator, so it must not leave a gap
-   on the page. mountToolbar() writes no markup in that case. */
-.layout-toolbar-bar:empty {
-  display: none;
-}
-
-.layout-toolbar {
+.account-menu-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.45rem;
+  height: 34px;
+  padding: 0 0.6rem 0 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: transparent;
+  color: #f2f0e6;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.account-menu-btn:hover,
+.account-menu-btn.open {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.account-menu-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.account-menu-name {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-menu-caret {
+  font-size: 0.6rem;
+  opacity: 0.7;
+  transition: transform 0.15s;
+}
+
+.account-menu-btn.open .account-menu-caret {
+  transform: rotate(180deg);
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 1100;
+  min-width: 15rem;
+  /* The panel is on the paper background, not the navy navbar, so it uses
+     ink tones. The 8px solid shadow matches the rest of the paper theme. */
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 6px 6px 0 var(--brand-deep);
+  padding: 0.4rem;
+  /* Anchored to the right edge and capped to the viewport, so it can never
+     open off-screen on a narrow window. */
+  max-width: calc(100vw - 2rem);
+}
+
+.account-menu-header {
+  padding: 0.5rem 0.6rem 0.6rem;
+  border-bottom: 1px solid var(--paper-line);
+  margin-bottom: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.account-menu-item:hover {
+  background: var(--brand-soft);
+}
+
+/* The pressed state of a toggle is easy to miss inside a dropdown, so the
+   menu item also carries an explicit On/Off readout on the right. */
+.account-menu-item.active {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 600;
+}
+
+.account-menu-state {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.account-menu-item.active .account-menu-state {
+  color: var(--brand);
+}
+
+.account-menu-danger {
+  color: var(--neg);
+}
+
+.account-menu-danger:hover {
+  background: rgba(179, 58, 58, 0.1);
+}
+
+.account-menu-sep {
+  height: 1px;
+  background: var(--paper-line);
+  margin: 0.35rem 0.3rem;
+}
+
+/* ============================================================
+   LAYOUT EDITOR CONTROLS
+
+   Rendered into a group inside the account menu by LAYOUT.mountToolbar(),
+   for administrators only. A non-admin never receives the markup.
+   ============================================================ */
+
+.layout-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0.15rem 0;
 }
 
 .layout-toolbar-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.3rem;
-  height: 32px;
-  padding: 0 0.65rem;
-  border: 1px solid var(--ink);
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid transparent;
   border-radius: 6px;
-  background: var(--paper-raised);
-  color: var(--ink-soft);
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  text-align: left;
   cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.12s;
 }
 
 .layout-toolbar-btn:hover {
   background: var(--brand-soft);
-  color: var(--brand-deep);
-  border-color: var(--brand);
 }
 
 .layout-toolbar-btn:focus-visible {
   outline: 2px solid var(--brand);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 
-/* The edit-mode toggle. Reads as a mode switch rather than an action: it is
-   the button that reveals the handles, so it gets the filled treatment when
-   that mode is active. On the paper background the fill is the brand navy. */
+/* The edit-mode toggle reads as a mode switch, not an action: it is filled
+   while that mode is active, so its state is visible without reading the
+   label. */
 .layout-mode-btn.active {
   background: var(--brand);
   border-color: var(--brand);
@@ -2145,17 +2236,11 @@ body.widget-resizing {
   color: #fff;
 }
 
-/* On a phone the three buttons still fit on one line at icon-and-label size,
-   and the labels stay: "Edit layout" has to be findable. */
-@media (max-width: 560px) {
-  .layout-toolbar-bar {
-    justify-content: flex-start;
-  }
-  .layout-toolbar-btn {
-    font-size: 0.58rem;
-    padding: 0 0.5rem;
-  }
+.layout-mode-btn i {
+  width: 1.1rem;
+  text-align: center;
 }
+
 
 
 /* While edit mode is on, mark every resizable widget so it is obvious which
