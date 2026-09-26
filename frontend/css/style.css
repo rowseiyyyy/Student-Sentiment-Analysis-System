@@ -2117,9 +2117,103 @@ tbody tr:last-child td {
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
 
+/* Width stepper, shown in the grip in edit mode.
+   Dragging a 16px edge strip can only ever land on whole columns, which makes
+   "make this exactly two columns wide" an exercise in pixel-hunting. These
+   buttons do it in one click, and the readout states the current width as
+   n/total so the control explains itself. */
+.widget-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 4px;
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  background: var(--paper-raised);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.widget-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.widget-stepper-btn:hover:not(:disabled) {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+
+.widget-stepper-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.widget-stepper-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.widget-stepper-readout {
+  min-width: 30px;
+  padding: 0 2px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-soft);
+  cursor: default;
+  user-select: none;
+}
+
+/* The live size readout that follows a resize drag. */
+.widget-size-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 9;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--brand-deep);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
 /* While dragging, stop the sweep from selecting the dashboard text. */
 body.widget-resizing {
   user-select: none;
+}
+
+/* In edit mode the drag targets grow: the resting 16px strip is easy to miss,
+   and missing it is indistinguishable from the resize being broken. The nub
+   also becomes faintly visible so the edges read as grabbable. */
+.layout-editing .widget-grip-edge-e {
+  width: 22px;
+}
+
+.layout-editing .widget-grip-edge-e::after,
+.layout-editing .widget-grip-edge-se::after {
+  opacity: 0.3;
+}
+
+.layout-editing .widget-grip-edge-e:hover::after,
+.layout-editing .widget-grip-edge-e:focus-visible::after,
+.layout-editing .widget-grip-edge-se:hover::after,
+.layout-editing .widget-grip-edge-se:focus-visible::after {
+  opacity: 0.75;
 }
 
 /* Edit mode: suppress pointer interaction with the cards themselves, so a

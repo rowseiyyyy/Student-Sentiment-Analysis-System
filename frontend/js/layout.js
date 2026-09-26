@@ -21,10 +21,16 @@
 
    Responsiveness
    -------------
-   A saved width is a preference, not a promise. On a narrow viewport the
-   grid collapses to one column, so a `span 3` must become `span 1`, or a
-   wide-screen save would overflow a phone. _effectiveW() does that clamp and
-   the CSS media queries are the backstop.
+   A saved width is a preference, not a promise, and it is bounded by the grid
+   it lands in. A `span 3` on a 2-column grid would overflow it, and a `span 4`
+   on a 3-column grid is worse than an overflow: the browser answers an
+   over-wide span by adding an IMPLICIT track, so the whole grid silently grows
+   a column and every other card on the page shrinks. _gridMetrics() reads the
+   authored column count out of the stylesheet for exactly this reason --
+   getComputedStyle reports the tracks that were built, implicit ones included,
+   so it cannot be trusted to report what the layout is allowed to be.
+   _effectiveW() clamps every width to that count, and the CSS media queries
+   remain the backstop.
 */
 const LAYOUT = {
     // Bounds. The server enforces the same numbers; these are the tighter,
@@ -34,6 +40,12 @@ const LAYOUT = {
     MIN_H: 120,
     MAX_H: 900,
     HEIGHT_STEP: 10,
+
+    // Used only when the authored column count cannot be read from the
+    // stylesheet at all (a detached node, a cross-origin sheet). Matches the
+    // desktop .chart-grid so the common case is right.
+    FALLBACK_COLS: 3,
+    FALLBACK_GAP: 18,
 
     // Which layout document each page uses, keyed by page id so a page cannot
     // write to another page's layout by mistake.
@@ -259,12 +271,134 @@ const LAYOUT = {
     },
 
 
-    // Clamp a stored width to what the current viewport can honour. Below the
-    // two-column breakpoint the grid is one column wide, so every widget
-    // spans one column no matter what was saved.
-    _effectiveW(w) {
+    // Clamp a stored width to what the current viewport can honour.
+    //
+    // `el` is the widget, needed to resolve how many columns its grid really
+    // has. Clamping to the grid's own column count is what stops a saved
+    // `span 4` from silently wrecking a 3-column dashboard: an over-wide span
+    // makes the browser add an IMPLICIT track, so the grid grows a 4th column
+    // and every other card on the page shrinks to a quarter width. Clamping
+    // here means a too-wide saved value degrades to "as wide as this grid
+    // allows" instead of breaking the page.
+    _effectiveW(w, el) {
+        const cols = this._gridMetrics(el).cols;
+        const max = Math.max(this.MIN_W, Math.min(this.MAX_W, cols));
         if (window.innerWidth <= 900) return 1;
-        return Math.max(this.MIN_W, Math.min(this.MAX_W, w || this.MIN_W));
+        return Math.max(this.MIN_W, Math.min(max, w || this.MIN_W));
+    },
+
+    // How many columns a widget's grid has, and how wide one column is in
+    // pixels. Everything about resizing derives from these two numbers.
+    //
+    // The count comes from the STYLESHEET, not from getComputedStyle, and that
+    // distinction is the whole point. The computed value of
+    // grid-template-columns lists the tracks the browser actually built --
+    // including implicit ones conjured by an over-wide span. Reading it back
+    // would report 4 columns for a 3-column grid and the bad layout would
+    // become self-perpetuating. The authored declaration has no such problem.
+    _gridMetrics(el) {
+        const section = this._sectionOf(el);
+        const metrics = { cols: this.FALLBACK_COLS, unit: 0, gap: this.FALLBACK_GAP };
+        if (!section) return metrics;
+
+        const cols = this._authoredCols(section);
+        if (cols) metrics.cols = cols;
+
+        if (typeof window.getComputedStyle === 'function') {
+            try {
+                const cs = window.getComputedStyle(section);
+                const gap = parseFloat(cs.columnGap || cs.gap || '0');
+                if (gap > 0) metrics.gap = gap;
+            } catch (err) { /* detached or stub DOM: keep the fallback */ }
+        }
+
+        // A column is the section width minus the gaps, shared evenly. Derived
+        // from the container rather than from a sibling card, so it stays
+        // correct when every sibling spans two or three columns -- which is
+        // exactly the case that made the old sibling-probe drag feel dead.
+        const width = section.clientWidth ||
+            (section.getBoundingClientRect ? section.getBoundingClientRect().width : 0);
+        if (width > 0) {
+            metrics.unit = (width - metrics.gap * (metrics.cols - 1)) / metrics.cols;
+        }
+        if (!(metrics.unit > 0)) metrics.unit = 240;
+        return metrics;
+    },
+
+    // The column count authored in CSS for this element.
+    //
+    // Walks the stylesheets for the last rule that both matches the element and
+    // declares grid-template-columns, honouring @media blocks whose condition
+    // currently holds. "Last match wins" mirrors how the cascade resolves two
+    // rules of equal specificity, which is all that is needed here: the media
+    // query that is currently active is always declared later than the base
+    // rule it overrides.
+    _authoredCols(section) {
+        if (typeof document === 'undefined' || !document.styleSheets) return 0;
+        const self = this;
+        const found = [];
+        const walk = function (rules) {
+            for (let i = 0; i < rules.length; i++) {
+                const rule = rules[i];
+                // Order matters. A plain style rule ALSO exposes an (empty)
+                // .cssRules list now that CSS Nesting is supported, so testing
+                // .cssRules first would treat every rule as a group, recurse
+                // into nothing, and never read a single selector. A style rule
+                // is identified by having a selectorText; only a rule without
+                // one (@media, @supports) is a group to descend into.
+                if (rule.selectorText && rule.style) {
+                    const value = rule.style.getPropertyValue('grid-template-columns');
+                    if (value) {
+                        let matches = false;
+                        try { matches = section.matches(rule.selectorText); } catch (err) { matches = false; }
+                        if (matches) {
+                            const n = self._colsFromTemplate(value);
+                            if (n) found.push(n);
+                        }
+                    }
+                    continue;
+                }
+                if (rule.cssRules) {
+                    if (rule.conditionText !== undefined && rule.media &&
+                        typeof window.matchMedia === 'function') {
+                        const text = rule.conditionText || rule.media.mediaText;
+                        if (text && !window.matchMedia(text).matches) continue;
+                    }
+                    walk(rule.cssRules);
+                }
+            }
+        };
+        for (let s = 0; s < document.styleSheets.length; s++) {
+            let rules;
+            // A cross-origin sheet throws on .cssRules. Skipping it is correct:
+            // it cannot be one of ours, and the fallback covers the loss.
+            try { rules = document.styleSheets[s].cssRules; } catch (err) { continue; }
+            if (rules) walk(rules);
+        }
+        return found.length ? found[found.length - 1] : 0;
+    },
+
+    // "repeat(3, minmax(0, 1fr))" -> 3. "300px 1fr 1fr" -> 3.
+    // `none` (a non-grid element) yields 0 so the caller keeps its fallback.
+    _colsFromTemplate(value) {
+        const v = String(value || '').trim();
+        if (!v || v === 'none') return 0;
+        const repeat = v.match(/repeat\(\s*(\d+)\s*,/i);
+        if (repeat) return parseInt(repeat[1], 10) || 0;
+        // Count top-level tracks only: a nested repeat()/minmax() contains
+        // spaces that must not be counted as separate tracks.
+        let depth = 0;
+        let count = 0;
+        let inToken = false;
+        for (let i = 0; i < v.length; i++) {
+            const ch = v[i];
+            if (ch === '(') { depth++; continue; }
+            if (ch === ')') { depth--; continue; }
+            if (depth > 0) continue;
+            if (/\s/.test(ch)) { inToken = false; continue; }
+            if (!inToken) { inToken = true; count++; }
+        }
+        return count;
     },
 
     // The span a widget should take when nothing has been saved for it.
@@ -285,8 +419,9 @@ const LAYOUT = {
             if (el.classList.contains('span-3')) span = 3;
             else if (el.classList.contains('span-2')) span = 2;
         }
-        const w = window.innerWidth;
-        const cols = w <= 780 ? 1 : (w <= 1200 ? 2 : 3);
+        // The authored column count already accounts for the media queries, so
+        // this is no longer a guess based on window.innerWidth.
+        const cols = this._gridMetrics(el).cols;
         return Math.max(1, Math.min(span, cols));
     },
 
@@ -299,8 +434,8 @@ const LAYOUT = {
             const el = entry.el;
             const saved = this._sizes[entry.key];
             const w = saved && saved.w
-                ? this._effectiveW(saved.w)
-                : this._effectiveW(this._defaultSpan(el));
+                ? this._effectiveW(saved.w, el)
+                : this._effectiveW(this._defaultSpan(el), el);
             el.style.gridColumn = 'span ' + w;
             if (saved && saved.h && el.classList.contains('chart-card')) {
                 const h = Math.max(this.MIN_H, Math.min(this.MAX_H, saved.h));
@@ -308,6 +443,9 @@ const LAYOUT = {
             } else {
                 el.style.removeProperty('--widget-h');
             }
+            // Keep the editor's readout in step with the geometry actually
+            // applied, so the stepper can never claim a width the grid refused.
+            if (el.__layoutStepper) el.__layoutStepper.sync(w);
         });
     },
 
@@ -481,8 +619,15 @@ const LAYOUT = {
     // cannot strip anything belonging to the page's own markup.
     _unmountHandles(root) {
         if (!root || !root.querySelectorAll) return;
+        // The stepper object is cached on the element for applyTo() to call.
+        // Drop it with the DOM it points at, or a later pass would write into
+        // controls that are no longer in the document.
         Array.prototype.forEach.call(
-            root.querySelectorAll('.widget-grip, .widget-grip-edge'),
+            root.querySelectorAll('.chart-card, .card'),
+            (el) => { el.__layoutStepper = null; }
+        );
+        Array.prototype.forEach.call(
+            root.querySelectorAll('.widget-grip, .widget-grip-edge, .widget-size-badge'),
             (el) => { if (el.parentElement) el.parentElement.removeChild(el); }
         );
     },
@@ -517,6 +662,9 @@ const LAYOUT = {
             const move = document.createElement('button');
             move.type = 'button';
             move.className = 'widget-grip-move';
+            // The handle is a 22x20 button, so without content it rendered as
+            // an empty box: there was nothing to indicate it was draggable.
+            move.innerHTML = '<i class="fas fa-grip-vertical"></i>';
             move.title = 'Drag to reorder';
             move.setAttribute('aria-label', 'Drag to reorder this widget within its section');
             grip.appendChild(move);
@@ -530,7 +678,85 @@ const LAYOUT = {
                 this._addResizeHandle(el, 'se', 'nwse-resize',
                     'Drag to change width and height', 'both', set);
             }
+
+            // ---- width stepper: exact sizes in one click ----
+            // Dragging can only ever land on whole columns, and the drag target
+            // is a 16px strip on the card's right edge. For "make this exactly
+            // two columns wide" that is a fiddly thing to do with a mouse, so
+            // the grip also carries a -/+ stepper and a live readout. Clicking
+            // is precise, keyboard-reachable, and needs no drag at all.
+            el.__layoutStepper = this._makeWidthStepper(el, grip, set);
         });
+    },
+
+    // The -/+ width control shown in a widget's grip. Returns a small object
+    // with sync(), which applyTo() calls after every geometry pass so the
+    // readout reflects the width the grid ACTUALLY applied (which can be less
+    // than the width requested, when the viewport is narrower).
+    _makeWidthStepper(el, grip, set) {
+        const self = this;
+
+        const stepper = document.createElement('span');
+        stepper.className = 'widget-stepper';
+
+        const dec = document.createElement('button');
+        dec.type = 'button';
+        dec.className = 'widget-stepper-btn';
+        dec.innerHTML = '&minus;';
+        dec.title = 'Narrower';
+        dec.setAttribute('aria-label', 'Make this widget narrower');
+
+        const readout = document.createElement('span');
+        readout.className = 'widget-stepper-readout';
+
+        const inc = document.createElement('button');
+        inc.type = 'button';
+        inc.className = 'widget-stepper-btn';
+        inc.innerHTML = '+';
+        inc.title = 'Wider';
+        inc.setAttribute('aria-label', 'Make this widget wider');
+
+        stepper.appendChild(dec);
+        stepper.appendChild(readout);
+        stepper.appendChild(inc);
+        grip.appendChild(stepper);
+
+        // The width currently in effect. Falls back to the authored span when
+        // nothing has been saved yet, so the first click on "+" takes a card
+        // from its designed width to one step wider rather than always
+        // starting from 1.
+        const currentW = function () {
+            const saved = self._sizes[self._keyOf(el)] || {};
+            return saved.w
+                ? self._effectiveW(saved.w, el)
+                : self._effectiveW(self._defaultSpan(el), el);
+        };
+        const nudge = function (delta) {
+            const metrics = self._gridMetrics(el);
+            const next = Math.max(self.MIN_W, Math.min(metrics.cols, currentW() + delta));
+            set('w', next);
+            self.applyTo(self._root, self._page());
+        };
+        dec.addEventListener('click', function (e) { e.stopPropagation(); nudge(-1); });
+        inc.addEventListener('click', function (e) { e.stopPropagation(); nudge(1); });
+
+        const self_ = {
+            sync: function (appliedW) {
+                const metrics = self._gridMetrics(el);
+                // Read the value back off the element rather than trusting the
+                // argument, so the readout can never disagree with the layout.
+                const actual = parseInt(String(el.style.gridColumn || '').replace(/\D+/g, ''), 10);
+                const w = isNaN(actual) ? (appliedW || currentW()) : actual;
+                readout.textContent = w + '/' + metrics.cols;
+                stepper.title = 'Width: ' + w + ' of ' + metrics.cols + ' columns';
+                // Disable at the ends, so the control explains itself instead of
+                // appearing to be broken.
+                dec.disabled = w <= self.MIN_W;
+                inc.disabled = w >= metrics.cols;
+            },
+        };
+        self_.sync();
+        return self_;
     },
 
     // Re-resolve a widget's key. The key is position-derived for widgets
@@ -671,81 +897,104 @@ const LAYOUT = {
         handle.setAttribute('role', 'separator');
         handle.tabIndex = 0;
         el.appendChild(handle);
+        // Stop the browser scrolling the page or panning the card when a finger
+        // is on the handle. Without this a touch drag scrolls instead of
+        // resizing, and the gesture appears to do nothing.
+        handle.style.touchAction = 'none';
 
-        // The width of one grid unit, measured from a sibling spanning a
-        // single column. Turns a pixel drag into column steps.
-        //
-        // Guarded because getComputedStyle is not available in every host
-        // (and a throw here would kill the whole drag on mousedown). Falls
-        // back to the section's own width divided by an assumed column count,
-        // which is close enough to snap to sensible steps.
-        const unitWidth = function () {
-            const section = el.parentElement;
-            const sibs = self._sectionWidgets(section).filter((s) => s !== el);
-            const probe = sibs[0] || el;
-            const probeRect = probe.getBoundingClientRect();
-            if (probeRect && probeRect.width) {
-                let gap = 0;
-                if (typeof window.getComputedStyle === 'function') {
-                    const cs = window.getComputedStyle(probe);
-                    gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
-                }
-                return Math.max(80, probeRect.width + gap);
-            }
-            // No measurable geometry (detached, or a stub DOM): assume the
-            // grid is the common 2-column case so the drag still responds.
-            const sectionRect = section.getBoundingClientRect
-                ? section.getBoundingClientRect()
-                : null;
-            const basis = sectionRect && sectionRect.width ? sectionRect.width : 800;
-            return Math.max(80, basis / 2);
+        // The size readout that follows the drag. Rendered as a child of the
+        // card so it inherits the card's own stacking context and cannot be
+        // clipped away by an ancestor's overflow.
+        const badge = document.createElement('div');
+        badge.className = 'widget-size-badge';
+        badge.setAttribute('aria-hidden', 'true');
+        const showBadge = function (text) {
+            badge.textContent = text;
+            el.appendChild(badge);
+        };
+        const hideBadge = function () {
+            if (badge.parentElement) badge.parentElement.removeChild(badge);
         };
 
-        handle.addEventListener('mousedown', function (e) {
+        // The width of one grid unit, measured from the SECTION rather than
+        // from a sibling card. The old sibling probe measured whatever card
+        // happened to come first, so on a row of wide cards one "step" was two
+        // columns wide and a small drag did nothing at all.
+        const unitWidth = function () {
+            return self._gridMetrics(el).unit;
+        };
+
+        // Pointer events, not mouse events: this is the only way one handler
+        // serves mouse, pen and touch. Capture keeps the gesture alive when the
+        // pointer outruns the 16px handle, which is what made a fast drag feel
+        // as though it had stopped responding.
+        handle.addEventListener('pointerdown', function (e) {
+            if (e.button !== undefined && e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
             const startX = e.clientX;
             const startY = e.clientY;
-            const startW = self._effectiveW((self._sizes[self._keyOf(el)] || {}).w);
+            const startW = self._effectiveW((self._sizes[self._keyOf(el)] || {}).w, el);
             const startH = el.getBoundingClientRect().height;
-            const uw = unitWidth();
+            // Re-read per move rather than once here: a resize changes the
+            // section's own width, and one stale unit makes the steps drift
+            // out from under the cursor.
+            const startUnit = unitWidth();
             // Suppress text selection for the sweep, otherwise dragging
             // highlights the whole dashboard.
             document.body.classList.add('widget-resizing');
             handle.classList.add('widget-resizing');
+            try { handle.setPointerCapture(e.pointerId); } catch (err) { /* older host */ }
 
+            let lastW = startW;
             const onMove = function (ev) {
+                if (ev.pointerId !== undefined && e.pointerId !== undefined &&
+                    ev.pointerId !== e.pointerId) return;
+                const metrics = self._gridMetrics(el);
                 if (mode !== 'height') {
-                    const steps = Math.round((ev.clientX - startX) / uw);
-                    set('w', Math.max(self.MIN_W, Math.min(self.MAX_W, startW + steps)));
+                    // One step is a column PLUS the gap it crosses, so that is
+                    // the distance a single step has to travel.
+                    const step = startUnit + metrics.gap;
+                    const steps = Math.round((ev.clientX - startX) / (step || startUnit));
+                    // Clamp to the grid's real column count, never MAX_W: an
+                    // over-wide span makes the browser add an implicit column
+                    // and shrink every other card on the page.
+                    lastW = Math.max(self.MIN_W, Math.min(metrics.cols, startW + steps));
+                    set('w', lastW);
                 }
                 if (mode !== 'width') {
                     const dy = ev.clientY - startY;
                     set('h', Math.max(self.MIN_H, Math.min(self.MAX_H,
                         Math.round((startH + dy) / self.HEIGHT_STEP) * self.HEIGHT_STEP)));
                 }
+                showBadge(lastW + ' of ' + metrics.cols +
+                    (metrics.cols === 1 ? ' column' : ' columns'));
                 self.applyTo(self._root, self._page());
             };
             const onUp = function () {
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
+                document.removeEventListener('pointermove', onMove);
+                document.removeEventListener('pointerup', onUp);
+                document.removeEventListener('pointercancel', onUp);
                 document.body.classList.remove('widget-resizing');
                 handle.classList.remove('widget-resizing');
+                hideBadge();
+                try { handle.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
             };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onUp);
+            document.addEventListener('pointercancel', onUp);
         });
 
         // Arrow keys, so neither dimension is mouse-only. Shift moves faster.
         handle.addEventListener('keydown', function (e) {
             const step = e.shiftKey ? 3 : 1;
             const s = self._sizes[self._keyOf(el)] || {};
-            const w = self._effectiveW(s.w);
+            const w = self._effectiveW(s.w, el);
             const h = s.h || el.getBoundingClientRect().height;
             if (e.key === 'ArrowLeft' && mode !== 'height') {
                 set('w', Math.max(self.MIN_W, w - step));
             } else if (e.key === 'ArrowRight' && mode !== 'height') {
-                set('w', Math.min(self.MAX_W, w + step));
+                set('w', Math.min(self._gridMetrics(el).cols, w + step));
             } else if (e.key === 'ArrowUp' && mode !== 'width') {
                 set('h', Math.max(self.MIN_H, h - self.HEIGHT_STEP * step));
             } else if (e.key === 'ArrowDown' && mode !== 'width') {
