@@ -306,7 +306,7 @@ a:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
   gap: 1.1rem;
-  margin-bottom: 2.25rem;
+  margin-bottom: 1.35rem;   /* was 2.25rem — a full card-height of dead space under the KPI row */
 }
 
 .stat-card {
@@ -746,7 +746,9 @@ tbody tr:last-child td {
 }
 
 .page-layout {
-  padding: 2.5rem 1.75rem 4rem;
+  /* Was 2.5rem / 1.75rem / 4rem. The page edge was padded further than any
+     card inside it, so the whole UI read as "too thick". */
+  padding: 1.5rem 1.5rem 2.5rem;
   max-width: 1180px;
   margin: 0 auto;
 }
@@ -757,7 +759,7 @@ tbody tr:last-child td {
   align-items: flex-end;
   border-bottom: 2px solid var(--ink);
   padding-bottom: 0.85rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;   /* was 2rem — 32px of air under every page title */
   gap: 1rem;
   flex-wrap: wrap;
 }
@@ -952,7 +954,7 @@ tbody tr:last-child td {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 1.1rem;
-  margin-bottom: 1.1rem;
+  margin-bottom: 0.85rem;   /* was 1.1rem — rhythm between stacked chart sections */
 }
 
 /* Faculty "Top Comments": complaints and appreciations side by side, so both
@@ -1669,7 +1671,7 @@ tbody tr:last-child td {
     grid-template-columns: 1fr;
   }
   .page-layout {
-    padding: 1.25rem 1rem 3rem;
+    padding: 1rem 1rem 2rem;   /* mirrors the tightened desktop rhythm */
   }
   .two-col {
     grid-template-columns: 1fr;
