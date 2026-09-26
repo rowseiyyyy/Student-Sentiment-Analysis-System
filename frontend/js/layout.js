@@ -267,6 +267,29 @@ const LAYOUT = {
         return Math.max(this.MIN_W, Math.min(this.MAX_W, w || this.MIN_W));
     },
 
+    // The span a widget should take when nothing has been saved for it.
+    //
+    // Read from the markup's own .span-2 / .span-3 class, so a card that was
+    // deliberately authored as wide (a table-heavy card, a full-width report)
+    // keeps that width on a first visit. Previously this always fell back to 1,
+    // which wrote an inline `grid-column: span 1` onto every widget and -- being
+    // inline -- silently beat the stylesheet, so those cards rendered at a
+    // third of the page width no matter what the CSS asked for.
+    //
+    // Clamped to the grid's real column count at this width, because this value
+    // is written INLINE and so outranks the stylesheet's media queries: a
+    // span-3 left unclamped on a 2-column grid would overflow it.
+    _defaultSpan(el) {
+        let span = 1;
+        if (el && el.classList) {
+            if (el.classList.contains('span-3')) span = 3;
+            else if (el.classList.contains('span-2')) span = 2;
+        }
+        const w = window.innerWidth;
+        const cols = w <= 780 ? 1 : (w <= 1200 ? 2 : 3);
+        return Math.max(1, Math.min(span, cols));
+    },
+
     applyTo(root, pageId) {
         if (!root || !pageId) return;
         // Apply the saved order first, so the geometry below is written onto
@@ -275,7 +298,10 @@ const LAYOUT = {
         this.entries(root, pageId).forEach((entry) => {
             const el = entry.el;
             const saved = this._sizes[entry.key];
-            el.style.gridColumn = 'span ' + this._effectiveW(saved ? saved.w : 1);
+            const w = saved && saved.w
+                ? this._effectiveW(saved.w)
+                : this._effectiveW(this._defaultSpan(el));
+            el.style.gridColumn = 'span ' + w;
             if (saved && saved.h && el.classList.contains('chart-card')) {
                 const h = Math.max(this.MIN_H, Math.min(this.MAX_H, saved.h));
                 el.style.setProperty('--widget-h', h + 'px');
