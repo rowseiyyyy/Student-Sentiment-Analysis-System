@@ -10,15 +10,20 @@
 
    Sizing model
    ------------
-   Width is stored in *grid units* (how many columns of the page's current
-   grid the widget spans), never in pixels. That is what makes a saved layout
-   survive a change to the page container's max-width: "span 2" means two
-   columns of whatever the grid is today, so widening the container re-flows
-   the layout instead of leaving stranded fixed-width columns. Height is
-   stored in pixels, snapped to a 10px step, and every widget honours it -- a
-   chart canvas takes it as an exact height, because a fixed height is what
-   makes a plot readable, while a text or table card takes it as a MINIMUM so
-   that making a card taller can never clip a row or a paragraph.
+   Width comes in two flavours, and which one a card uses decides how it
+   behaves when the container changes. A card nobody has touched keeps its
+   authored COLUMN span, so it reflows with the grid and stays responsive. Once
+   an admin resizes it by hand the width is stored in free PIXELS, snapped to
+   10px, and the card is pinned to that exact size. That is what "however I
+   want" has to mean -- a width is a width, not a multiple of a third of the
+   page -- but it is a deliberate trade: a hand-sized card no longer scales with
+   the grid, so the clamp in _widthFor() keeps it inside the grid and the phone
+   breakpoint drops the pixel width entirely.
+
+   Height is stored in pixels too, snapped to a 10px step, and every widget
+   honours it -- a chart canvas takes it as an exact height, because a fixed
+   height is what makes a plot readable, while a text or table card takes it as
+   a MINIMUM so that making a card taller can never clip a row or a paragraph.
 
    Both axes are editable three ways: drag the right edge (width), the bottom
    edge (height), or the bottom-right corner (both); use the -/+ steppers in
@@ -47,6 +52,13 @@ const LAYOUT = {
     MIN_H: 120,
     MAX_H: 900,
     HEIGHT_STEP: 10,
+
+    // Free pixel width. Once an admin resizes a card's width it is stored in
+    // pixels and snapped to this step, so the stored value is tidy rather than
+    // whatever the mouse happened to produce.
+    MIN_W_PX: 160,
+    MAX_W_PX: 4000,
+    PX_STEP: 10,
 
     // Used only when the authored column count cannot be read from the
     // stylesheet at all (a detached node, a cross-origin sheet). Matches the
@@ -408,6 +420,67 @@ const LAYOUT = {
         return count;
     },
 
+    // The width of the whole grid at its current size, in pixels. A card can
+    // never usefully be wider than this.
+    _fullWidthPx(metrics) {
+        return metrics.unit * metrics.cols + metrics.gap * (metrics.cols - 1);
+    },
+
+    // The `grid-column` value and pixel width for a widget, from whichever width
+    // mode it is in.
+    //
+    // Two modes coexist. A card nobody has touched keeps its authored column
+    // span, which is what makes the default layout responsive. A card the admin
+    // has resized carries `wp` and is sized in free pixels.
+    //
+    // The span is an INTEGER plus an explicit pixel width, and the integer is
+    // not optional decoration. It looked like a fractional span would do the job
+    // on its own -- `span 1.583` is exactly 700px on a 3-column grid -- but
+    // `grid-column: span <integer>` takes an integer, and a fractional value is
+    // invalid: the browser discards the ENTIRE declaration, the card silently
+    // falls back to whatever it had before, and the resize appears to do nothing.
+    // So the card is given the smallest integer span that can hold the requested
+    // width, and then sized to the exact pixel count within it.
+    _widthFor(el, saved) {
+        const metrics = this._gridMetrics(el);
+        // One column on a phone. The pixel width is dropped as well, not just
+        // clamped: a 900px width on a 380px screen would overflow the viewport.
+        if (window.innerWidth <= 900) return { css: 'span 1', px: null };
+        if (saved && saved.wp) {
+            const px = Math.max(this.MIN_W_PX,
+                Math.min(saved.wp, this._fullWidthPx(metrics)));
+            const track = metrics.unit + metrics.gap;
+            const n = Math.max(this.MIN_W, Math.min(metrics.cols, Math.ceil(px / track)));
+            return { css: 'span ' + n, px: px };
+        }
+        const w = saved && saved.w
+            ? this._effectiveW(saved.w, el)
+            : this._defaultSpan(el);
+        return { css: 'span ' + w, px: null };
+    },
+
+    // The width a card is currently rendering at, in pixels, whether that came
+    // from a saved pixel width or from a column span.
+    _currentPx(el) {
+        const metrics = this._gridMetrics(el);
+        const saved = this._sizes[this._keyOf(el)] || {};
+        if (saved.wp) {
+            return Math.max(this.MIN_W_PX,
+                Math.min(saved.wp, this._fullWidthPx(metrics)));
+        }
+        // No pixel width saved: read the span that was actually applied and
+        // convert it, so the two representations can never disagree. The result
+        // is snapped to the pixel step, which is what makes the stored value
+        // tidy; the cost is that the FIRST nudge out of column mode can differ
+        // from the nominal step by up to half a step (5px), because the column
+        // width it came from is rarely a multiple of 10. Every subsequent step
+        // is exact.
+        const applied = parseFloat(String(el.style.gridColumn || '').replace(/[^0-9.]/g, ''));
+        const n = isNaN(applied) ? this._defaultSpan(el) : applied;
+        const px = n * metrics.unit + (n - 1) * metrics.gap;
+        return Math.round(px / this.PX_STEP) * this.PX_STEP;
+    },
+
     // The span a widget should take when nothing has been saved for it.
     //
     // Read from the markup's own .span-2 / .span-3 class, so a card that was
@@ -440,10 +513,22 @@ const LAYOUT = {
         this.entries(root, pageId).forEach((entry) => {
             const el = entry.el;
             const saved = this._sizes[entry.key];
-            const w = saved && saved.w
-                ? this._effectiveW(saved.w, el)
-                : this._effectiveW(this._defaultSpan(el), el);
-            el.style.gridColumn = 'span ' + w;
+            const width = this._widthFor(el, saved);
+            el.style.gridColumn = width.css;
+            // The pixel width is written and REMOVED as one pair. Leaving a
+            // stale inline width behind would keep a card at its old size after
+            // it goes back to column mode, or after the viewport collapses to
+            // one column where a pixel width would overflow the screen.
+            if (width.px) {
+                el.style.width = width.px + 'px';
+                // Grid items stretch to their track by default; with an explicit
+                // width that resolves to start anyway, but stating it keeps the
+                // card left-aligned in its span rather than relying on that.
+                el.style.justifySelf = 'start';
+            } else {
+                el.style.removeProperty('width');
+                el.style.removeProperty('justify-self');
+            }
             // Height is honoured on every card, not only chart cards.
             //
             // It used to be gated on .chart-card because a fixed height on a
@@ -460,7 +545,7 @@ const LAYOUT = {
             }
             // Keep the editor's readout in step with the geometry actually
             // applied, so the stepper can never claim a width the grid refused.
-            if (el.__layoutStepper) el.__layoutStepper.sync(w);
+            if (el.__layoutStepper) el.__layoutStepper.sync();
         });
     },
 
@@ -747,24 +832,20 @@ const LAYOUT = {
         const widthCtl = build('width');
         const heightCtl = build('height');
 
-        // ---- width, in grid columns ----
-        // Falls back to the authored span when nothing has been saved yet, so
-        // the first click takes a card from its designed width one step wider
-        // rather than always starting from 1.
-        const currentW = function () {
-            const saved = self._sizes[self._keyOf(el)] || {};
-            return saved.w
-                ? self._effectiveW(saved.w, el)
-                : self._effectiveW(self._defaultSpan(el), el);
-        };
+        // ---- width, in free pixels ----
+        // Steps in pixels, not columns: an admin who wants 700px rather than
+        // "two thirds of a column" should not have to hunt for it, and the
+        // fractional span this is stored as keeps the row free of dead space.
         const nudgeW = function (delta) {
             const metrics = self._gridMetrics(el);
-            const next = Math.max(self.MIN_W, Math.min(metrics.cols, currentW() + delta));
-            set('w', next);
+            const snapped = Math.round(
+                (self._currentPx(el) + delta) / self.PX_STEP) * self.PX_STEP;
+            set('wp', Math.max(self.MIN_W_PX,
+                Math.min(self._fullWidthPx(metrics), snapped)));
             self.applyTo(self._root, self._page());
         };
-        widthCtl.dec.addEventListener('click', function (e) { e.stopPropagation(); nudgeW(-1); });
-        widthCtl.inc.addEventListener('click', function (e) { e.stopPropagation(); nudgeW(1); });
+        widthCtl.dec.addEventListener('click', function (e) { e.stopPropagation(); nudgeW(-self.PX_STEP * 4); });
+        widthCtl.inc.addEventListener('click', function (e) { e.stopPropagation(); nudgeW(self.PX_STEP * 4); });
 
         // ---- height, in pixels ----
         // The saved height is authoritative when there is one. Otherwise the
@@ -784,22 +865,21 @@ const LAYOUT = {
         heightCtl.inc.addEventListener('click', function (e) { e.stopPropagation(); nudgeH(self.HEIGHT_STEP * 2); });
 
         const self_ = {
-            sync: function (appliedW) {
+            sync: function () {
                 const metrics = self._gridMetrics(el);
-                // Read the value back off the element rather than trusting the
-                // argument, so the readout can never disagree with the layout.
-                const actual = parseInt(String(el.style.gridColumn || '').replace(/\D+/g, ''), 10);
-                const w = isNaN(actual) ? (appliedW || currentW()) : actual;
-                // Columns AND the pixel width they come to, so the admin can
-                // see both the responsive unit and the real size.
-                const px = Math.round(metrics.unit * w + metrics.gap * (w - 1));
-                widthCtl.readout.textContent = w + '/' + metrics.cols;
-                widthCtl.box.title = 'Width: ' + w + ' of ' + metrics.cols +
-                    ' columns (' + px + 'px). Drag the right edge to resize.';
+                // Read the geometry back off the element rather than trusting
+                // an argument, so the readout can never disagree with the
+                // layout -- including after a clamp narrowed the width.
+                const px = self._currentPx(el);
+                const cols = (px + metrics.gap) / (metrics.unit + metrics.gap);
+                widthCtl.readout.textContent = px + 'px';
+                widthCtl.box.title = 'Width: ' + px + 'px (' + cols.toFixed(1) +
+                    ' of ' + metrics.cols + ' columns). Drag the right edge, ' +
+                    'or use the -/+ buttons. Free pixel sizing.';
                 // Disable at the ends, so the control explains itself instead of
                 // appearing to be broken.
-                widthCtl.dec.disabled = w <= self.MIN_W;
-                widthCtl.inc.disabled = w >= metrics.cols;
+                widthCtl.dec.disabled = px <= self.MIN_W_PX;
+                widthCtl.inc.disabled = px >= Math.floor(self._fullWidthPx(metrics));
 
                 const h = currentH();
                 heightCtl.readout.textContent = h + 'px';
@@ -945,9 +1025,11 @@ const LAYOUT = {
     },
 
     // Edge/corner resize drag. `mode` is 'width', 'height' or 'both'.
-    // Width is stored in grid units, so a horizontal drag snaps to whole
-    // columns rather than to an arbitrary pixel: the unit IS a column, and a
-    // fractional span would have no meaning on reload.
+    // The width follows the pointer 1:1 in pixels -- free sizing, no column
+    // snapping -- and is stored as a pixel width. What it is written to the
+    // element is a FRACTIONAL span (see _spanForPx), so the card occupies
+    // exactly the width asked for and the next card starts right where it ends,
+    // with no dead strip at the end of the row.
     _addResizeHandle(el, corner, cursor, title, mode, set) {
         const self = this;
         const handle = document.createElement('div');
@@ -984,6 +1066,34 @@ const LAYOUT = {
             return self._gridMetrics(el).unit;
         };
 
+        // Focus a handle and use the arrow keys: a pointer-only resize would be
+        // unreachable without a mouse. Shift moves faster.
+        handle.addEventListener('keydown', function (e) {
+            const step = e.shiftKey ? 3 : 1;
+            const saved = self._sizes[self._keyOf(el)] || {};
+            const h = saved.h || el.getBoundingClientRect().height;
+            const nudgePx = function (delta) {
+                const m = self._gridMetrics(el);
+                const next = self._currentPx(el) + delta;
+                const snapped = Math.round(next / self.PX_STEP) * self.PX_STEP;
+                set('wp', Math.max(self.MIN_W_PX,
+                    Math.min(self._fullWidthPx(m), snapped)));
+            };
+            if (e.key === 'ArrowLeft' && mode !== 'height') {
+                nudgePx(-self.PX_STEP * 4 * step);
+            } else if (e.key === 'ArrowRight' && mode !== 'height') {
+                nudgePx(self.PX_STEP * 4 * step);
+            } else if (e.key === 'ArrowUp' && mode !== 'width') {
+                set('h', Math.max(self.MIN_H, h - self.HEIGHT_STEP * step));
+            } else if (e.key === 'ArrowDown' && mode !== 'width') {
+                set('h', Math.min(self.MAX_H, h + self.HEIGHT_STEP * step));
+            } else {
+                return;
+            }
+            e.preventDefault();
+            self.applyTo(self._root, self._page());
+        });
+
         // Pointer events, not mouse events: this is the only way one handler
         // serves mouse, pen and touch. Capture keeps the gesture alive when the
         // pointer outruns the 16px handle, which is what made a fast drag feel
@@ -994,49 +1104,42 @@ const LAYOUT = {
             e.stopPropagation();
             const startX = e.clientX;
             const startY = e.clientY;
-            const startW = self._effectiveW((self._sizes[self._keyOf(el)] || {}).w, el);
+            // Free pixel sizing: the card is grabbed at whatever width it is
+            // currently rendering at, in pixels, and follows the pointer 1:1.
+            // A card still on its authored column span is converted to pixels
+            // on first drag, which is the moment it stops being responsive.
+            const startPx = self._currentPx(el);
             const startH = el.getBoundingClientRect().height;
-            // Re-read per move rather than once here: a resize changes the
-            // section's own width, and one stale unit makes the steps drift
-            // out from under the cursor.
-            const startUnit = unitWidth();
             // Suppress text selection for the sweep, otherwise dragging
             // highlights the whole dashboard.
             document.body.classList.add('widget-resizing');
             handle.classList.add('widget-resizing');
             try { handle.setPointerCapture(e.pointerId); } catch (err) { /* older host */ }
 
-            let lastW = startW;
+            let lastPx = startPx;
+            let lastH = startH;
+            const clampPx = function (value) {
+                const m = self._gridMetrics(el);
+                const snapped = Math.round(value / self.PX_STEP) * self.PX_STEP;
+                return Math.max(self.MIN_W_PX, Math.min(self._fullWidthPx(m), snapped));
+            };
             const onMove = function (ev) {
                 if (ev.pointerId !== undefined && e.pointerId !== undefined &&
                     ev.pointerId !== e.pointerId) return;
-                const metrics = self._gridMetrics(el);
                 if (mode !== 'height') {
-                    // One step is a column PLUS the gap it crosses, so that is
-                    // the distance a single step has to travel.
-                    const step = startUnit + metrics.gap;
-                    const steps = Math.round((ev.clientX - startX) / (step || startUnit));
-                    // Clamp to the grid's real column count, never MAX_W: an
-                    // over-wide span makes the browser add an implicit column
-                    // and shrink every other card on the page.
-                    lastW = Math.max(self.MIN_W, Math.min(metrics.cols, startW + steps));
-                    set('w', lastW);
+                    lastPx = clampPx(startPx + (ev.clientX - startX));
+                    set('wp', lastPx);
                 }
                 if (mode !== 'width') {
-                    const dy = ev.clientY - startY;
-                    set('h', Math.max(self.MIN_H, Math.min(self.MAX_H,
-                        Math.round((startH + dy) / self.HEIGHT_STEP) * self.HEIGHT_STEP)));
-                }
-                if (mode === 'height') {
-                    // A height drag should report the axis being dragged, not
-                    // the width it is leaving alone.
-                    const h = Math.max(self.MIN_H, Math.min(self.MAX_H,
+                    lastH = Math.max(self.MIN_H, Math.min(self.MAX_H,
                         Math.round((startH + (ev.clientY - startY)) / self.HEIGHT_STEP) * self.HEIGHT_STEP));
-                    showBadge(h + 'px tall');
-                } else {
-                    showBadge(lastW + ' of ' + metrics.cols +
-                        (metrics.cols === 1 ? ' column' : ' columns'));
+                    set('h', lastH);
                 }
+                // Report the axis actually being dragged, so a height drag is
+                // not reported in widths and vice versa.
+                if (mode === 'height') showBadge(lastH + 'px tall');
+                else if (mode === 'width') showBadge(lastPx + 'px wide');
+                else showBadge(lastPx + ' × ' + lastH + ' px');
                 self.applyTo(self._root, self._page());
             };
             const onUp = function () {
@@ -1053,27 +1156,6 @@ const LAYOUT = {
             document.addEventListener('pointercancel', onUp);
         });
 
-        // Arrow keys, so neither dimension is mouse-only. Shift moves faster.
-        handle.addEventListener('keydown', function (e) {
-            const step = e.shiftKey ? 3 : 1;
-            const s = self._sizes[self._keyOf(el)] || {};
-            const w = self._effectiveW(s.w, el);
-            const h = s.h || el.getBoundingClientRect().height;
-            if (e.key === 'ArrowLeft' && mode !== 'height') {
-                set('w', Math.max(self.MIN_W, w - step));
-            } else if (e.key === 'ArrowRight' && mode !== 'height') {
-                set('w', Math.min(self._gridMetrics(el).cols, w + step));
-            } else if (e.key === 'ArrowUp' && mode !== 'width') {
-                set('h', Math.max(self.MIN_H, h - self.HEIGHT_STEP * step));
-            } else if (e.key === 'ArrowDown' && mode !== 'width') {
-                set('h', Math.min(self.MAX_H, h + self.HEIGHT_STEP * step));
-            } else {
-                return;
-            }
-            e.preventDefault();
-            self.applyTo(self._root, self._page());
-        });
     },
-
 };
 if (typeof window !== 'undefined') window.LAYOUT = LAYOUT;

@@ -105,8 +105,17 @@ def save_dashboard_layout(
             detail="Layout name in the body must match the name in the path.",
         )
 
+    # Rebuilt field by field rather than dumped straight from the model, so
+    # nothing the schema does not declare can reach the stored document.
+    # `wp` (a free pixel width) is written only when present, which keeps a
+    # layout nobody has hand-resized the same shape it always was.
     document = {
-        key: {"w": size.w, "h": size.h, "order": size.order}
+        key: {
+            "w": size.w,
+            "h": size.h,
+            "order": size.order,
+            **({"wp": size.wp} if size.wp is not None else {}),
+        }
         for key, size in payload.widgets.items()
     }
     row = db.query(DashboardLayout).filter(DashboardLayout.name == name).first()

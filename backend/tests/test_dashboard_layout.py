@@ -238,7 +238,13 @@ def test_full_width_and_tall_height_are_accepted(client):
     )
     assert response.status_code == 200
     widgets = response.json()["widgets"]
-    assert widgets["wide"] == {"w": 6, "h": 1600, "order": 0}
+    # Field by field rather than by dict equality: the response now also carries
+    # `wp`, the optional free pixel width, which is None for a card that was
+    # never resized by hand.
+    assert widgets["wide"]["w"] == 6
+    assert widgets["wide"]["h"] == 1600
+    assert widgets["wide"]["order"] == 0
+    assert widgets["wide"]["wp"] is None
     assert widgets["small"]["h"] == 120
 
 
@@ -258,6 +264,103 @@ def test_height_above_1600_is_still_rejected(client):
         json={"name": "admin_analytics", "widgets": {"a": {"w": 1, "h": 2000}}},
     )
     assert response.status_code == 422
+
+
+# ------------------------------------------------- free pixel width (``wp``) ----
+
+
+def test_pixel_width_round_trips(client):
+    """A hand-resized card stores its width in pixels. The field has to survive
+    the save, because the API rebuilds each widget from a fixed field list --
+    an unlisted field would be silently dropped and the card would snap back."""
+    admin = _admin(client)
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=admin,
+        json={
+            "name": "admin_analytics",
+            "widgets": {"a": {"w": 1, "h": 300, "order": 0, "wp": 730}},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["widgets"]["a"]["wp"] == 730
+
+    # And it comes back on a read, not just on the save response. The read is
+    # what parses the stored JSON, so this is the assertion that would fail if
+    # the serializer dropped the field.
+    read = client.get("/api/v1/dashboard-layout/admin_analytics", headers=admin)
+    assert read.json()["widgets"]["a"]["wp"] == 730
+
+
+def test_pixel_width_is_snapped_to_ten(client):
+    """A drag produces an arbitrary pixel; the stored value is tidied to a 10px
+    step, exactly as the height already is."""
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=_admin(client),
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 1, "h": 300, "wp": 731}}},
+    )
+    assert response.status_code == 200
+    assert response.json()["widgets"]["a"]["wp"] == 730
+
+
+def test_omitted_pixel_width_is_optional(client):
+    """A card nobody resized by hand has no ``wp``. It must stay optional, and
+    must not be written into the stored document as a null."""
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=_admin(client),
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 2, "h": 300}}},
+    )
+    assert response.status_code == 200
+    assert response.json()["widgets"]["a"]["wp"] is None
+
+
+def test_absurd_pixel_width_is_rejected(client):
+    """The server is the backstop against a hand-crafted nonsense value, even
+    though the frontend clamps to the real grid width."""
+    # One login for both requests: _admin() creates the user, and calling it
+    # twice in a test would collide on the unique email.
+    admin = _admin(client)
+    response = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=admin,
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 1, "h": 300, "wp": 99999}}},
+    )
+    assert response.status_code == 422
+
+    too_narrow = client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=admin,
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 1, "h": 300, "wp": 10}}},
+    )
+    assert too_narrow.status_code == 422
+
+
+def test_pixel_width_reaches_the_stored_document(client):
+    """Guards the serializer specifically. The API rebuilds each widget from a
+    fixed field list, so `wp` has to be added to that list explicitly -- without
+    it the save would answer 200, the read would look fine, and every resized
+    card would silently snap back to its column width on the next page load."""
+    admin = _admin(client)
+    client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=admin,
+        json={"name": "admin_analytics", "widgets": {"a": {"w": 1, "h": 300, "wp": 640}}},
+    )
+    # A second read goes back through the database, not the response model, so
+    # this fails if the field never made it into the stored JSON.
+    read = client.get("/api/v1/dashboard-layout/admin_analytics", headers=admin)
+    assert read.json()["widgets"]["a"]["wp"] == 640
+
+    # And a card with no pixel width must not gain a null in storage.
+    client.put(
+        "/api/v1/dashboard-layout/admin_analytics",
+        headers=admin,
+        json={"name": "admin_analytics", "widgets": {"b": {"w": 2, "h": 300}}},
+    )
+    read2 = client.get("/api/v1/dashboard-layout/admin_analytics", headers=admin)
+    assert read2.json()["widgets"]["b"]["wp"] is None
 
 
 # ------------------------------------------------------------------ reset ----

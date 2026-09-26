@@ -11,6 +11,12 @@ from pydantic_core import PydanticCustomError
 # half-page column; MAX_H is 1600 for a full-height chart on a tall monitor.
 MIN_W, MAX_W = 1, 6
 MIN_H, MAX_H = 120, 1600
+# Free pixel width. Once an admin resizes a card by hand the width is stored in
+# pixels (`wp`) instead of grid units, so the bounds are pixel bounds. MIN_W_PX
+# is below one column on a laptop and MAX_W_PX is well past any sane monitor,
+# so the server is only a backstop against a nonsense value; the frontend clamps
+# to the real grid width, which the server cannot know.
+MIN_W_PX, MAX_W_PX = 120, 4000
 # Position within the widget's own section, 0-based. Sections are independent:
 # reordering is scoped to a section so the page's narrative order is preserved.
 MAX_ORDER = 500
@@ -27,6 +33,12 @@ class WidgetSize(BaseModel):
     widget spans), not pixels. Storing units rather than pixels is what lets a
     saved layout survive a change to the page container's max-width.
 
+    ``wp`` is a free pixel width, and takes precedence over ``w`` when present.
+    It exists because an admin resizing a card by hand wants an exact size, not
+    a whole number of columns. Optional: a card that has not been resized by hand
+    has no ``wp`` and stays on its authored column span, which is what keeps the
+    default layout responsive.
+
     ``order`` is the widget's 0-based position within its own section. It is
     optional: a layout saved before reordering existed has no order, and such a
     widget keeps whatever position the page markup gives it rather than
@@ -36,12 +48,22 @@ class WidgetSize(BaseModel):
     w: int = Field(ge=MIN_W, le=MAX_W)
     h: int = Field(ge=MIN_H, le=MAX_H)
     order: int | None = Field(default=None, ge=0, le=MAX_ORDER)
+    wp: int | None = Field(default=None, ge=MIN_W_PX, le=MAX_W_PX)
 
     @field_validator("h")
     @classmethod
     def _height_multiple_of_10(cls, v: int) -> int:
         # Round to a 10px step so a drag-to-resize gesture produces a tidy
         # stored value instead of an arbitrary pixel.
+        return int(round(v / 10.0) * 10)
+
+    @field_validator("wp")
+    @classmethod
+    def _width_multiple_of_10(cls, v: int | None) -> int | None:
+        # Same reasoning as the height: a free pixel width is still snapped, so
+        # a 1px jitter from the mouse cannot be stored.
+        if v is None:
+            return None
         return int(round(v / 10.0) * 10)
 
 
