@@ -137,9 +137,56 @@ def test_import_combined_csv_auto_detected(mock_process, client, tmp_path):
         assert r["course"] == "BS IT"
         assert r["share_your_thoughts"]
         assert r["ratings"]
+        # The combined importer must not emit an evaluatee key either.
+        assert "evaluatee" not in r
+
     faculty = next(r for r in rows if r["category"] == "Faculty")
     assert faculty["ratings"] == {"teaching_quality": 4}
 
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_combined_ignores_a_professor_name_column(mock_process, client, tmp_path):
+    """A per-category professor-name column in a combined file is ignored.
+
+    The combined importer used to capture this for the Faculty prefix. It no
+    longer does, and an unrecognised per-category column must be dropped
+    without shifting the other columns or costing the row its ratings.
+    """
+    captured = {}
+
+    def fake_process(db, clean_rows, run_prediction=True, **kwargs):
+        captured["clean_rows"] = clean_rows
+        return type("R", (), {"total_rows": len(clean_rows), "imported": len(clean_rows), "failed": 0, "errors": []})()
+
+    mock_process.side_effect = fake_process
+    token = _register_admin_and_login(client)
+    csv_path = tmp_path / "combined_with_name.csv"
+    csv_path.write_text(
+        "Course,"
+        "Professor_ProfessorName,"
+        "Professor_TeachingQuality,"
+        "Professor_Comments,"
+        "Staff_Comments\n"
+        "BS IT,Prof. Cruz,4,Very clear teaching.,Good service.\n"
+    )
+
+    with open(csv_path, "rb") as f:
+        response = client.post(
+            "/api/v1/imports/evaluations",
+            files={"file": ("combined_with_name.csv", f, "text/csv")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 201
+    rows = captured["clean_rows"]
+    faculty = [r for r in rows if r["category"] == "Faculty"]
+    assert faculty, "the Faculty row should still be imported"
+    row = faculty[0]
+    assert row["ratings"] == {"teaching_quality": 4}
+    assert row["share_your_thoughts"] == "Very clear teaching."
+    # "Prof. Cruz" is dropped, and the course column is not misread as a name.
+    assert "evaluatee" not in row
+    assert row["course"] == "BS IT"
 
 
 @patch("app.api.imports.process_imported_evaluations")
@@ -366,12 +413,12 @@ def _post_single(client, tmp_path, csv_text, category, filename="single.csv"):
 
 
 @patch("app.api.imports.process_imported_evaluations")
-def test_import_single_faculty_keeps_ratings_evaluatee_and_course(
+def test_import_single_faculty_keeps_ratings_and_course_but_ignores_professor_name(
     mock_process, client, tmp_path
 ):
-    """Selecting the Professor/Faculty form must keep the Likert ratings, the
-    professor column and the row's Course — not fall back to a comment-only
-    evaluation."""
+    """Selecting the Professor/Faculty form must keep the Likert ratings and the
+    row's Course, and must NOT import the professor name: the form asks about
+    "the professors" collectively, so an individual name is not collected."""
     captured = {}
     mock_process.side_effect = _capture_process(captured)
 
@@ -383,16 +430,18 @@ def test_import_single_faculty_keeps_ratings_evaluatee_and_course(
     row = captured["clean_rows"][0]
     assert row["category"] == "Faculty"
     assert row["course"] == "BSCS"
-    assert row["evaluatee"] == "Prof. Cruz"
     assert row["ratings"] == {"mastery": 5}
+    # No evaluatee key at all: the field is gone from the clean-row contract.
+    assert "evaluatee" not in row
 
 
 @patch("app.api.imports.process_imported_evaluations")
-def test_import_single_faculty_rating_question_is_not_the_evaluatee(
+def test_import_single_faculty_rating_question_is_not_stolen_by_a_name_column(
     mock_process, client, tmp_path
 ):
-    """A rating question that mentions "professor" must never be mistaken for
-    the professor-name column, even when it comes first in the header row."""
+    """A 'Professor Name' column must not hijack a rating question that mentions
+    "professor", and must not be imported at all. The rating still has to land
+    in the ratings slot."""
     captured = {}
     mock_process.side_effect = _capture_process(captured)
 
@@ -408,17 +457,18 @@ def test_import_single_faculty_rating_question_is_not_the_evaluatee(
 
     assert response.status_code == 201
     row = captured["clean_rows"][0]
-    assert row["evaluatee"] == "Prof. Cruz"
     assert row["ratings"] == {"mastery": 5}
     assert row["course"] == "BSCS"
+    # "Prof. Cruz" is discarded rather than captured anywhere.
+    assert "evaluatee" not in row
 
 
 @patch("app.api.imports.process_imported_evaluations")
-def test_import_single_course_column_is_not_claimed_as_evaluatee(
+def test_import_single_course_column_is_never_treated_as_a_person_name(
     mock_process, client, tmp_path
 ):
-    """A lone 'Course' column must never be reused as the evaluatee column —
-    otherwise the course value is rendered as the professor's name."""
+    """A lone 'Course' column resolves to course. With the professor-name
+    field gone there is no second column competing for it."""
     captured = {}
     mock_process.side_effect = _capture_process(captured)
 
@@ -433,7 +483,7 @@ def test_import_single_course_column_is_not_claimed_as_evaluatee(
     assert response.status_code == 201
     row = captured["clean_rows"][0]
     assert row["course"] == "BSCS"
-    assert row["evaluatee"] is None
+    assert "evaluatee" not in row
 
 
 @patch("app.api.imports.process_imported_evaluations")

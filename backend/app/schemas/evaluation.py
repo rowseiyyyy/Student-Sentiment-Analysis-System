@@ -52,6 +52,9 @@ class EvaluationCreate(BaseModel):
     # `comment` required here would silently defeat that check with an
     # early 422 before the handler ever runs.
     comment: str | None = Field(default=None, max_length=5000)
+    # Accepted but ignored. The form asks about "the professors" collectively
+    # and no longer collects an individual name. Kept on the schema so an older
+    # client still sending the field does not get a 422.
     evaluatee: str | None = None
     share_your_thoughts: str | None = None
     # Likert-scale ratings: mapping of question/aspect -> 1-5 score.

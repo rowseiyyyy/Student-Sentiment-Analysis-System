@@ -311,7 +311,8 @@ const STUDENT = {
                 const payload = {
                     category: this.categoryNames[cat] || cat,
                     comment: null,
-                    evaluatee: null,
+                    // No professor name is collected: the Professors section
+                    // asks about the faculty collectively.
                     share_your_thoughts: data.share_your_thoughts || null,
                     ratings: data.ratings || null,
                     student_id: null,

@@ -10,7 +10,6 @@ normal student submission through the live form:
     exactly like app.api.evaluation.submit_evaluation does. Rows with no
     Student ID are imported anonymously (user_id = None), same as the
     live anonymous flow.
-  - Evaluatee (professor name)         -> Evaluation.evaluatee
   - Open-ended comment                 -> Evaluation.share_your_thoughts
     (NOT Evaluation.comment — that field is reserved for the
     Likert-only fallback text, matching submit_evaluation's behavior).
@@ -75,11 +74,15 @@ COMMENT_COL_KEYWORDS = [
     "your suggestions", "open-ended feedback", "student feedback",
 ]
 
-EVALUATEE_COL_KEYWORDS = [
-    "evaluatee", "professor", "professor name", "instructor",
-    "instructor name", "select the professor", "name of professor",
-    "staff name", "subject/course handled",
-]
+# NOTE: EVALUATEE_COL_KEYWORDS and the evaluatee column-detection helpers were
+# removed. The evaluation form asks about "the professors" collectively and no
+# longer collects an individual professor's name, so a name column arriving in
+# a CSV is no longer mapped to Evaluation.evaluatee.
+#
+# The Evaluation.evaluatee COLUMN and its existing values are deliberately
+# kept: rows imported before this change still carry a name, and it remains
+# searchable in the responses list. Only the collection path is gone. Dropping
+# the column would need a migration and would destroy historical data.
 
 STUDENT_ID_COL_KEYWORDS = [
     "student id", "student number", "student no", "id number", "id no",
@@ -324,7 +327,7 @@ def _resolve_combined_aspect(category: str, remainder: str) -> str | None:
     (``The professors deliver lessons with good teaching quality``).
 
     Returns ``None`` when the text does not describe a rating question, so the
-    caller can then try the comment / evaluatee column checks.
+    caller can then try the comment column check.
     """
     compact = _compact(remainder)
     if not compact:
@@ -340,28 +343,9 @@ def _resolve_combined_aspect(category: str, remainder: str) -> str | None:
     return None
 
 
-# Name-like combined headers that identify the professor evaluated.
-_EVALUATEE_EXACT_HEADERS = {
-    "professor", "professors", "professorname", "professorsname",
-    "instructor", "instructorname", "evaluatee", "nameofprofessor",
-    "name", "staffname",
-}
-
-
-def _looks_like_evaluatee_column(remainder: str) -> bool:
-    """True when a combined column names the professor evaluated.
-
-    Deliberately conservative: only a short, name-like header ("Professor",
-    "Professor Name", "Evaluatee") qualifies, so an unrecognised rating
-    question that merely mentions "professor" is not hijacked into the
-    evaluatee slot.
-    """
-    compact = _compact(remainder)
-    if not compact:
-        return False
-    if compact in _EVALUATEE_EXACT_HEADERS:
-        return True
-    return compact.endswith("name") and len(compact) <= 30
+# The professor-name column detection that used to live here
+# (_EVALUATEE_EXACT_HEADERS / _looks_like_evaluatee_column) was removed with
+# EVALUATEE_COL_KEYWORDS. Nothing imports a professor name any more.
 
 
 # ---------------------------------------------------------------------------
@@ -452,21 +436,14 @@ def resolve_column_map(headers: list[str], category: str) -> dict[str, Any]:
     ratings = _find_rating_columns(headers, category)
     rating_headers = set(ratings.values())
 
-    # Course is resolved before Evaluatee: EVALUATEE_COL_KEYWORDS contains
-    # "subject/course handled", and _find_column also matches in the reverse
-    # direction (a header contained in a keyword), so a plain "Course" column
-    # would otherwise be claimed by BOTH fields — and on a file with no
-    # professor column the course value would be rendered as the professor.
+    # Course is resolved on its own. A "Course" column used to compete with
+    # the removed evaluatee column for ownership; with that field gone there is
+    # nothing to exclude.
     course_col = _find_column(headers, COURSE_COL_KEYWORDS)
-    evaluatee_pool = [
-        h for h in headers
-        if h != course_col and h not in rating_headers
-    ]
 
     return {
         "category": _find_column(headers, CATEGORY_COL_KEYWORDS),
         "comment": comment_col,
-        "evaluatee": _find_column(evaluatee_pool, EVALUATEE_COL_KEYWORDS),
         "student_id": _find_column(headers, STUDENT_ID_COL_KEYWORDS),
         "course": course_col,
         "year_level": _find_column(headers, YEAR_LEVEL_COL_KEYWORDS),
@@ -502,8 +479,8 @@ def _resolve_combined_columns(headers: list[str]) -> dict[str, Any]:
     """Map a combined file's columns into a structured description.
 
     Returns a dict with top-level identity columns (respondent_id, course,
-    year_level, timestamp) and a per-category breakdown of rating headers,
-    comment header, and (for Faculty) an optional evaluatee header.
+    year_level, timestamp) and a per-category breakdown of rating headers
+    and a comment header.
     """
     col_map: dict[str, Any] = {
         "respondent_id": None,
@@ -520,7 +497,7 @@ def _resolve_combined_columns(headers: list[str]) -> dict[str, Any]:
             # derive the aspect key from the portion after the prefix.
             remainder = h[len(prefix):]
             cat_cols = col_map["categories"].setdefault(
-                category, {"ratings": {}, "comment": None, "evaluatee": None}
+                category, {"ratings": {}, "comment": None}
             )
             # A rating column is matched FIRST so a question that happens to
             # contain a comment keyword ("...constructive feedback...") is
@@ -532,10 +509,9 @@ def _resolve_combined_columns(headers: list[str]) -> dict[str, Any]:
             # or Google Forms' "Share your thoughts".
             elif _find_column([remainder], COMMENT_COL_KEYWORDS) is not None:
                 cat_cols["comment"] = h
-            # An optional column naming the professor evaluated (Faculty only).
-            elif category == "Faculty" and _looks_like_evaluatee_column(remainder):
-                cat_cols["evaluatee"] = h
-            # any other remainder is a stray/unknown column and is ignored
+            # A professor-name column used to be captured here. It is no
+            # longer collected, so such a column is now an unrecognised
+            # remainder and is ignored along with any other stray column.
         else:
             # top-level identity columns (not prefixed by a category)
             if _normalise_header(h) == "respondent_id":
@@ -590,10 +566,6 @@ def _parse_combined_row(
         if cat_cols.get("comment"):
             raw_comment = (row.get(cat_cols["comment"]) or "").strip()
 
-        evaluatee = None
-        if cat_cols.get("evaluatee"):
-            evaluatee = (row.get(cat_cols["evaluatee"]) or "").strip() or None
-
         if not raw_comment and not ratings:
             continue  # no data for this category -> skip silently
         any_category_data = True
@@ -625,7 +597,6 @@ def _parse_combined_row(
         clean_rows.append({
             "category": category,
             "share_your_thoughts": raw_comment or None,
-            "evaluatee": evaluatee if category == "Faculty" else None,
             "ratings": ratings or None,
             "student_id": student_id,
             "course": course,
@@ -784,7 +755,7 @@ def validate_imported_data(
         the rating-question columns.
 
     Each clean row is a dict ready for process_imported_evaluations:
-    category, share_your_thoughts, evaluatee, ratings, student_id,
+    category, share_your_thoughts, ratings, student_id,
     course, year_level, timestamp.
     """
     if not rows:
@@ -859,12 +830,6 @@ def validate_imported_data(
                     f"'{category}' for this import — skipped to avoid miscategorizing it."
                 )
 
-        evaluatee = None
-        if col_map["evaluatee"]:
-            evaluatee = (row.get(col_map["evaluatee"]) or "").strip() or None
-            if category != "Faculty":
-                evaluatee = None  # evaluatee is only meaningful for Faculty
-
         student_id = (row.get(col_map["student_id"]) or "").strip() if col_map["student_id"] else ""
         course = (row.get(col_map["course"]) or "").strip() if col_map["course"] else ""
         year_level = (row.get(col_map["year_level"]) or "").strip() if col_map["year_level"] else ""
@@ -881,7 +846,6 @@ def validate_imported_data(
             clean.append({
                 "category": category,
                 "share_your_thoughts": raw_comment or None,
-                "evaluatee": evaluatee,
                 "ratings": ratings or None,
                 "student_id": student_id or None,
                 "course": course or None,
@@ -973,7 +937,6 @@ def process_imported_evaluations(
                 category=EvaluationCategory(row["category"]),
                 comment=stored_comment,
                 cleaned_comment=clean_for_classical(text_for_sentiment) if text_for_sentiment else None,
-                evaluatee=row.get("evaluatee"),
                 share_your_thoughts=text_for_sentiment,
                 ratings=row.get("ratings"),
                 likert_sentiment=likert_label,

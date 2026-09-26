@@ -57,7 +57,9 @@ _SORTABLE_FIELDS = {
     "sentiment",
     "likert_sentiment",
     "likert_average",
-    "evaluatee",
+    # NOTE: "evaluatee" is no longer collected -- the form asks about "the
+    # professors" collectively. The column remains so rows imported before
+    # this change keep their professor name and stay searchable.
 }
 
 
@@ -262,7 +264,10 @@ def submit_evaluation(
         category=payload.category,
         comment=stored_comment,
         cleaned_comment=clean_for_classical(text_for_sentiment) if text_for_sentiment else None,
-        evaluatee=payload.evaluatee,
+        # evaluatee is intentionally not written. The form asks about "the
+        # professors" collectively, so no individual name is collected. The
+        # column stays for rows that predate this change, and the request
+        # schema still accepts the field so an older client cannot 422.
         share_your_thoughts=payload.share_your_thoughts,
         ratings=payload.ratings,
         likert_sentiment=likert_label,
