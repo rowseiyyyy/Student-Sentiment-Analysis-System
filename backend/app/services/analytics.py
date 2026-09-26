@@ -640,13 +640,30 @@ def term_comparison(
 _WORD_PATTERN = re.compile(r"[a-zA-Z']+")
 
 
-def word_frequency(db: Session, sentiment: SentimentLabel, top_n: int = 30) -> dict:
-    rows = (
+def word_frequency(
+    db: Session,
+    sentiment: SentimentLabel,
+    top_n: int = 30,
+    category: Optional[EvaluationCategory] = None,
+) -> dict:
+    """Most frequent comment words for one sentiment, optionally one category.
+
+    ``category`` narrows to a single evaluation category. It is REQUIRED for
+    the scoping to be meaningful: this endpoint had no category parameter at
+    all, so it was the one analytics route a faculty token could read without
+    restriction -- the word frequency of Staff / Facilities / Payments
+    comments was reachable by anyone who could sign in as faculty. The route
+    now accepts the filter and pins it to Professors for faculty accounts,
+    the same as every other panel on their dashboard.
+    """
+    query = (
         db.query(Evaluation.comment)
         .join(Prediction, Prediction.evaluation_id == Evaluation.id)
         .filter(Prediction.official_prediction == sentiment)
-        .all()
     )
+    if category is not None:
+        query = query.filter(Evaluation.category == category)
+    rows = query.all()
 
     counter: Counter = Counter()
     for (comment,) in rows:

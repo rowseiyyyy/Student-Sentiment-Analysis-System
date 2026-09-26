@@ -544,6 +544,173 @@ def test_faculty_cannot_widen_its_own_scope(client, db_session):
     assert {item["category"] for item in comments.json()["items"]} == {"Professors"}
 
 
+def test_faculty_daily_and_terms_are_scoped(client, db_session):
+    """The daily and term charts must not mix in the other departments.
+
+    Regression test for the scoping bypass: /analytics/daily and /terms
+    forwarded the caller's category straight to the service, so a faculty
+    token could read the Staff / Facilities / Payments panels that every
+    other route refused them.
+    """
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    daily = client.get(
+        "/api/v1/analytics/daily", params={"category": "Staff"}, headers=headers
+    )
+    assert daily.status_code == 200
+    # Only the two Professors rows; the Staff row is not summed in.
+    assert [p["total"] for p in daily.json()["points"]] == [2]
+
+    terms = client.get(
+        "/api/v1/analytics/terms", params={"category": "Staff"}, headers=headers
+    )
+    assert terms.status_code == 200
+    assert sum(p["total"] for p in terms.json()["points"]) == 2
+
+
+def test_faculty_term_comparison_is_scoped(client, db_session):
+    """term_comparison delegates to term_analytics, so pinning /terms closes
+    this route too.
+
+    Asserted as agreement with the term chart rather than an absolute total:
+    term-comparison reports the *current* calendar period, and the fixtures are
+    seeded in the past, so the current period legitimately has no rows. What
+    matters is that faculty cannot widen the scope -- so its numbers must be
+    identical to an admin request pinned to the same category.
+    """
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    faculty = client.get(
+        "/api/v1/analytics/term-comparison",
+        params={"category": "Staff"},
+        headers=headers,
+    )
+    assert faculty.status_code == 200
+
+    admin_token = _register_admin_and_login(
+        client, email="term_cmp_admin@asiatech.edu.ph"
+    )
+    admin = client.get(
+        "/api/v1/analytics/term-comparison",
+        params={"category": "Professors"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert admin.status_code == 200
+    assert faculty.json() == admin.json()
+
+
+def test_faculty_category_breakdown_is_scoped(client, db_session):
+    """/analytics/category takes a REQUIRED category, so it must be pinned
+    too -- otherwise ?category=Staff returned the Staff breakdown outright."""
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.get(
+        "/api/v1/analytics/category", params={"category": "Staff"}, headers=headers
+    )
+    assert response.status_code == 200
+    body = response.json()
+    # Pinned to Professors: 2 rows, not the 1 Staff row that was seeded.
+    assert body["category"] == "Professors"
+    assert body["breakdown"]["total"] == 2
+
+
+def test_faculty_word_frequency_is_scoped(client, db_session):
+    """The word-frequency panel had no category filter at all, so it was the
+    one analytics route where a faculty token could read the vocabulary of
+    another department's feedback.
+
+    Compared against an admin request pinned to Professors, so the assertion is
+    about the scoping rather than about the seeded comment text.
+    """
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    faculty = client.get(
+        "/api/v1/analytics/word-frequency",
+        params={"sentiment": "Negative", "top_n": 20, "category": "Staff"},
+        headers=headers,
+    )
+    assert faculty.status_code == 200
+
+    admin_token = _register_admin_and_login(
+        client, email="wf_scope_admin@asiatech.edu.ph"
+    )
+    admin = client.get(
+        "/api/v1/analytics/word-frequency",
+        params={"sentiment": "Negative", "top_n": 20, "category": "Professors"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert admin.status_code == 200
+    assert faculty.json() == admin.json()
+
+
+def test_admin_word_frequency_still_sees_every_category(client, db_session):
+    """The fix must not silently narrow administrators: no category still
+    means every category for an admin."""
+    admin = _register_admin_and_login(client, email="wf_all_admin@asiatech.edu.ph")
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {admin}"}
+
+    unscoped = client.get(
+        "/api/v1/analytics/word-frequency",
+        params={"sentiment": "Negative", "top_n": 50},
+        headers=headers,
+    ).json()
+    scoped = client.get(
+        "/api/v1/analytics/word-frequency",
+        params={"sentiment": "Negative", "top_n": 50, "category": "Professors"},
+        headers=headers,
+    ).json()
+
+    # Negative rows were seeded in all four categories, so Professors alone is
+    # a strict subset of the unscoped total.
+    assert sum(w["count"] for w in scoped["words"]) < sum(
+        w["count"] for w in unscoped["words"]
+    )
+
+
+def test_every_analytics_route_pins_the_faculty_scope():
+    """Structural guard: no analytics route may accept a `category` and then
+    forward it unscoped.
+
+    The bypass existed precisely because applying the scope was a manual step
+    at each of a dozen call sites, and five of them were forgotten. This walks
+    the route table and fails if any handler takes a category parameter without
+    referencing _scoped_category, so a newly added endpoint cannot silently
+    reintroduce the leak.
+    """
+    import inspect
+
+    from app.api import analytics as analytics_api
+
+    offenders = []
+    for route in analytics_api.router.routes:
+        fn = getattr(route, "endpoint", None)
+        if fn is None:
+            continue
+        try:
+            names = set(inspect.signature(fn).parameters)
+            source = inspect.getsource(fn)
+        except (TypeError, ValueError, OSError):
+            continue
+        if "category" not in names:
+            continue
+        if "_scoped_category" not in source:
+            offenders.append(f"{sorted(route.methods)[0]} {route.path}")
+
+    assert not offenders, (
+        "analytics routes that accept a category but do not scope it: "
+        + ", ".join(offenders)
+    )
+
+
 def test_faculty_top_comments_are_scoped_to_professors(client, db_session):
     token = _login_faculty(client)
     _seed_mixed_categories(db_session)

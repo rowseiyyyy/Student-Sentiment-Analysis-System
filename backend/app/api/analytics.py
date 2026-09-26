@@ -85,7 +85,12 @@ def get_category_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.category_analytics(db, category, days=_days_param(days))
+    # Pinned through _scoped_category like every other panel: this route takes
+    # a REQUIRED category, so without it a faculty token asking for Staff got
+    # the Staff breakdown outright.
+    return analytics_service.category_analytics(
+        db, _scoped_category(category, current_user), days=_days_param(days)
+    )
 
 
 @router.get("/monthly", response_model=TrendResponse)
@@ -112,7 +117,12 @@ def get_daily_trend(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.trend_analytics(db, granularity="daily", days=_days_param(days), category=category)
+    return analytics_service.trend_analytics(
+        db,
+        granularity="daily",
+        days=_days_param(days),
+        category=_scoped_category(category, current_user),
+    )
 
 
 @router.get("/terms", response_model=TermAnalyticsResponse)
@@ -123,7 +133,9 @@ def get_term_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.term_analytics(db, days=_days_param(days), category=category)
+    return analytics_service.term_analytics(
+        db, days=_days_param(days), category=_scoped_category(category, current_user)
+    )
 
 
 @router.get("/term-comparison", response_model=TermComparisonResponse)
@@ -136,8 +148,14 @@ def get_term_comparison(
 ):
     """Current grading period vs the one before it — backs the Overview
     term-over-term widget. "Current" is resolved from today's month with the
-    same configured calendar the /analytics/terms chart uses."""
-    return analytics_service.term_comparison(db, days=_days_param(days), category=category)
+    same configured calendar the /analytics/terms chart uses.
+
+    Scoped like the rest: term_comparison delegates to term_analytics, so
+    pinning the category here closes this route too.
+    """
+    return analytics_service.term_comparison(
+        db, days=_days_param(days), category=_scoped_category(category, current_user)
+    )
 
 
 @router.get("/courses", response_model=CourseAnalyticsResponse)
@@ -164,10 +182,26 @@ def get_course_analytics(
 def get_word_frequency(
     sentiment: SentimentLabel,
     top_n: int = Query(30, ge=1, le=200),
+    category: Optional[NormalizedCategory] = Query(
+        None, description="Restrict to one category. Pinned to Professors for faculty accounts."
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.word_frequency(db, sentiment, top_n=top_n)
+    """Keyword frequency across comments of one sentiment.
+
+    This route previously had no category filter at all, so it ignored the
+    active scope entirely -- the one analytics endpoint where a faculty token
+    could read the vocabulary of Staff / Facilities / Payments feedback. It
+    now takes an optional category, pinned to Professors for faculty, and the
+    default (no category) still means every category for administrators.
+    """
+    return analytics_service.word_frequency(
+        db,
+        sentiment,
+        top_n=top_n,
+        category=_scoped_category(category, current_user),
+    )
 
 
 @router.get("/ratings/distribution", response_model=RatingDistributionResponse)
