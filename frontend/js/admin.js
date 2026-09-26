@@ -1895,11 +1895,16 @@ predictionHtml +
                         '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Where each department\'s submissions land on the 1-5 scale, all four side by side. Mass at the right-hand end means satisfied students; mass at the left means the opposite. Only submissions that answered the scale are counted.</p>' +
                         '<div class="chart-container" id="chart-host-rating-by-dept"></div>' +
                     '</div>' +
-                    '<div class="chart-card">' +
-                        '<h3><i class="fas fa-table"></i> Average Rating by Aspect &amp; Department</h3>' +
-                        '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per rating aspect, one column per department — &ldquo;Staff are weakest on punctuality, Facilities on cleanliness&rdquo;. Departments ask different questions, so a blank cell means that department never asked it. Hover a cell for how many students answered.</p>' +
-                        '<div id="aspect-heatmap"></div>' +
-                    '</div>' +
+                  '</div>' +
+                  // One table per department rather than a single combined
+                  // cross-tab. Each department asks a different set of
+                  // questions, so the combined table was mostly em-dashes —
+                  // one filled cell per row and three dead ones. Full width
+                  // below so each table gets room to breathe.
+                  '<div class="chart-card">' +
+                    '<h3><i class="fas fa-table"></i> Average Rating by Aspect</h3>' +
+                    '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per question, listed strongest first, split into one table per department — &ldquo;Staff are weakest on safety, Facilities on cleanliness&rdquo;. Every department asks a different set of questions, so each table shows only what that department actually asked. n is how many students answered; a high score resting on very few answers is thin evidence.</p>' +
+                    '<div id="aspect-tables"></div>' +
                   '</div>') +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>' +
@@ -2008,49 +2013,53 @@ predictionHtml +
                     }
                 }
 
-                // ---- Average rating by aspect x department (heat grid) ------
-                // Rows are every aspect any department asked; columns are the
-                // four departments. Blanks are expected and meaningful: a
-                // department never asks the questions that don't apply to it.
-                var grid = document.getElementById('aspect-heatmap');
-                if (grid) {
-                    var byAspect = {};
-                    var aspectOrder = [];
-                    deptRatings.forEach(function(d, di) {
-                        ((d.aspects && d.aspects.points) || []).forEach(function(p) {
-                            if (!byAspect[p.label]) {
-                                byAspect[p.label] = {};
-                                aspectOrder.push(p.label);
-                            }
-                            byAspect[p.label][di] = p;
-                        });
+                // ---- Average rating by aspect, one table per department ----
+                // Each department is rendered independently: its own rows,
+                // its own header, sorted strongest-first (the API already
+                // orders points by descending average). No cross-tab and no
+                // em-dashes, because a department only ever lists the
+                // questions it actually asked.
+                var tablesHost = document.getElementById('aspect-tables');
+                if (tablesHost) {
+                    var withAspects = deptRatings.filter(function(d) {
+                        return (d.aspects && d.aspects.points || []).length;
                     });
-                    if (!aspectOrder.length) {
-                        grid.innerHTML = '<p class="text-muted text-center">No aspect data available.</p>';
+                    if (!withAspects.length) {
+                        tablesHost.innerHTML = '<p class="text-muted text-center">No aspect data available.</p>';
                     } else {
-                        var heatCell = function(p) {
-                            if (!p) {
-                                return '<td class="t-empty" title="Not asked by this department">—</td>';
-                            }
-                            // Tint on the shared 1-5 bands, and carry n so a
-                            // 4.90 from three students is legible as thin.
-                            var band = Math.max(1, Math.min(5, Math.round(p.average)));
-                            return '<td class="t' + band + '" title="' + escapeHtml(p.label) + ': ' +
-                                p.average.toFixed(2) + ' / 5 from ' + p.responses + ' student' +
-                                (p.responses === 1 ? '' : 's') + '">' + p.average.toFixed(2) + '</td>';
-                        };
-                        grid.innerHTML = '<table class="aspect-heatmap"><thead><tr><th>Aspect</th>' +
-                            deptRatings.map(function(d) {
-                                return '<th>' + escapeHtml(d.label) + '</th>';
+                        tablesHost.innerHTML = '<div class="aspect-tables">' +
+                            withAspects.map(function(d) {
+                                var points = d.aspects.points;
+                                // Mean of the per-aspect means, weighted by how
+                                // many students answered each one, so the
+                                // headline figure reflects the whole department
+                                // rather than an average of averages.
+                                var sum = 0;
+                                var n = 0;
+                                points.forEach(function(p) {
+                                    sum += p.average * p.responses;
+                                    n += p.responses;
+                                });
+                                var overall = n ? (sum / n) : null;
+                                return '<table class="aspect-table">' +
+                                    '<caption>' + escapeHtml(d.label) +
+                                        (overall === null ? '' : ' · ' + overall.toFixed(2) + ' overall') +
+                                    '</caption>' +
+                                    '<thead><tr><th>Question</th><th>Avg</th><th class="col-n">n</th></tr></thead>' +
+                                    '<tbody>' +
+                                    points.map(function(p) {
+                                        var band = Math.max(1, Math.min(5, Math.round(p.average)));
+                                        return '<tr><th scope="row">' + escapeHtml(p.label) + '</th>' +
+                                            '<td class="t' + band + '" title="' +
+                                                escapeHtml(d.label) + ' · ' + escapeHtml(p.label) + ': ' +
+                                                p.average.toFixed(2) + ' / 5 from ' + p.responses +
+                                                ' student' + (p.responses === 1 ? '' : 's') + '">' +
+                                                p.average.toFixed(2) + '</td>' +
+                                            '<td class="col-n">' + p.responses + '</td></tr>';
+                                    }).join('') +
+                                    '</tbody></table>';
                             }).join('') +
-                            '</tr></thead><tbody>' +
-                            aspectOrder.map(function(label) {
-                                return '<tr><th>' + escapeHtml(label) + '</th>' +
-                                    deptRatings.map(function(d, di) {
-                                        return heatCell(byAspect[label][di]);
-                                    }).join('') + '</tr>';
-                            }).join('') +
-                            '</tbody></table>';
+                            '</div>';
                     }
                 }
             }

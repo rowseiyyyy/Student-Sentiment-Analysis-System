@@ -1821,26 +1821,46 @@ tbody tr:last-child td {
    .account-menu-item, so the old navbar-pill styling is gone. */
 
 /* ============================================================
-   ASPECT x DEPARTMENT HEAT GRID
-   The per-department Likert comparison: one row per rating aspect,
-   one column per department, cell tinted on the shared 1-5 scale.
-   Departments ask different questions (Faculty rates clarity, Staff rates
-   safety), so blanks are expected and shown as an em dash.
+   AVERAGE RATING BY ASPECT — one table per department
+   Each department asks a different set of questions (Faculty
+   rates clarity, Staff rates safety, Facilities rates
+   cleanliness), so a single combined table is mostly em-dashes:
+   every row has one filled cell and three empty ones. One
+   table per department drops the dead columns entirely and
+   keeps every rating on screen.
    ============================================================ */
-.aspect-heatmap {
+.aspect-tables {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.1rem;
+}
+
+.aspect-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.78rem;
 }
 
-.aspect-heatmap th,
-.aspect-heatmap td {
+.aspect-table caption {
+  caption-side: top;
+  text-align: left;
+  padding-bottom: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.aspect-table th,
+.aspect-table td {
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--paper-line);
   text-align: center;
 }
 
-.aspect-heatmap thead th {
+.aspect-table thead th {
   font-family: var(--font-mono);
   font-size: 0.62rem;
   font-weight: 500;
@@ -1851,25 +1871,29 @@ tbody tr:last-child td {
   white-space: nowrap;
 }
 
-.aspect-heatmap tbody th {
+.aspect-table tbody th {
   text-align: left;
   font-weight: 500;
   color: var(--ink);
   white-space: nowrap;
 }
 
-.aspect-heatmap td {
+.aspect-table td {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
+.aspect-table .col-n {
+  width: 3.5rem;
+  color: var(--ink-faint);
+}
+
 /* Cell tints follow the same 1-5 bands as the aspect bar chart. */
-.aspect-heatmap .t5,
-.aspect-heatmap .t4 { background: rgba(47, 111, 78, 0.16); color: var(--pos); }
-.aspect-heatmap .t3      { background: rgba(183, 121, 31, 0.16); color: var(--neu); }
-.aspect-heatmap .t2,
-.aspect-heatmap .t1      { background: rgba(179, 58, 58, 0.16); color: var(--neg); }
-.aspect-heatmap .t-empty { color: var(--ink-faint); }
+.aspect-table .t5,
+.aspect-table .t4 { background: rgba(47, 111, 78, 0.16); color: var(--pos); }
+.aspect-table .t3    { background: rgba(183, 121, 31, 0.16); color: var(--neu); }
+.aspect-table .t2,
+.aspect-table .t1    { background: rgba(179, 58, 58, 0.16); color: var(--neg); }
 
 /* ============================================================
    WIDGET LAYOUT EDITOR (admin only)
