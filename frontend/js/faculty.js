@@ -108,15 +108,28 @@ const FACULTY = {
             </div>
             <div class="chart-grid">
                 <div class="chart-card">
-                    <h3><i class="fas fa-chart-line"></i> Monthly Trend</h3>
-                    <div class="chart-container"><canvas id="faculty-chart-monthly"></canvas></div>
+                    <h3><i class="fas fa-chart-pie"></i> Sentiment Split</h3>
+                    <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">How the Professors-category comments read, all-time: every submission that carries a sentiment, counted once.</p>
+                    <div class="chart-container" id="faculty-chart-sentiment-split"></div>
                 </div>
                 <div class="chart-card">
-                    <h3><i class="fas fa-comment-dots"></i> Top Comments</h3>
-                    <!-- Complaints on the left, appreciations on the right
-                         (.faculty-comments-grid); each column scrolls on its
-                         own, so neither list has to be scrolled past. -->
-                    <div id="faculty-top-comments" class="faculty-comments-grid"></div>
+                    <h3><i class="fas fa-chart-bar"></i> Rating Distribution</h3>
+                    <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Each submission&rsquo;s 1-5 average, stacked by that same submission&rsquo;s sentiment — so a tall 4-5 block that is mostly red is the case worth looking at. Comment-only submissions have no rating and are not counted.</p>
+                    <div class="chart-container" id="faculty-chart-ratings"></div>
+                    <p class="source-note" id="faculty-ratings-summary" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.5rem 0 0;text-align:center;"></p>
+                </div>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3><i class="fas fa-star"></i> Average by Aspect</h3>
+                    <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per rating aspect, strongest at the top — the &ldquo;strong on clarity, weak on punctuality&rdquo; view. Hover a bar for how many students answered that aspect.</p>
+                    <div class="chart-container" id="faculty-chart-aspects"></div>
+                </div>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3><i class="fas fa-chart-line"></i> Monthly Trend</h3>
+                    <div class="chart-container"><canvas id="faculty-chart-monthly"></canvas></div>
                 </div>
             </div>
             <div class="chart-grid">
@@ -126,23 +139,210 @@ const FACULTY = {
                     <div class="chart-container" id="faculty-chart-courses"></div>
                 </div>
             </div>
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3><i class="fas fa-comment-dots"></i> Top Comments</h3>
+                    <!-- Complaints on the left, appreciations on the right
+                         (.faculty-comments-grid); each column scrolls on its
+                         own, so neither list has to be scrolled past. -->
+                    <div id="faculty-top-comments" class="faculty-comments-grid"></div>
+                </div>
+            </div>
         `;
 
         showLoading('Loading analytics...');
         try {
             // Professors-only view: the category filter rides along on every
-            // panel in this tab, so the Monthly Trend, Top Comments and
-            // Sentiment by Courses charts can never mix in Staff /
+            // panel in this tab, so none of these charts can mix in Staff /
             // Facilities / Payments rows.
             const scope = `category=${encodeURIComponent(this.SCOPED_CATEGORY)}`;
-            const [monthly, complaints, appreciations, courses] = await Promise.all([
-                API.getMonthlyTrend(scope),
-                API.getTopComplaints(5, scope),
-                API.getTopAppreciations(5, scope),
-                // Individually guarded: a failure here must degrade to this one
-                // chart's "No course data available." caption, not blank the tab.
-                API.getCourseAnalytics(scope).catch(() => null)
-            ]);
+            const [monthly, complaints, appreciations, courses, split, ratings, aspects] =
+                await Promise.all([
+                    API.getMonthlyTrend(scope),
+                    API.getTopComplaints(5, scope),
+                    API.getTopAppreciations(5, scope),
+                    // Individually guarded: a failure in one panel must degrade
+                    // to that panel's own "no data" caption, not blank the tab.
+                    API.getCourseAnalytics(scope).catch(() => null),
+                    API.getOverallAnalytics(scope).catch(() => null),
+                    API.getRatingDistribution(scope).catch(() => null),
+                    API.getAspectAverages(scope).catch(() => null)
+                ]);
+
+            // Shared empty-state for a panel with nothing to draw: the same
+            // readable caption the courses chart uses, instead of a bare axis.
+            const showEmpty = (host, message) => {
+                host.style.display = 'flex';
+                host.style.alignItems = 'center';
+                host.style.justifyContent = 'center';
+                host.innerHTML = `<p class="text-muted text-center">${message}</p>`;
+            };
+            // A canvas is created by hand (rather than declared in the markup)
+            // so one host can serve either the chart or the caption.
+            const mountCanvas = (host) => {
+                host.style.display = '';
+                host.innerHTML = '';
+                const canvas = document.createElement('canvas');
+                host.appendChild(canvas);
+                return canvas;
+            };
+
+            // ---- Sentiment split (doughnut) --------------------------------
+            // The only "how many" view on this tab: /analytics/overall, scoped.
+            const splitHost = document.getElementById('faculty-chart-sentiment-split');
+            const breakdown = (split && split.breakdown) || {};
+            if (splitHost) {
+                if (!breakdown.total) {
+                    showEmpty(splitHost, 'No sentiment data available.');
+                } else {
+                    setTimeout(() => {
+                        this.charts.split = new Chart(mountCanvas(splitHost), {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Positive', 'Neutral', 'Negative'],
+                                datasets: [{
+                                    data: [breakdown.positive || 0, breakdown.neutral || 0, breakdown.negative || 0],
+                                    backgroundColor: ['#2f6f4e', '#b7791f', '#b33a3a'],
+                                    borderWidth: 2,
+                                    borderColor: '#f8f9f5'
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'bottom' },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => {
+                                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                                const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
+                                                return `${ctx.label}: ${ctx.parsed} (${pct}%)`;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }, 100);
+                }
+            }
+
+            // ---- Rating distribution (stacked 1-5 histogram) ---------------
+            // The API returns all five bands zero-filled, so the x-axis keeps a
+            // stable 1-5 scale instead of collapsing to whichever bands happen
+            // to hold data. Each stack segment is the sentiment of the
+            // submissions that landed in that band.
+            const ratingsHost = document.getElementById('faculty-chart-ratings');
+            const bands = (ratings && ratings.points) || [];
+            const ratingsSummary = document.getElementById('faculty-ratings-summary');
+            if (ratingsHost) {
+                if (!ratings || !ratings.total) {
+                    showEmpty(ratingsHost, 'No rating data available.');
+                    if (ratingsSummary) ratingsSummary.textContent = '';
+                } else {
+                    if (ratingsSummary) {
+                        const mean = typeof ratings.average === 'number'
+                            ? ratings.average.toFixed(2) : '—';
+                        ratingsSummary.textContent =
+                            `Mean rating ${mean} / 5 · ${ratings.total} rated submission${ratings.total === 1 ? '' : 's'}`;
+                    }
+                    setTimeout(() => {
+                        this.charts.ratings = new Chart(mountCanvas(ratingsHost), {
+                            type: 'bar',
+                            data: {
+                                labels: bands.map(b => `${b.band} · ${b.label}`),
+                                datasets: [
+                                    { label: 'Positive', data: bands.map(b => b.positive || 0), backgroundColor: '#2f6f4e' },
+                                    { label: 'Neutral', data: bands.map(b => b.neutral || 0), backgroundColor: '#b7791f' },
+                                    { label: 'Negative', data: bands.map(b => b.negative || 0), backgroundColor: '#b33a3a' }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    x: { stacked: true },
+                                    // Submissions are whole people: no fractional ticks.
+                                    y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+                                },
+                                plugins: {
+                                    legend: { position: 'bottom' },
+                                    tooltip: {
+                                        callbacks: {
+                                            // Add the band's own total to the
+                                            // per-segment default, so a tooltip
+                                            // reads "Negative: 3" plus "5 in band".
+                                            footer: (items) => {
+                                                const band = bands[items[0].dataIndex];
+                                                return band ? `Total in band: ${band.total}` : '';
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }, 100);
+                }
+            }
+
+            // ---- Average by aspect (horizontal bars, fixed 1-5 axis) ---------
+            // The API sorts strongest-first, which is the order Chart.js plots
+            // a vertical category axis (first label at the top), so no reversal
+            // is needed and the weakest aspect lands at the bottom.
+            const aspectsHost = document.getElementById('faculty-chart-aspects');
+            const aspectPoints = (aspects && aspects.points) || [];
+            if (aspectsHost) {
+                if (!aspectPoints.length) {
+                    showEmpty(aspectsHost, 'No aspect data available.');
+                } else {
+                    // ~30px per bar so nine aspects don't collapse into
+                    // slivers, same growth rule the courses chart uses.
+                    const height = Math.max(280, Math.min(560, aspectPoints.length * 30 + 70));
+                    if (height > aspectsHost.clientHeight) aspectsHost.style.height = `${height}px`;
+                    setTimeout(() => {
+                        this.charts.aspects = new Chart(mountCanvas(aspectsHost), {
+                            type: 'bar',
+                            data: {
+                                labels: aspectPoints.map(p => p.label),
+                                datasets: [{
+                                    label: 'Average score',
+                                    data: aspectPoints.map(p => p.average || 0),
+                                    // Colour bands the 1-5 scale the way the
+                                    // paper theme colours sentiment elsewhere.
+                                    backgroundColor: aspectPoints.map(p =>
+                                        p.average >= 4 ? '#2f6f4e' : (p.average >= 3 ? '#b7791f' : '#b33a3a')),
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                indexAxis: 'y',
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            // A 4.6 from three students must not
+                                            // read like a 4.6 from three hundred.
+                                            label: ctx => {
+                                                const point = aspectPoints[ctx.dataIndex] || {};
+                                                return `Average ${(point.average || 0).toFixed(2)} / 5 · n=${point.responses || 0}`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    // Fixed 1-5 so bar lengths are comparable
+                                    // between aspects and between reloads.
+                                    x: { min: 1, max: 5, ticks: { stepSize: 1 } },
+                                    y: { ticks: { autoSkip: false } }
+                                }
+                            }
+                        });
+                    }, 100);
+                }
+            }
 
             setTimeout(() => {
                 const ctx = document.getElementById('faculty-chart-monthly');

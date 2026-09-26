@@ -102,11 +102,16 @@ def test_csv_export_with_data(client):
 # Academic-term analytics (Sentiment by Academic Term chart)
 # ============================================================
 
-def _seed_evaluation(db_session, *, evaluation_id, category, sentiment, created_at, course=None):
+def _seed_evaluation(
+    db_session, *, evaluation_id, category, sentiment, created_at,
+    course=None, likert_average=None, ratings=None,
+):
     """Insert one evaluation + its prediction so analytics joins can see it.
 
     ``course`` is optional: the "Sentiment by Courses" chart only counts rows
     that named a course, so pass it when that panel is under test.
+    ``likert_average`` / ``ratings`` are optional for the same reason — the
+    Likert panels only see submissions that were actually rated.
     """
     from app.models.evaluation import Evaluation, EvaluationCategory
     from app.models.prediction import AlgorithmName, Prediction, SentimentLabel
@@ -117,6 +122,8 @@ def _seed_evaluation(db_session, *, evaluation_id, category, sentiment, created_
             category=EvaluationCategory(category),
             comment=f"Comment for {evaluation_id}",
             course=course,
+            likert_average=likert_average,
+            ratings=ratings,
             created_at=created_at,
         )
     )
@@ -629,4 +636,211 @@ def test_admin_csv_export_still_includes_every_category(client, db_session):
     assert response.status_code == 200
     for expected in ("scope-prof-neg", "scope-staff", "scope-facilities", "scope-payments"):
         assert expected in response.text
+
+
+# ============================================================
+# Likert panels — "Rating Distribution" (1-5 histogram) and
+# "Average by Aspect" (per-aspect means), both faculty-facing.
+#
+# The 1-5 signal is stored per submission (Evaluation.likert_average
+# and Evaluation.ratings), so these are aggregations over existing
+# data. Like the rest of the faculty dashboard they must be scoped
+# to Professors only.
+# ============================================================
+
+
+def _seed_likert_rows(db_session):
+    """Three rated Professors rows spanning the 1-5 range, one unrated
+    comment-only Professors row, and one rated Staff row that must never
+    reach a faculty account."""
+    _seed_evaluation(
+        db_session, evaluation_id="likert-prof-5", category="Professors",
+        sentiment="Positive", likert_average=5.0,
+        ratings={"mastery": 5, "clarity": 5, "punctuality": 4, "approachability": 5},
+        created_at=datetime(2026, 7, 15, 9, 0, 0),
+    )
+    _seed_evaluation(
+        db_session, evaluation_id="likert-prof-4", category="Professors",
+        sentiment="Positive", likert_average=4.0,
+        ratings={"mastery": 4, "clarity": 5, "punctuality": 3, "approachability": 4},
+        created_at=datetime(2026, 7, 16, 9, 0, 0),
+    )
+    _seed_evaluation(
+        db_session, evaluation_id="likert-prof-2", category="Professors",
+        sentiment="Negative", likert_average=2.0,
+        ratings={"mastery": 2, "clarity": 2, "punctuality": 3, "approachability": 1},
+        created_at=datetime(2026, 7, 17, 9, 0, 0),
+    )
+    # Comment-only submission: no Likert answer, so it must not be bucketed.
+    _seed_evaluation(
+        db_session, evaluation_id="likert-prof-unrated", category="Professors",
+        sentiment="Neutral", created_at=datetime(2026, 7, 18, 9, 0, 0),
+    )
+    # Other category: excluded from every faculty panel.
+    _seed_evaluation(
+        db_session, evaluation_id="likert-staff-1", category="Staff",
+        sentiment="Negative", likert_average=1.0,
+        ratings={"safety": 1, "registrar": 2},
+        created_at=datetime(2026, 7, 19, 9, 0, 0),
+    )
+
+
+def test_rating_distribution_buckets_professors_only(client, db_session):
+    """All five bands are always present; faculty see only Professors rows and
+    the unrated comment-only row is not counted as a rating."""
+    token = _login_faculty(client)
+    _seed_likert_rows(db_session)
+
+    response = client.get(
+        "/api/v1/analytics/ratings/distribution",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert [p["band"] for p in data["points"]] == [1, 2, 3, 4, 5]
+    by_band = {p["band"]: p for p in data["points"]}
+    assert by_band[5]["total"] == 1
+    assert by_band[4]["total"] == 1
+    assert by_band[2]["total"] == 1
+    # Bands 1 and 3 stay on the axis but empty: band 1's only submission is a
+    # Staff row the faculty account may not see.
+    assert by_band[1]["total"] == 0
+    assert by_band[3]["total"] == 0
+    # The comment-only row contributes no rating.
+    assert data["total"] == 3
+    assert data["average"] == 3.67          # (5 + 4 + 2) / 3
+    # Each band carries the sentiment split so the chart can stack.
+    assert by_band[2]["negative"] == 1
+    assert by_band[4]["positive"] == 1
+    assert by_band[5]["positive"] == 1
+    assert by_band[5]["label"] == "Strongly agree"
+
+
+def test_aspect_averages_are_professors_only_and_sorted(client, db_session):
+    token = _login_faculty(client)
+    _seed_likert_rows(db_session)
+
+    response = client.get(
+        "/api/v1/analytics/ratings/aspects",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    points = response.json()["points"]
+
+    aspects = [p["aspect"] for p in points]
+    # No Staff aspects leak through.
+    assert "safety" not in aspects
+    assert "registrar" not in aspects
+    # Strongest first — the order the horizontal bar chart plots.
+    averages = [p["average"] for p in points]
+    assert averages == sorted(averages, reverse=True)
+    assert aspects[0] == "clarity"
+    assert dict(zip(aspects, averages)) == {
+        "clarity": 4.0,          # (5 + 5 + 2) / 3
+        "mastery": 3.67,         # (5 + 4 + 2) / 3
+        "approachability": 3.33, # (5 + 4 + 1) / 3
+        "punctuality": 3.33,     # (4 + 3 + 3) / 3
+    }
+    # Human labels, not raw keys.
+    labels = {p["aspect"]: p["label"] for p in points}
+    assert labels["clarity"] == "Clarity of explanation"
+    assert labels["mastery"] == "Subject mastery"
+    # Response count is reported so a thin average reads as thin.
+    assert all(p["responses"] == 3 for p in points)
+
+
+
+def test_faculty_cannot_widen_likert_panels(client, db_session):
+    """Hand-crafting ?category=Staff is pinned back to Professors, like the
+    other faculty panels."""
+    token = _login_faculty(client)
+    _seed_likert_rows(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    distribution = client.get(
+        "/api/v1/analytics/ratings/distribution",
+        params={"category": "Staff"},
+        headers=headers,
+    )
+    assert distribution.json()["total"] == 3
+
+    aspects = client.get(
+        "/api/v1/analytics/ratings/aspects",
+        params={"category": "Staff"},
+        headers=headers,
+    )
+    assert "safety" not in [p["aspect"] for p in aspects.json()["points"]]
+
+
+def test_faculty_overall_is_scoped_to_professors(client, db_session):
+    """The sentiment-split doughnut reads /overall, which must be pinned too."""
+    token = _login_faculty(client)
+    _seed_mixed_categories(db_session)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.get("/api/v1/analytics/overall", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    # _seed_mixed_categories: 2 Professors rows + 1 each Staff/Facilities/Payments.
+    assert data["breakdown"]["total"] == 2
+    assert data["evaluation_volume"] == 2
+
+    asked_for_staff = client.get(
+        "/api/v1/analytics/overall", params={"category": "Staff"}, headers=headers
+    )
+    assert asked_for_staff.json()["breakdown"]["total"] == 2
+
+
+def test_admin_still_sees_likert_data_from_every_category(client, db_session):
+    token = _register_admin_and_login(client, email="likert_admin@asiatech.edu.ph")
+    _seed_likert_rows(db_session)
+
+    distribution = client.get(
+        "/api/v1/analytics/ratings/distribution",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert distribution.status_code == 200
+    data = distribution.json()
+    # The Staff row is visible to an admin, so band 1 is populated and the
+    # total is one higher than the faculty view.
+    assert {p["band"]: p["total"] for p in data["points"]}[1] == 1
+    assert data["total"] == 4
+
+    aspects = client.get(
+        "/api/v1/analytics/ratings/aspects",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    admin_aspects = {p["aspect"]: p["average"] for p in aspects.json()["points"]}
+    assert admin_aspects["safety"] == 1.0
+    assert admin_aspects["registrar"] == 2.0
+    # Weakest aspect sorts last, so the bar chart puts it at the bottom.
+    assert aspects.json()["points"][-1]["aspect"] == "safety"
+
+
+def test_likert_analytics_ignore_malformed_values(client, db_session):
+    """A junk or out-of-range value is skipped, not fatal — the dashboard must
+    still render. An aspect key with no display-name entry falls back to a
+    readable title-cased label."""
+    token = _login_faculty(client)
+    _seed_evaluation(
+        db_session, evaluation_id="likert-junk", category="Professors",
+        sentiment="Neutral", likert_average=9.0,   # outside the 1-5 scale
+        ratings={"clarity": "not-a-number", "mastery": 4, "punctuality": 99},
+        created_at=datetime(2026, 7, 20, 9, 0, 0),
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+
+    distribution = client.get(
+        "/api/v1/analytics/ratings/distribution", headers=headers
+    )
+    assert distribution.status_code == 200
+    assert distribution.json()["total"] == 0
+
+    aspects = client.get("/api/v1/analytics/ratings/aspects", headers=headers)
+    assert aspects.status_code == 200
+    points = aspects.json()["points"]
+    # Only the one valid key survives; the other two are dropped.
+    assert [p["aspect"] for p in points] == ["mastery"]
+    assert points[0]["label"] == "Subject mastery"
 

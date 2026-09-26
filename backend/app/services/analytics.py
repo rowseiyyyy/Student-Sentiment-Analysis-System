@@ -324,6 +324,173 @@ def course_analytics(
     return {"points": points}
 
 
+# ---------------------------------------------------------------------------
+# LIKERT ANALYTICS — the numeric half of the feedback
+#
+# Sentiment is the text signal; Likert is what students actually ticked. Both
+# are stored per submission, so these aggregations need no new data and work on
+# every historical row.
+# ---------------------------------------------------------------------------
+
+# Band captions mirroring the live form's 1-5 scale (js/student.js), so the API
+# payload is self-describing for any consumer.
+LIKERT_BAND_LABELS: dict[int, str] = {
+    1: "Strongly disagree",
+    2: "Disagree",
+    3: "Neutral",
+    4: "Agree",
+    5: "Strongly agree",
+}
+
+# Short human labels for the aspect keys the live form writes into
+# Evaluation.ratings. Unknown keys fall back to a title-cased version of the
+# key, so a newly added aspect still renders without a change here.
+ASPECT_DISPLAY_NAMES: dict[str, str] = {
+    "teaching_quality": "Teaching quality",
+    "mastery": "Subject mastery",
+    "clarity": "Clarity of explanation",
+    "fairness": "Fairness of grading",
+    "punctuality": "Punctuality",
+    "approachability": "Approachability",
+    "feedback": "Constructive feedback",
+    "classroom_mgmt": "Classroom management",
+    "teaching_style": "Teaching style",
+}
+
+
+def _aspect_label(key: str) -> str:
+    if key in ASPECT_DISPLAY_NAMES:
+        return ASPECT_DISPLAY_NAMES[key]
+    return key.replace("_", " ").strip().capitalize()
+
+
+def _in_scale(value: float) -> bool:
+    from app.services.likert import MAX_SCALE_VALUE, MIN_SCALE_VALUE
+
+    return MIN_SCALE_VALUE <= value <= MAX_SCALE_VALUE
+
+
+def rating_distribution(
+    db: Session,
+    category: Optional[EvaluationCategory] = None,
+    days: Optional[int] = None,
+) -> dict:
+    """Histogram of submissions across the five 1-5 Likert bands.
+
+    Every band is always returned, zero-filled, so the x-axis keeps a stable
+    1-5 scale instead of collapsing when a band has no submissions. Each band
+    also carries the Positive/Neutral/Negative split of those same
+    submissions, so the chart can stack and the UI can answer "do the 5s and
+    the negative comments come from the same people?".
+
+    ``likert_average`` is a submission's mean of that student's ticks (see
+    app.services.likert), rounded to the nearest whole band: 4.4 -> 4, 4.6 ->
+    5. Rows with no Likert answer (a comment-only submission) are skipped
+    rather than counted as a rating.
+    """
+    query = (
+        db.query(Evaluation.likert_average, Prediction.official_prediction)
+        .join(Prediction, Prediction.evaluation_id == Evaluation.id)
+    )
+    if category is not None:
+        query = query.filter(Evaluation.category == category)
+    if days is not None:
+        query = query.filter(
+            Evaluation.created_at >= utcnow_naive() - timedelta(days=days)
+        )
+
+    buckets: dict[int, Counter] = {band: Counter() for band in LIKERT_BAND_LABELS}
+    values: list[float] = []
+    for average, label in query.all():
+        if average is None:
+            continue
+        try:
+            value = float(average)
+        except (TypeError, ValueError):
+            continue
+        if not _in_scale(value):
+            continue
+        values.append(value)
+        band = min(max(int(round(value)), 1), 5)
+        buckets[band][label] += 1
+
+    points = []
+    for band in sorted(LIKERT_BAND_LABELS):
+        counter = buckets[band]
+        points.append({
+            "band": band,
+            "label": LIKERT_BAND_LABELS[band],
+            "positive": counter.get(SentimentLabel.POSITIVE, 0),
+            "neutral": counter.get(SentimentLabel.NEUTRAL, 0),
+            "negative": counter.get(SentimentLabel.NEGATIVE, 0),
+            "total": sum(counter.values()),
+        })
+
+    return {
+        "points": points,
+        "total": len(values),
+        # Mean of the raw values, not of the rounded bands, so a class
+        # averaging 4.4 reports 4.4 instead of being flattened to 4.
+        "average": round(sum(values) / len(values), 2) if values else None,
+    }
+
+
+def aspect_averages(
+    db: Session,
+    category: Optional[EvaluationCategory] = None,
+    days: Optional[int] = None,
+) -> dict:
+    """Mean Likert score per rating aspect, strongest first.
+
+    Evaluation.ratings is a JSON object of aspect_key -> 1-5, written by both
+    the live form and the bulk importer. Averaging happens in Python rather
+    than with JSON_EXTRACT so one code path covers every aspect (including any
+    added later), a single malformed value cannot raise a SQL error, and each
+    aspect can report how many students answered it — a 4.6 average from three
+    students must not read like a 4.6 from three hundred.
+
+    Only aspects that were actually answered appear, sorted by descending
+    average: that is the order a horizontal bar chart plots (best at the top)
+    and it puts the weakest aspect where the eye lands first.
+    """
+    query = db.query(Evaluation.ratings).filter(Evaluation.ratings.isnot(None))
+    if category is not None:
+        query = query.filter(Evaluation.category == category)
+    if days is not None:
+        query = query.filter(
+            Evaluation.created_at >= utcnow_naive() - timedelta(days=days)
+        )
+
+    values: dict[str, list[float]] = {}
+    for (ratings,) in query.all():
+        if not isinstance(ratings, dict):
+            continue
+        for key, raw in ratings.items():
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if not _in_scale(value):
+                continue
+            values.setdefault(str(key), []).append(value)
+
+    points = [
+        {
+            "aspect": key,
+            "label": _aspect_label(key),
+            "average": round(sum(scores) / len(scores), 2),
+            "responses": len(scores),
+        }
+        for key, scores in values.items()
+    ]
+    points.sort(key=lambda p: (-p["average"], p["label"].lower()))
+
+    return {
+        "points": points,
+        "total": sum(p["responses"] for p in points),
+    }
+
+
 def _academic_cycle_position(month: int, anchor_month: int) -> int:
     """Where ``month`` sits in the academic cycle, measured from ``anchor_month``.
 

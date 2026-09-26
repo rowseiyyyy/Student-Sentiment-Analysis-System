@@ -111,6 +111,43 @@ class CourseAnalyticsResponse(BaseModel):
     points: list[CourseSentimentPoint]
 
 
+class RatingBandPoint(BaseModel):
+    """One band of the 1-5 Likert histogram, with the sentiment split of the
+    submissions that landed in it (so the chart can stack)."""
+
+    band: int
+    label: str
+    positive: int
+    neutral: int
+    negative: int
+    total: int
+
+
+class RatingDistributionResponse(BaseModel):
+    # All five bands are always present, zero-filled, so the x-axis stays 1-5.
+    points: list[RatingBandPoint]
+    # Submissions that carried a Likert answer (comment-only rows are excluded).
+    total: int
+    # Mean of the raw 1-5 scores, or None when nothing was rated.
+    average: Optional[float] = None
+
+
+class AspectAveragePoint(BaseModel):
+    """Mean score for one rating aspect plus how many students answered it."""
+
+    aspect: str
+    label: str
+    average: float
+    responses: int
+
+
+class AspectAveragesResponse(BaseModel):
+    # Sorted by descending average, which is the order the horizontal bar chart
+    # plots (strongest aspect at the top, weakest at the bottom).
+    points: list[AspectAveragePoint]
+    total: int
+
+
 class WordFrequencyItem(BaseModel):
     word: str
     count: int

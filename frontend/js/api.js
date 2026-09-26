@@ -269,6 +269,17 @@ async getEvaluations(params = {}) {
         return this.get('/analytics/courses' + this._buildQuery(params));
     },
 
+    // 1-5 Likert histogram, each band split by that submission's sentiment.
+    async getRatingDistribution(params) {
+        return this.get('/analytics/ratings/distribution' + this._buildQuery(params));
+    },
+
+    // Mean 1-5 score per rating aspect, strongest first ("strong on clarity,
+    // weak on punctuality").
+    async getAspectAverages(params) {
+        return this.get('/analytics/ratings/aspects' + this._buildQuery(params));
+    },
+
     async getDailyTrend(params) {
         return this.get('/analytics/daily' + this._buildQuery(params));
     },

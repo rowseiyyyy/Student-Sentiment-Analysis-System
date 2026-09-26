@@ -13,9 +13,11 @@ from app.models.evaluation import Evaluation, EvaluationCategory
 from app.models.prediction import Prediction, SentimentLabel
 from app.models.user import User, UserRole
 from app.schemas.analytics import (
+    AspectAveragesResponse,
     CategoryAnalyticsResponse,
     CourseAnalyticsResponse,
     OverallAnalyticsResponse,
+    RatingDistributionResponse,
     TermAnalyticsResponse,
     TermComparisonResponse,
     TopCommentsResponse,
@@ -68,7 +70,11 @@ def get_overall_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    return analytics_service.overall_analytics(db, category=category, days=_days_param(days))
+    return analytics_service.overall_analytics(
+        db,
+        category=_scoped_category(category, current_user),
+        days=_days_param(days),
+    )
 
 
 @router.get("/category", response_model=CategoryAnalyticsResponse)
@@ -162,6 +168,50 @@ def get_word_frequency(
     current_user: User = Depends(require_staff),
 ):
     return analytics_service.word_frequency(db, sentiment, top_n=top_n)
+
+
+@router.get("/ratings/distribution", response_model=RatingDistributionResponse)
+@retry_on_disconnect()
+def get_rating_distribution(
+    days: Optional[int] = Query(None, ge=1, le=3650),
+    category: Optional[NormalizedCategory] = Query(
+        None, description="Restrict to one category. Pinned to Professors for faculty accounts."
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    """1-5 Likert histogram, each band split by that submission's sentiment.
+
+    Backs the faculty "Rating Distribution" chart: are students ticking 4-5
+    while writing negative comments, or genuinely unhappy?
+    """
+    return analytics_service.rating_distribution(
+        db,
+        days=_days_param(days),
+        category=_scoped_category(category, current_user),
+    )
+
+
+@router.get("/ratings/aspects", response_model=AspectAveragesResponse)
+@retry_on_disconnect()
+def get_aspect_averages(
+    days: Optional[int] = Query(None, ge=1, le=3650),
+    category: Optional[NormalizedCategory] = Query(
+        None, description="Restrict to one category. Pinned to Professors for faculty accounts."
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    """Mean Likert score per rating aspect, strongest first.
+
+    Backs the faculty "Average by Aspect" chart — the "strong on clarity,
+    weak on punctuality" view, read straight from Evaluation.ratings.
+    """
+    return analytics_service.aspect_averages(
+        db,
+        days=_days_param(days),
+        category=_scoped_category(category, current_user),
+    )
 
 
 @router.get("/top-complaints", response_model=TopCommentsResponse)
