@@ -68,7 +68,9 @@ a:hover {
    ============================================================ */
 .navbar {
   background: var(--brand-deep);
-  padding: 0 0 0 1.5rem;
+  /* Left/right edge 1.5rem -> 1.25rem so the nav's outer edge lines up with
+     .page-layout's content edge instead of sitting inboard of it. */
+  padding: 0 0 0 1.25rem;
   display: flex;
   align-items: flex-end;
   gap: 0.25rem;
@@ -159,7 +161,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 0.9rem;
-  padding: 0 1.5rem;
+  padding: 0 1.25rem;   /* matches .navbar's left edge; see .page-layout */
   margin-left: auto;
   align-self: stretch;
 }
@@ -746,11 +748,15 @@ tbody tr:last-child td {
 }
 
 .page-layout {
-  /* Was 2.5rem / 1.75rem / 4rem. The page edge was padded further than any
-     card inside it, so the whole UI read as "too thick". */
-  padding: 1.5rem 1.5rem 2.5rem;
-  max-width: 1180px;
+  /* Width: was max-width 1180px + centered, which stranded the content in the
+     middle of any wider screen and left large dead gutters either side. The
+     cap is now generous enough to read as "use the space you have" while
+     still keeping line lengths sane on an ultrawide monitor. */
+  max-width: 1800px;
   margin: 0 auto;
+  /* Side padding: 1.5rem -> 1.25rem (20px). The page edge was padded further
+     than any card inside it, so the whole UI read as "too thick". */
+  padding: 1.5rem 1.25rem 2.5rem;
 }
 
 .page-header {
