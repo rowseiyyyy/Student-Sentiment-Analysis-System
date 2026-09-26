@@ -1049,6 +1049,34 @@ tbody tr:last-child td {
   margin-bottom: 0;
 }
 
+/* Packed rows: exact pixel widths, packed flush.
+
+   layout.js adds .layout-packed to a section once every child is a widget it
+   sizes, and gives each card an exact pixel width. Flex wrapping then places
+   each card at its own width and starts the next one flush against it.
+
+   This is what makes free pixel widths usable. In a grid a card reserves WHOLE
+   tracks -- a 620px card on a 3-column grid takes two 453px tracks and strands
+   the rest of the second one, so the next card jumps a track and a ~290px hole
+   opens up mid-row. Flex has no such thing as an indivisible track.
+
+   The grid above stays as the no-JS fallback, and its grid-template-columns
+   declaration is deliberately left in place: _authoredCols() reads the
+   responsive column count out of the CSSOM, and this rule only overrides
+   `display`, so that count is still discoverable here. */
+.chart-grid.layout-packed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.chart-grid.layout-packed > * {
+  flex: 0 0 auto;
+  /* Belt and braces: a width saved on a very wide monitor must never be able to
+     push a card past the container even if the clamp above is ever wrong. */
+  max-width: 100%;
+}
+
 /* Wide cards. --span is a plain custom property so a card can be told to take
    two columns (or the whole row) from the markup that emits it. */
 .chart-card[style*="--span:2"],

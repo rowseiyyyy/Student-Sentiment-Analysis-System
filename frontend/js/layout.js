@@ -426,36 +426,82 @@ const LAYOUT = {
         return metrics.unit * metrics.cols + metrics.gap * (metrics.cols - 1);
     },
 
+    // Whether a section should lay its cards out as a wrapping row of exact
+    // widths rather than as a grid.
+    //
+    // A CSS grid track cannot be split, so a card sized to a free pixel width
+    // still reserves WHOLE tracks: a 620px card on a 3-column grid occupies two
+    // 453px tracks, and the next card starts after the second one, leaving a
+    // ~290px hole in the middle of the row. That hole is not a cosmetic detail,
+    // it is the whole reason free pixel widths looked broken.
+    //
+    // Flex wrapping packs each card at its own width and starts the next one
+    // flush against it, so an exact width and a gap-free row are possible at the
+    // same time. This is only switched on when EVERY child is a widget this
+    // module sizes: a spinner, a wrapper or anything else would get no width
+    // and collapse to its content width, so those sections keep the grid.
+    _packable(section) {
+        if (!section || !section.children) return false;
+        const kids = Array.prototype.filter.call(
+            section.children, (c) => c.nodeType === 1);
+        if (kids.length < 2) return false;
+        return kids.every((c) => c.matches && c.matches(this.WIDGET_SELECTOR));
+    },
+
+    // The Overview is authored as 2-wide + 1-wide pairs, which only tiles
+    // perfectly on the 3-column desktop grid. The stylesheet forces every card
+    // full width below that (see the .overview-grid media query); the same rule
+    // is reproduced here because a flex row ignores `grid-column` entirely.
+    _forcedFullWidth(section, metrics) {
+        return metrics.cols < 3 && !!(section.classList &&
+            section.classList.contains('overview-grid'));
+    },
+
     // The `grid-column` value and pixel width for a widget, from whichever width
     // mode it is in.
     //
     // Two modes coexist. A card nobody has touched keeps its authored column
-    // span, which is what makes the default layout responsive. A card the admin
-    // has resized carries `wp` and is sized in free pixels.
+    // span, so the default layout stays responsive. A card the admin has resized
+    // carries `wp` and is sized in free pixels.
     //
-    // The span is an INTEGER plus an explicit pixel width, and the integer is
-    // not optional decoration. It looked like a fractional span would do the job
-    // on its own -- `span 1.583` is exactly 700px on a 3-column grid -- but
-    // `grid-column: span <integer>` takes an integer, and a fractional value is
-    // invalid: the browser discards the ENTIRE declaration, the card silently
-    // falls back to whatever it had before, and the resize appears to do nothing.
-    // So the card is given the smallest integer span that can hold the requested
-    // width, and then sized to the exact pixel count within it.
+    // `css` is the grid-column value, and it is only meaningful when the section
+    // is still a grid. `px` is the exact rendered width, used both to size a card
+    // inside a reserved span and, on a packed row, as the whole placement.
     _widthFor(el, saved) {
         const metrics = this._gridMetrics(el);
+        const section = this._sectionOf(el);
+        const packed = this._packable(section);
         // One column on a phone. The pixel width is dropped as well, not just
         // clamped: a 900px width on a 380px screen would overflow the viewport.
         if (window.innerWidth <= 900) return { css: 'span 1', px: null };
+        const full = this._fullWidthPx(metrics);
+
         if (saved && saved.wp) {
-            const px = Math.max(this.MIN_W_PX,
-                Math.min(saved.wp, this._fullWidthPx(metrics)));
+            const px = Math.max(this.MIN_W_PX, Math.min(saved.wp, full));
+            if (packed) return { css: '', px: px };
+            // Not packed: the card still needs a span to sit in. The span is an
+            // INTEGER, because `grid-column: span <integer>` takes an integer
+            // and a fractional value is invalid -- the browser discards the
+            // whole declaration and the resize silently does nothing.
             const track = metrics.unit + metrics.gap;
             const n = Math.max(this.MIN_W, Math.min(metrics.cols, Math.ceil(px / track)));
             return { css: 'span ' + n, px: px };
         }
+
         const w = saved && saved.w
             ? this._effectiveW(saved.w, el)
             : this._defaultSpan(el);
+
+        if (packed && this._forcedFullWidth(section, metrics)) {
+            return { css: '', px: full };
+        }
+        if (packed) {
+            // Column mode on a packed row becomes an exact pixel width, left
+            // UNROUNDED on purpose: a full row of columns has to add back up to
+            // the container width, and rounding each one would leave a strip of
+            // dead space at the end of the row.
+            return { css: '', px: w * metrics.unit + (w - 1) * metrics.gap };
+        }
         return { css: 'span ' + w, px: null };
     },
 
@@ -510,11 +556,27 @@ const LAYOUT = {
         // Apply the saved order first, so the geometry below is written onto
         // the widgets in their final positions.
         this.reorderAll(root, pageId);
-        this.entries(root, pageId).forEach((entry) => {
+        const all = this.entries(root, pageId);
+
+        // Decide each section's layout mode once, before any width is written:
+        // _widthFor reads it, and it depends only on the section's children.
+        const sections = [];
+        all.forEach((entry) => {
+            const s = this._sectionOf(entry.el);
+            if (s && sections.indexOf(s) === -1) sections.push(s);
+        });
+        sections.forEach((s) => {
+            s.classList.toggle('layout-packed', this._packable(s));
+        });
+
+        all.forEach((entry) => {
             const el = entry.el;
             const saved = this._sizes[entry.key];
             const width = this._widthFor(el, saved);
-            el.style.gridColumn = width.css;
+            // On a packed row the width alone does the placing, so the span is
+            // cleared rather than left behind as a dead inline style.
+            if (width.css) el.style.gridColumn = width.css;
+            else el.style.removeProperty('grid-column');
             // The pixel width is written and REMOVED as one pair. Leaving a
             // stale inline width behind would keep a card at its old size after
             // it goes back to column mode, or after the viewport collapses to
