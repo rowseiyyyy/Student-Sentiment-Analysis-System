@@ -1909,14 +1909,6 @@ predictionHtml +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>' +
             '</div>' +
-            '<div class="chart-card">' +
-                '<h3><i class="fas fa-tags"></i> Word / Theme Frequency</h3>' +
-                '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Most frequent keywords in comments, split by the sentiment they came from. This panel has no department filter server-side, so it always covers all four departments — unlike the charts around it.</p>' +
-                '<div class="two-col" style="grid-template-columns:1fr 1fr;gap:1.25rem;">' +
-                    '<div><h4 style="color:var(--neg);margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas fa-exclamation-circle"></i> Complaint Themes</h4><div class="chart-container" style="height:300px;" id="chart-host-theme-complaints"></div></div>' +
-                    '<div><h4 style="color:var(--pos);margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas fa-star"></i> Appreciation Themes</h4><div class="chart-container" style="height:300px;" id="chart-host-theme-appreciations"></div></div>' +
-                '</div>' +
-            '</div>' +
             '<div class="two-col">' +
                 '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-complaints-list"></div></div>' +
                 '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-appreciations-list"></div></div>' +
@@ -2079,17 +2071,11 @@ predictionHtml +
                     // of the scope applies here.
                     return API.getMonthlyTrend(ADMIN._qs(c)).catch(function() { return null; });
                 })),
-                // Word frequency has no department filter server-side, so it is
-                // deliberately left unscoped and says so in its own caption.
-                API.getWordFrequency('Negative', 12).catch(function() { return null; }),
-                API.getWordFrequency('Positive', 12).catch(function() { return null; }),
                 API.getCourseAnalytics(qs).catch(function() { return null; })
             ]);
             var termData = extra[0];
             var deptTrends = extra[1];
-            var complaintWords = extra[2];
-            var appreciationWords = extra[3];
-            var courseData = extra[4];
+            var courseData = extra[2];
 
             setTimeout(function() {
                 var ctx = document.getElementById('chart-category-sentiment');
@@ -2335,38 +2321,6 @@ predictionHtml +
                         }
                     });
                 }, 'No course data available.');
-            }, 100);
-
-            // ---- Word / theme frequency (aggregate view of the verbatim lists) ----
-            // The backend returns words most-frequent first (Counter.most_common)
-            // and a vertical category axis plots index 0 at the TOP (see the
-            // course chart above), so that order is charted as-is: the most
-            // frequently mentioned keyword sits at the top of each chart. The
-            // .reverse() calls that used to live here assumed the axis ran
-            // bottom-up, which put the *least* frequent term on top instead.
-            var complaintTerms = (complaintWords && complaintWords.words) ? complaintWords.words.slice() : [];
-            var appreciationTerms = (appreciationWords && appreciationWords.words) ? appreciationWords.words.slice() : [];
-            setTimeout(function() {
-                ADMIN.mountChart('chart-host-theme-complaints', complaintTerms.length > 0, function(canvas) {
-                    ADMIN.charts.complaintThemes = new Chart(canvas, {
-                        type: 'bar',
-                        data: {
-                            labels: complaintTerms.map(function(w) { return w.word; }),
-                            datasets: [{ label: 'Mentions', data: complaintTerms.map(function(w) { return w.count; }), backgroundColor: '#b33a3a' }]
-                        },
-                        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
-                    });
-                }, 'No complaint themes available.');
-                ADMIN.mountChart('chart-host-theme-appreciations', appreciationTerms.length > 0, function(canvas) {
-                    ADMIN.charts.appreciationThemes = new Chart(canvas, {
-                        type: 'bar',
-                        data: {
-                            labels: appreciationTerms.map(function(w) { return w.word; }),
-                            datasets: [{ label: 'Mentions', data: appreciationTerms.map(function(w) { return w.count; }), backgroundColor: '#2f6f4e' }]
-                        },
-                        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
-                    });
-                }, 'No appreciation themes available.');
             }, 100);
 
             var complaintsList = document.getElementById('top-complaints-list');
