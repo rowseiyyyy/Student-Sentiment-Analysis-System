@@ -1033,6 +1033,22 @@ tbody tr:last-child td {
   align-items: start;
 }
 
+/* A grid child defaults to min-width:auto, which refuses to shrink below its
+   content: a chart legend, a long legend label or a wide table would push its
+   column wider than 1fr and shove the rest of the row out of alignment. Cards
+   in this grid are chart/table holders, so their content is allowed to be
+   narrower than the track -- the .table-container inside scrolls instead. */
+.chart-grid > * {
+  min-width: 0;
+}
+
+/* .card carries a bottom margin for the stacked-page rhythm; inside the grid
+   the gap already spaces the cards, and the leftover margin would make the two
+   kinds of card sit at visibly different heights in the same row. */
+.chart-grid > .card {
+  margin-bottom: 0;
+}
+
 /* Wide cards. --span is a plain custom property so a card can be told to take
    two columns (or the whole row) from the markup that emits it. */
 .chart-card[style*="--span:2"],
@@ -1072,6 +1088,28 @@ tbody tr:last-child td {
   .chart-card[style*="--span:3"],
   .chart-card.span-3 {
     grid-column: span 1;
+  }
+}
+
+/* The Overview pairs a 2-wide card with a 1-wide one (2 + 1, twice over), which
+   only tiles perfectly on the 3-column desktop grid. On a 2-column tablet the
+   1-wide partner would be left alone on its row with half a row of dead space,
+   so below the 3-column breakpoint every Overview card takes the full width
+   instead -- a clean single stack rather than a half-empty row. */
+/* Selector is two classes deep on purpose: the <=900px collapse backstop
+   further down the file also sets grid-column on .chart-card / .card with
+   !important, and equal-specificity !important rules are resolved by source
+   order. Naming the grid here wins on specificity instead, so the Overview
+   keeps its intended 2-up-then-full-width shape at 781-900px too. */
+@media (max-width: 1200px) {
+  .chart-grid.overview-grid > * {
+    grid-column: span 2 !important;
+  }
+}
+
+@media (max-width: 780px) {
+  .chart-grid.overview-grid > * {
+    grid-column: span 1 !important;
   }
 }
 

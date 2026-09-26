@@ -717,31 +717,32 @@ var ADMIN = {
                     kpiCard({ tone: 'blue', icon: 'fa-file-alt', value: overall.evaluation_volume || 0, label: 'Total Evaluations', spark: sparkTot, badge: trendTot, caption: 'Counted in ' + scopeNote }) +
                     kpiCard({ tone: 'purple', icon: 'fa-chart-bar', value: overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A', label: 'Avg Confidence', caption: 'Avg. of each submission\'s prediction confidence at time of submission' }) +
                 '</div>' +
-                '<div class="chart-grid">' +
-                    '<div class="chart-card">' +
+                /* One 3-column grid for the whole tab. The cards are sized so
+                   every row is completely full: 2 + 1, then 2 + 1. Previously
+                   a lone .chart-grid held Term-over-Term by itself (a
+                   one-third card beside two thirds of nothing) and a .two-col
+                   put the comparison chart and the two department/model cards
+                   in mismatched columns, which is what read as "messy". */
+                '<div class="chart-grid overview-grid">' +
+                    '<div class="chart-card span-2">' +
                         '<h3><i class="fas fa-graduation-cap"></i> Term-over-Term</h3>' +
                         '<p class="source-note">The grading period in progress versus the one immediately before it, resolved from today\'s date through the same academic calendar that drives the Analytics term chart. During a break or enrollment month there is no active period, so the two most recently completed periods are compared instead and the caption below says so.</p>' +
                         termCmpBodyHtml +
                     '</div>' +
-                '</div>' +
-                '<div class="two-col">' +
-                    '<div>' +
-                        '<div class="chart-card">' +
-                            '<h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3>' +
-                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> Accuracy &amp; F1 score measured on the held-out test split from each algorithm\'s most recent training run — one bar pair per algorithm\'s latest run, independent of how many students have submitted evaluations since.' +
-                            '<div class="chart-container"><canvas id="chart-model-perf"></canvas></div>' +
-                        '</div>' +
+                    '<div class="card" id="overview-by-department">' +
+                        '<div class="card-header"><h3><i class="fas fa-chart-line"></i> By Department</h3></div>' +
+                        '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, in ' + scopeNote + ', as one line per sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative). Departments are a fixed four-point axis, so read the heights at each category rather than the slope between them; hover any point for that department&rsquo;s exact split.' +
+                        '<div class="chart-container" style="height:300px;" id="chart-host-by-department"></div>' +
                     '</div>' +
-                    '<div>' +
-                        '<div class="card" id="overview-by-department" style="margin-bottom:1.1rem;">' +
-                            '<div class="card-header"><h3><i class="fas fa-chart-line"></i> By Department</h3></div>' +
-                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, in ' + scopeNote + ', as one line per sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative). Departments are a fixed four-point axis, so read the heights at each category rather than the slope between them; hover any point for that department&rsquo;s exact split.' +
-                            '<div class="chart-container" style="height:300px;" id="chart-host-by-department"></div>' +
-                        '</div>' +
-                        '<div class="card">' +
-                            '<div class="card-header"><h3><i class="fas fa-table"></i> Model Performance</h3></div>' +
-                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> One row per model showing metrics from that model\'s most recent training run only (not combined across datasets or runs).</p>' +
-                            '<div class="table-container"><table class="perf-table"><thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead><tbody>' +
+                    '<div class="chart-card span-2">' +
+                        '<h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3>' +
+                        '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> Accuracy &amp; F1 score measured on the held-out test split from each algorithm\'s most recent training run — one bar pair per algorithm\'s latest run, independent of how many students have submitted evaluations since.' +
+                        '<div class="chart-container"><canvas id="chart-model-perf"></canvas></div>' +
+                    '</div>' +
+                    '<div class="card">' +
+                        '<div class="card-header"><h3><i class="fas fa-table"></i> Model Performance</h3></div>' +
+                        '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> One row per model showing metrics from that model\'s most recent training run only (not combined across datasets or runs).</p>' +
+                        '<div class="table-container"><table class="perf-table"><thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead><tbody>' +
                                 perfRows.map(function(r) {
                                     var isWinner = winnerAlgo && r.algorithm === winnerAlgo;
                                     return '<tr' + (isWinner ? ' class="winner-row"' : '') + '><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong>' +
@@ -750,7 +751,6 @@ var ADMIN = {
                                 }).join('') +
                                 (perfRows.length === 0 ? '<tr><td colspan="5" class="text-center text-muted">No training data available.</td></tr>' : '') +
                             '</tbody></table></div>' +
-                        '</div>' +
                     '</div>' +
                 '</div>';
 
