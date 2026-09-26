@@ -48,6 +48,15 @@ body {
     transparent 34px,
     rgba(28, 35, 31, 0.035) 35px
   );
+  /* Sideways-scroll guard.
+     The nav used to carry `overflow-x: hidden` to stop itself pushing the
+     page, but that made the navbar a scroll container: it clipped the
+     account menu (absolutely positioned, hanging below the nav) and grew a
+     scrollbar inside the header. Clipping at the page level instead means
+     one oversized element is cut off on its own rather than breaking the
+     chrome for everything -- the account menu and alert panel both hang
+     outside their parents and still render fully. */
+  overflow-x: hidden;
 }
 
 a {
@@ -77,17 +86,16 @@ a:hover {
   position: sticky;
   top: 0;
   z-index: 1000;
-  /* The nav is a single non-wrapping flex row holding the brand, five tabs,
-     the layout controls and the user cluster. Once the layout toolbar was
-     added, that row was wide enough to push past the viewport -- which made
-     the whole document scroll sideways and spilled "System Administrator"
-     and "Close file" off the dark background onto the white page, where
-     their light-on-white text was unreadable.
-     These three rules are the guard: the tab strip is allowed to shrink and
-     scroll instead of pushing, the user cluster is never shrunk, and the nav
-     never exceeds its container. */
+  /* max-width: 100% keeps the nav from exceeding its container.
+     There is deliberately NO overflow here. An earlier version used
+     `overflow-x: hidden` to stop the nav pushing the page sideways, but that
+     turns the navbar into a scroll container: it clips the account menu,
+     which is absolutely positioned and hangs below the nav, and it grows a
+     scrollbar of its own inside the header. The page-level
+     `body { overflow-x: hidden }` guard handles the sideways-scroll case
+     without clipping anything, and the tab strip manages its own overflow
+     locally through .nav-links. */
   max-width: 100%;
-  overflow-x: hidden;
 }
 
 .nav-brand {
@@ -1359,6 +1367,9 @@ tbody tr:last-child td {
   display: flex;
   border-bottom: 2px solid var(--ink);
   margin-bottom: 1.5rem;
+  /* Scrolls its own long meta line (the "Compiled ..." stamp) rather than
+     pushing the page sideways. Safe as a scroll container because nothing
+     inside the header hangs outside it. */
   overflow-x: auto;
 }
 
@@ -1698,7 +1709,10 @@ tbody tr:last-child td {
 @media (max-width: 768px) {
   .navbar {
     flex-wrap: wrap;
-    overflow-x: auto;
+    /* No overflow-x here either: it would clip the account menu on exactly
+       the phones where the menu is most needed. The tab strip already
+       handles its own overflow, and the page-level body guard covers the
+       rest. */
     padding: 0 0.75rem;
   }
   .nav-brand {
@@ -3136,16 +3150,6 @@ body.widget-resizing {
   .chart-container,
   .chart-card .chart-container {
     height: 210px !important;
-  }
-
-  /* Last-resort guard against any single element forcing the whole document
-     wider than the screen. A stray wide child previously made the entire page
-     scroll sideways, which dragged the sticky navbar's contents off the end
-     and made the identity/logout controls unreadable. Clipping at the page
-     level means one bad element degrades to being cut off on its own rather
-     than breaking the chrome for everything. */
-  body {
-    overflow-x: hidden;
   }
 
   /* The KPI row and the chart grids carry a 1.1rem gap; on a phone that is a
