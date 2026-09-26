@@ -343,9 +343,13 @@ const LAYOUT = {
 
     // ---- toolbar (admin only) ---------------------------------------------
 
-    // Renders the Save / Reset controls in the navbar. Kept out of index.html
-    // and injected here so a non-admin never receives the markup at all --
-    // the buttons are not merely hidden with CSS, they are never created.
+    // Renders the Save / Reset controls. Kept out of index.html and injected
+    // here so a non-admin never receives the markup at all -- the buttons are
+    // not merely hidden with CSS, they are never created.
+    //
+    // The host is the slim bar above the page content, not the navbar: these
+    // act on the widgets on this screen, so they belong with them. In the
+    // navbar they overran the row and scrolled the tab strip sideways.
     mountToolbar() {
         const slot = document.getElementById('layout-toolbar-slot');
         if (!slot) return;

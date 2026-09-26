@@ -276,6 +276,17 @@ var ADMIN = {
             : 'Preview every chart exactly as a faculty account sees it';
     },
 
+    // Keep the active tab visible in the scrollable tab strip. The scrollbar
+    // is hidden, so without this a tab further along the row would activate
+    // off-screen with no visible indicator and no scrollbar to explain why.
+    showActiveTab() {
+        const active = document.querySelector('.nav-links li button.active');
+        if (!active || typeof active.scrollIntoView !== 'function') return;
+        // "nearest" scrolls the minimum distance, so an already-visible tab
+        // does not jump the whole strip to the left.
+        active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    },
+
     renderTab: function(tab) {
         this.currentTab = tab;
         var content = document.getElementById('admin-content');
@@ -283,6 +294,16 @@ var ADMIN = {
         var tabContent = document.createElement('div');
         tabContent.id = 'admin-tab-content';
         content.appendChild(tabContent);
+
+        // The layout editor lives HERE, above the tab content, rather than in
+        // the navbar. It is a per-page control, not app navigation: it acts on
+        // the widgets on this screen, so it belongs with them. In the navbar it
+        // consumed ~250px of the nav's width, which overran the row, scrolled
+        // the tab strip sideways and buried the active tab behind a scrollbar.
+        var layoutBar = document.createElement('div');
+        layoutBar.id = 'layout-toolbar-slot';
+        layoutBar.className = 'layout-toolbar-bar';
+        tabContent.appendChild(layoutBar);
 
         // Apply the shared, admin-editable layout. LAYOUT.mount() reads the
         // saved geometry and, for an administrator only, attaches the resize
@@ -308,6 +329,9 @@ var ADMIN = {
             case 'actions': this.renderActionUpdates(tabContent); break;
             
         }
+        // The tab strip is scrollable with a hidden scrollbar, so the active
+        // tab is scrolled into view explicitly on every switch.
+        this.showActiveTab();
     },
 
     // ============================================================
