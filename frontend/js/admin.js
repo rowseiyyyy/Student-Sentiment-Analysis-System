@@ -417,7 +417,6 @@ var ADMIN = {
             var catData = await Promise.all(categories.map(function(c) {
                 return API.getCategoryAnalytics(c, filterQs || null).catch(function() { return null; });
             }));
-            var maxCatTotal = 1;
             var ledgerRows = categories.map(function(c, i) {
                 var d = catData[i];
                 var b = (d && d.breakdown) || {};
@@ -427,23 +426,16 @@ var ADMIN = {
                     neg: b.negative || 0
                 };
                 var total = b.total || (counts.pos + counts.neu + counts.neg);
-                if (total > maxCatTotal) maxCatTotal = total;
                 return { label: c, total: total, counts: counts };
             });
-            var ledgerRowsHtml = ledgerRows.map(function(r) {
-                var seg = function(count, cls, name) {
-                    if (count <= 0) return '';
-                    var w = (count / maxCatTotal) * 100;
-                    return '<div class="ledger-fill ' + cls + '" style="width:' + w + '%" title="' + name + ': ' + count + '"></div>';
-                };
-                var displayLabel = r.label === 'Payment' ? 'Payments' : r.label;
-                var countLabel = r.total > 0
-                    ? r.counts.pos + ' pos · ' + r.counts.neu + ' neu · ' + r.counts.neg + ' neg'
-                    : 'No submissions';
-                return '<div class="ledger-row"><span class="label">' + displayLabel + '</span><div class="ledger-track">' +
-                    seg(r.counts.pos, 'pos', 'Positive') + seg(r.counts.neu, 'neu', 'Neutral') + seg(r.counts.neg, 'neg', 'Negative') +
-                    '</div><span class="pct" title="' + countLabel + '">' + r.total + '</span></div>';
-            }).join('');
+            // Line graph: one point per department, three series (positive /
+            // neutral / negative submission counts) crossing at each category.
+            // Was a set of stacked horizontal CSS bars; the counts are the same,
+            // only the presentation changed. The canvas is charted in
+            // renderByDepartmentChart() after the markup is written.
+            var byDeptLabels = ledgerRows.map(function(r) {
+                return r.label === 'Payment' ? 'Payments' : r.label;
+            });
 
             // ---- Trend & change indicators (KPI badges + sparklines) ----
             // Uses GET /analytics/monthly: compares the current calendar
@@ -685,96 +677,7 @@ var ADMIN = {
                     '<p class="term-cmp-note">' + escapeHtml(termCmp.note) + '</p>';
             }
 
-            // ---- Quick department leaderboard ----
-            // Ranks the categories already fetched for the By Department card by
-            // positive share, so this adds no extra request. Top 3 / bottom 3,
-            // with anything already listed on top excluded from the bottom list
-            // so a small department count (this school has four) never lists the
-            // same department twice. Pointers lead to the fuller views.
-            var displayCategory = function(c) { return c === 'Payment' ? 'Payments' : c; };
-            var rankedDepts = ledgerRows.filter(function(r) {
-                return r.total > 0;
-            }).map(function(r) {
-                return { label: r.label, total: r.total, counts: r.counts, posPct: (r.counts.pos / r.total) * 100 };
-            }).sort(function(a, b) {
-                return b.posPct - a.posPct || b.total - a.total;
-            });
-            var topDepts = rankedDepts.slice(0, 3);
-            var topLabels = {};
-            topDepts.forEach(function(r) { topLabels[r.label] = true; });
-            var bottomDepts = rankedDepts.slice(-3).reverse().filter(function(r) { return !topLabels[r.label]; });
 
-            function leaderboardRow(r, rank, tone) {
-                var total = r.total || 1;
-                var segment = function(count, cls) {
-                    if (count <= 0) return '';
-                    return '<div class="ledger-fill ' + cls + '" style="width:' + ((count / total) * 100) + '%"></div>';
-                };
-                return '<div class="ledger-row">' +
-                    '<span class="label"><span class="leader-rank ' + tone + '">' + rank + '</span>' + displayCategory(r.label) +
-                        ' <span class="leader-n">n=' + r.total + '</span></span>' +
-                    '<div class="ledger-track">' + segment(r.counts.pos, 'pos') + segment(r.counts.neu, 'neu') + segment(r.counts.neg, 'neg') + '</div>' +
-                    '<span class="pct" title="' + r.counts.pos + ' pos \u00b7 ' + r.counts.neu + ' neu \u00b7 ' + r.counts.neg + ' neg">' +
-                        r.posPct.toFixed(0) + '%</span>' +
-                    '</div>';
-            }
-
-            var leaderboardHtml;
-            if (!rankedDepts.length) {
-                leaderboardHtml = emptyBlock('No department submissions match the current filter.');
-            } else {
-                leaderboardHtml = '<div class="leaderboard-group">' +
-                    '<span class="leaderboard-heading">Most positive</span>' +
-                    '<div class="ledger-bars">' + topDepts.map(function(r, i) { return leaderboardRow(r, i + 1, 'top'); }).join('') + '</div>' +
-                    '</div>';
-                if (bottomDepts.length) {
-                    leaderboardHtml += '<div class="leaderboard-group">' +
-                        '<span class="leaderboard-heading">Needs attention</span>' +
-                        '<div class="ledger-bars">' + bottomDepts.map(function(r) {
-                            return leaderboardRow(r, rankedDepts.length - rankedDepts.indexOf(r), 'bottom');
-                        }).join('') + '</div>' +
-                        '</div>';
-                }
-                if (rankedDepts.length < 6) {
-                    leaderboardHtml += '<p class="leaderboard-note">Showing ' +
-                        (topDepts.length + bottomDepts.length) + ' of ' + rankedDepts.length +
-                        ' departments \u2014 with fewer than six, a department would otherwise appear in both lists. ' +
-                        'The full per-department split is in By Department below.</p>';
-                }
-            }
-
-            // ---- System health snapshot ----
-            var lowPct = overall.low_confidence_pct || 0;
-            var lowCount = overall.low_confidence_count || 0;
-            var daysSince = overall.days_since_last_submission;
-            // Colour bands, mirrored in the card's (i) caption: green = healthy,
-            // amber = worth a look, red = act. Deliberately conservative - more
-            // than a quarter of predictions at coin-flip confidence, or over a
-            // week of silence, is a real signal about the data pipeline.
-            var lowTone = lowPct < 10 ? 'good' : (lowPct < 25 ? 'warn' : 'bad');
-            var idleTone = (daysSince === null || daysSince === undefined) ? 'warn'
-                : (daysSince <= 2 ? 'good' : (daysSince <= 7 ? 'warn' : 'bad'));
-            function healthRow(icon, label, value, tone, hint) {
-                return '<div class="health-row">' +
-                    '<span class="health-icon ' + tone + '"><i class="fas ' + icon + '"></i></span>' +
-                    '<span class="health-label">' + label + '</span>' +
-                    '<span class="health-value ' + tone + '" title="' + escapeHtml(hint) + '">' + value + '</span>' +
-                    '</div>';
-            }
-            var hasHealthData = (overall.evaluation_volume || 0) > 0;
-            var healthBodyHtml = !hasHealthData
-                ? emptyBlock('No submissions match the current filter.')
-                : '<div class="health-rows">' +
-                    healthRow('fa-triangle-exclamation', 'Low-confidence submissions', lowPct.toFixed(1) + '%', lowTone,
-                        lowCount + ' of ' + (overall.evaluation_volume || 0) +
-                        ' predictions scored below 50% model confidence') +
-                    healthRow('fa-clock', 'Days since last submission',
-                        (daysSince === null || daysSince === undefined) ? '\u2014' : String(daysSince), idleTone,
-                        'Time since the most recent submission in this filter scope') +
-                    healthRow('fa-calendar-check', 'Last submission',
-                        shortDate(overall.last_submission_at), 'neutral',
-                        'Date of the most recent submission in this filter scope') +
-                    '</div>';
             var trendPeriod = (byPeriod[nowKey] ? nowKey : (mPoints.length ? mPoints[mPoints.length - 1].period : '')) || '—';
 
             container.innerHTML = '' +
@@ -820,30 +723,9 @@ var ADMIN = {
                         '<p class="source-note">The grading period in progress versus the one immediately before it, resolved from today\'s date through the same academic calendar that drives the Analytics term chart. During a break or enrollment month there is no active period, so the two most recently completed periods are compared instead and the caption below says so.</p>' +
                         termCmpBodyHtml +
                     '</div>' +
-                    '<div class="chart-card">' +
-                        '<div class="leaderboard-header">' +
-                            '<h3><i class="fas fa-list-ol"></i> Department Leaderboard</h3>' +
-                            '<span class="leaderboard-actions">' +
-                                '<button class="btn btn-sm btn-outline" onclick="ADMIN.scrollToOverviewCard(\'overview-by-department\')" title="Jump to the full By Department breakdown on this tab"><i class="fas fa-arrow-down"></i> By Department</button>' +
-                                '<button class="btn btn-sm btn-outline" onclick="ADMIN.renderTab(\'analytics\')" title="Open the Analytics tab for the full breakdown"><i class="fas fa-chart-line"></i> Analytics</button>' +
-                            '</span>' +
-                        '</div>' +
-                        '<p class="source-note">Departments ranked by the positive share of their submissions: the bar shows the full positive / neutral / negative split, the right-hand figure is that department\'s positive rate and n is its submission count. A quick ranking only - the full split lives in By Department and Analytics.</p>' +
-                        leaderboardHtml +
-                    '</div>' +
-                    '<div class="chart-card">' +
-                        '<h3><i class="fas fa-heartbeat"></i> System Health</h3>' +
-                        '<p class="source-note">At-a-glance data health for the current filter scope. Green = healthy, amber = worth a look, red = act. "Low confidence" means the model scored a prediction below 50% confidence (the configurable LOW_CONFIDENCE_THRESHOLD), so those submissions are worth a human review rather than being trusted as-is.</p>' +
-                        healthBodyHtml +
-                    '</div>' +
                 '</div>' +
                 '<div class="two-col">' +
                     '<div>' +
-                        '<div class="chart-card" style="margin-bottom:1.1rem;">' +
-                            '<h3><i class="fas fa-chart-pie"></i> Sentiment Distribution</h3>' +
-                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">All evaluation-form submissions ever received, classified positive / neutral / negative at the time each was submitted.' +
-                            '<div class="chart-container"><canvas id="chart-sentiment-overview"></canvas></div>' +
-                        '</div>' +
                         '<div class="chart-card">' +
                             '<h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3>' +
                             '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> Accuracy &amp; F1 score measured on the held-out test split from each algorithm\'s most recent training run — one bar pair per algorithm\'s latest run, independent of how many students have submitted evaluations since.' +
@@ -852,9 +734,9 @@ var ADMIN = {
                     '</div>' +
                     '<div>' +
                         '<div class="card" id="overview-by-department" style="margin-bottom:1.1rem;">' +
-                            '<div class="card-header"><h3><i class="fas fa-chart-bar"></i> By Department</h3></div>' +
-                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, in ' + scopeNote + ', stacked by predicted sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative; hover the count for the exact split)' +
-                            '<div class="ledger-bars">' + ledgerRowsHtml + '</div>' +
+                            '<div class="card-header"><h3><i class="fas fa-chart-line"></i> By Department</h3></div>' +
+                            '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, in ' + scopeNote + ', as one line per sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative). Departments are a fixed four-point axis, so read the heights at each category rather than the slope between them; hover any point for that department&rsquo;s exact split.' +
+                            '<div class="chart-container" style="height:300px;" id="chart-host-by-department"></div>' +
                         '</div>' +
                         '<div class="card">' +
                             '<div class="card-header"><h3><i class="fas fa-table"></i> Model Performance</h3></div>' +
@@ -880,9 +762,9 @@ var ADMIN = {
             // condition that made the bar chart randomly vanish.
             this.compressNotes(container);
             this.destroyCharts();
-            this.renderSentimentChart(overall.breakdown);
             this.renderModelPerfChart(perfRows);
             this.renderTermComparisonChart(termCmp);
+            this.renderByDepartmentChart(byDeptLabels, ledgerRows);
         } catch (error) {
             container.innerHTML = '<div class="page-header"><h1>Dashboard Overview</h1></div><div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-database"></i></div><h3>No Data Available</h3><p>' + escapeHtml(error.message) + '</p></div></div>';
         }
@@ -921,44 +803,57 @@ var ADMIN = {
         if (content) this.renderOverview(content); else this.renderTab('overview');
     },
 
-    renderSentimentChart: function(breakdown) {
-        setTimeout(function() {
-            var ctx = document.getElementById('chart-sentiment-overview');
-            if (!ctx) return;
-            // Sleek donut: hollow centre shows the total feedback count
-            // (dominant sentiment % on hover is covered by tooltips).
-            var total = (breakdown.positive || 0) + (breakdown.neutral || 0) + (breakdown.negative || 0);
-            var centerText = {
-                id: 'centerText',
-                afterDraw: function(chart) {
-                    if (chart.config.type !== 'doughnut') return;
-                    var meta = chart.getDatasetMeta(0).data[0];
-                    if (!meta) return;
-                    var g = chart.ctx;
-                    g.save();
-                    g.textAlign = 'center';
-                    g.textBaseline = 'middle';
-                    g.font = '700 1.5rem "Public Sans", sans-serif';
-                    g.fillStyle = '#1c231f';
-                    g.fillText(String(total), meta.x, meta.y - 8);
-                    g.font = '500 .62rem "Public Sans", sans-serif';
-                    g.fillStyle = '#8b9389';
-                    g.fillText('TOTAL', meta.x, meta.y + 14);
-                    g.restore();
-                }
+
+    // "By Department" as a line graph: three series crossing at each of the
+    // four departments. Replaces the old stacked CSS bars with the same counts.
+    // The tooltip repeats the split and the total, which the old hover-only
+    // count carried, so no information is lost by moving off the bars.
+    renderByDepartmentChart: function(labels, rows) {
+        var series = [
+            { key: 'pos', label: 'Positive', color: '#2f6f4e' },
+            { key: 'neu', label: 'Neutral', color: '#b7791f' },
+            { key: 'neg', label: 'Negative', color: '#b33a3a' }
+        ].map(function(s) {
+            return {
+                label: s.label,
+                data: rows.map(function(r) { return r.counts[s.key]; }),
+                borderColor: s.color,
+                backgroundColor: s.color,
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                tension: 0.3
             };
-            ADMIN.charts.sentiment = new Chart(ctx, {
-                type: 'doughnut',
-                data: { labels: ['Positive', 'Neutral', 'Negative'], datasets: [{ data: [breakdown.positive || 0, breakdown.neutral || 0, breakdown.negative || 0], backgroundColor: ['#2f6f4e', '#b7791f', '#b33a3a'], borderWidth: 2, borderColor: '#f8f9f5', hoverOffset: 6 }] },
+        });
+        var hasAny = rows.some(function(r) { return (r.total || 0) > 0; });
+        this.mountChart('chart-host-by-department', hasAny, function(canvas) {
+            ADMIN.charts.byDepartment = new Chart(canvas, {
+                type: 'line',
+                data: { labels: labels, datasets: series },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    cutout: '68%',
-                    plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8 } } }
-                },
-                plugins: [centerText]
+                    interaction: { intersect: false, mode: 'index' },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                footer: function(items) {
+                                    var row = rows[items[0].dataIndex] || { counts: {} };
+                                    var c = row.counts || {};
+                                    return 'Total ' + (row.total || 0) +
+                                        ' \u00b7 ' + (c.pos || 0) + ' pos / ' +
+                                        (c.neu || 0) + ' neu / ' + (c.neg || 0) + ' neg';
+                                }
+                            }
+                        }
+                    }
+                }
             });
-        }, 100);
+        }, 'No department submissions match the current filter.');
     },
 
     // Two small doughnut "rings" (deliberately not the Analytics stacked bar)
@@ -1898,7 +1793,6 @@ predictionHtml +
                     '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per question, listed strongest first, split into one table per department — &ldquo;Staff are weakest on safety, Facilities on cleanliness&rdquo;. Every department asks a different set of questions, so each table shows only what that department actually asked. n is how many students answered; a high score resting on very few answers is thin evidence.</p>' +
                     '<div id="aspect-tables"></div>' +
                   '</div>' +
-                '<div class="chart-card"><h3><i class="fas fa-project-diagram"></i> Sentiment Trend by Department</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Department positivity rate per month, size-normalized so trends compare fairly. Each point is tagged with that month\'s raw submission count (n=), so a swing backed by real volume can be told apart from one resting on a handful of low-traffic submissions.</p><div class="chart-container" id="chart-host-department-trend"></div></div>' +
                   // A bar per course reads better wide, and it is the last
                   // chart before the comment lists, so nothing follows to
                   // backfill beside it: it takes the full row.
@@ -2058,17 +1952,10 @@ predictionHtml +
             // the whole tab via the catch block below.
             var extra = await Promise.all([
                 API.getTermAnalytics(qs).catch(function() { return null; }),
-                Promise.all(categories.map(function(c) {
-                    // _qs(c) keeps the date filter while pinning one department:
-                    // this chart always compares all four, so only the date part
-                    // of the scope applies here.
-                    return API.getMonthlyTrend(ADMIN._qs(c)).catch(function() { return null; });
-                })),
                 API.getCourseAnalytics(qs).catch(function() { return null; })
             ]);
             var termData = extra[0];
-            var deptTrends = extra[1];
-            var courseData = extra[2];
+            var courseData = extra[1];
 
             setTimeout(function() {
                 var ctx = document.getElementById('chart-category-sentiment');
@@ -2105,121 +1992,6 @@ predictionHtml +
                         options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }, plugins: { legend: { position: 'bottom' } } }
                     });
                 }, 'No academic term data available.');
-            }, 100);
-
-            // ---- Sentiment trend by department over time (one line per department) ----
-            // Departments carry very different submission volumes, so each line
-            // plots that department's POSITIVITY RATE for the month (Positive
-            // share of that month's submissions) instead of raw counts. A month
-            // with no submissions for a department stays a gap, not a fake 0%.
-            //
-            // A rate on its own cannot be read though: 100% off two submissions
-            // means something very different from 100% off forty. So each point
-            // also carries that month's raw submission volume, which this
-            // inline plugin prints as an "n=" count label beside the marker
-            // (the tooltip repeats it). A 100% spike tagged "n=1" is visibly
-            // thin data rather than a real shift. Chart.js 4 is loaded from a
-            // CDN without chartjs-plugin-datalabels, so this is a small inline
-            // plugin instead of an extra dependency.
-            var deptVolumeLabels = {
-                id: 'deptVolumeLabels',
-                afterDatasetsDraw: function(chart) {
-                    var ctx = chart.ctx;
-                    ctx.save();
-                    ctx.font = '600 9px monospace';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'bottom';
-                    chart.data.datasets.forEach(function(dataset, di) {
-                        var meta = chart.getDatasetMeta(di);
-                        if (meta.hidden || !dataset.volumes) return;
-                        meta.data.forEach(function(element, index) {
-                            var volume = dataset.volumes[index];
-                            // null = no submissions that month, so no marker and
-                            // no label either (leave the gap clean).
-                            if (volume == null) return;
-                            var text = 'n=' + volume;
-                            // White halo keeps the tiny label legible where two
-                            // departments' lines cross.
-                            ctx.lineWidth = 3;
-                            ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-                            ctx.strokeText(text, element.x, element.y - 6);
-                            ctx.fillStyle = dataset.borderColor || '#555';
-                            ctx.fillText(text, element.x, element.y - 6);
-                        });
-                    });
-                    ctx.restore();
-                }
-            };
-            var deptColors = { Faculty: '#2b3a67', Staff: '#7c5cbf', Facilities: '#2e7d8f', Payment: '#8a5a2b' };
-            var deptMonths = [];
-            (deptTrends || []).forEach(function(d) {
-                ((d && d.points) || []).forEach(function(p) {
-                    if (deptMonths.indexOf(p.period) === -1) deptMonths.push(p.period);
-                });
-            });
-            deptMonths.sort();
-            var hasDeptTrend = false;
-            var deptDatasets = categories.map(function(c, i) {
-                var points = (deptTrends && deptTrends[i] && deptTrends[i].points) ? deptTrends[i].points : [];
-                var byMonth = {};
-                points.forEach(function(p) { byMonth[p.period] = p; });
-                var series = [];
-                var volumes = [];
-                deptMonths.forEach(function(m) {
-                    var point = byMonth[m];
-                    if (!point || !point.total) {
-                        // No submissions that month: keep the gap (null), and
-                        // null the volume too so no "n=0" label is drawn.
-                        series.push(null);
-                        volumes.push(null);
-                        return;
-                    }
-                    hasDeptTrend = true;
-                    series.push(Math.round((point.positive / point.total) * 1000) / 10);
-                    volumes.push(point.total);
-                });
-                return {
-                    label: c === 'Payment' ? 'Payments' : c,
-                    data: series,
-                    // Raw submission count per month, read by the
-                    // deptVolumeLabels plugin and the tooltip callback below.
-                    volumes: volumes,
-                    borderColor: deptColors[c],
-                    backgroundColor: deptColors[c],
-                    borderWidth: 2,
-                    pointRadius: 3,
-                    fill: false,
-                    tension: 0.35,
-                    spanGaps: true
-                };
-            });
-            setTimeout(function() {
-                ADMIN.mountChart('chart-host-department-trend', hasDeptTrend, function(canvas) {
-                    ADMIN.charts.departmentTrend = new Chart(canvas, {
-                        type: 'line',
-                        data: { labels: deptMonths, datasets: deptDatasets },
-                        // Inline plugin: "n=" volume labels beside each point.
-                        plugins: [deptVolumeLabels],
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: { intersect: false, mode: 'index' },
-                            scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: '% Positive' } } },
-                            plugins: {
-                                legend: { position: 'bottom' },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(ctx) {
-                                            var volume = ctx.dataset.volumes ? ctx.dataset.volumes[ctx.dataIndex] : null;
-                                            var text = ctx.dataset.label + ': ' + ctx.formattedValue + '% positive';
-                                            return volume == null ? text : text + ' \u00b7 n=' + volume;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
-                }, 'No department trend data available.');
             }, 100);
 
             // ---- Sentiment by Courses (net sentiment score, best course first) ----
