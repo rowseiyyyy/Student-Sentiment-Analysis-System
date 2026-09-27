@@ -393,20 +393,6 @@ var ADMIN = {
             var overall = await API.getOverallAnalytics(filterQs || null);
             var perf = await API.getModelPerformance();
             var perfRows = filterModelPerfRows(perf.rows);
-            // Best-performing row: the model with the highest metrics
-            // (max F1-score, accuracy as tie-break) — independent of the
-            // backend's production/best_model declaration, which may
-            // point at a different row than the metric leader.
-            var winnerAlgo = null;
-            if (perfRows.length) {
-                var bestRow = perfRows.reduce(function(a, b) {
-                    var fa = [(a.f1_score || 0), (a.accuracy || 0)];
-                    var fb = [(b.f1_score || 0), (b.accuracy || 0)];
-                    return (fb[0] > fa[0] || (fb[0] === fa[0] && fb[1] > fa[1])) ? b : a;
-                });
-                winnerAlgo = bestRow.algorithm;
-            }
-
             // "By Department" = sentiment distribution per category, from
             // GET /analytics/category?category=X (the .breakdown
             // positive/neutral/negative counts). Each row is a stacked
@@ -715,7 +701,6 @@ var ADMIN = {
                     kpiCard({ tone: 'yellow', icon: 'fa-meh', value: overall.breakdown.neutral || 0, label: 'Neutral Feedbacks', spark: sparkNeu, badge: trendNeu, pct: pct(overall.breakdown.neutral_pct), caption: scopeNote }) +
                     kpiCard({ tone: 'red', icon: 'fa-frown', value: overall.breakdown.negative || 0, label: 'Negative Feedbacks', spark: sparkNeg, badge: trendNeg, pct: pct(overall.breakdown.negative_pct), caption: scopeNote + ' · badge compares ' + trendPeriod + ' vs prior month' }) +
                     kpiCard({ tone: 'blue', icon: 'fa-file-alt', value: overall.evaluation_volume || 0, label: 'Total Evaluations', spark: sparkTot, badge: trendTot, caption: 'Counted in ' + scopeNote }) +
-                    kpiCard({ tone: 'purple', icon: 'fa-chart-bar', value: overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A', label: 'Avg Confidence', caption: 'Avg. of each submission\'s prediction confidence at time of submission' }) +
                 '</div>' +
                 /* One 3-column grid for the whole tab. The cards are sized so
                    every row is completely full: 2 + 1, then 2 + 1. Previously
@@ -744,9 +729,7 @@ var ADMIN = {
                         '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> One row per model showing metrics from that model\'s most recent training run only (not combined across datasets or runs).</p>' +
                         '<div class="table-container"><table class="perf-table"><thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead><tbody>' +
                                 perfRows.map(function(r) {
-                                    var isWinner = winnerAlgo && r.algorithm === winnerAlgo;
-                                    return '<tr' + (isWinner ? ' class="winner-row"' : '') + '><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong>' +
-                                        (isWinner ? ' <span class="winner-badge" title="Highest F1-score of the trained models"><i class="fas fa-trophy"></i> Best</span>' : '') +
+                                    return '<tr><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong>' +
                                         '</td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td></tr>';
                                 }).join('') +
                                 (perfRows.length === 0 ? '<tr><td colspan="5" class="text-center text-muted">No training data available.</td></tr>' : '') +
@@ -1274,15 +1257,11 @@ var ADMIN = {
                 '</div></div>';
         };
         var pct = function(n) { return b.total ? ((n / b.total) * 100).toFixed(1) + '%' : '0%'; };
-        var avgConf = summary && summary.average_confidence
-            ? (summary.average_confidence * 100).toFixed(1) + '%'
-            : 'N/A';
         el.innerHTML = '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:1.1rem;">' +
             card('fa-inbox', 'blue', (b.total || 0), 'Total Responses', scopeLabel) +
             card('fa-smile', 'green', pos, 'Positive', pct(pos) + ' of all responses') +
             card('fa-meh', 'yellow', neu, 'Neutral', pct(neu) + ' of all responses') +
             card('fa-frown', 'red', neg, 'Negative', pct(neg) + ' of all responses') +
-            card('fa-bullseye', 'purple', avgConf, 'Avg Confidence', 'ML prediction confidence') +
             card('fa-triangle-exclamation', 'yellow', (reviewCount || 0), 'Needs Review', 'Likert / sentiment mismatches') +
         '</div>';
     },
@@ -1764,7 +1743,6 @@ predictionHtml +
             '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">' +
                 '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-chart-line"></i></div><div class="stat-info"><h3 id="ana-pos-pct">-</h3><p>Positive Rate</p><small class="source-note">Scope: ' + scopeNote + '</small></div></div>' +
                 '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3 id="ana-total">-</h3><p>Total Entries</p><small class="source-note">Counted in ' + scopeNote + '</small></div></div>' +
-                '<div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-bullseye"></i></div><div class="stat-info"><h3 id="ana-confidence">-</h3><p>Model Confidence</p><small class="source-note">Mean prediction confidence, ' + scopeNote + '</small></div></div>' +
             '</div>' +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category. This panel always compares all four departments, so the department filter does not apply to it.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
@@ -1824,7 +1802,6 @@ predictionHtml +
 
             document.getElementById('ana-pos-pct').textContent = (overall.breakdown.positive_pct || 0).toFixed(1) + '%';
             document.getElementById('ana-total').textContent = overall.evaluation_volume || 0;
-            document.getElementById('ana-confidence').textContent = overall.average_confidence ? (overall.average_confidence * 100).toFixed(1) + '%' : 'N/A';
 
             // ---- Per-department rating panels -----------------------------
             // deptRatings is null when the scope is already one department; the
@@ -2205,20 +2182,8 @@ predictionHtml +
         try {
             var perf = await API.getModelPerformance();
             var rows = filterModelPerfRows(perf.rows);
-            // Winner = the model with the highest metrics (max F1-score,
-            // accuracy as tie-break), matching the overview table logic.
-            var winnerAlgo = null;
-            if (rows.length) {
-                winnerAlgo = rows.reduce(function(a, b) {
-                    var fa = [(a.f1_score || 0), (a.accuracy || 0)];
-                    var fb = [(b.f1_score || 0), (b.accuracy || 0)];
-                    return (fb[0] > fa[0] || (fb[0] === fa[0] && fb[1] > fa[1])) ? b : a;
-                }).algorithm;
-            }
             var rowsHtml = rows.map(function(r) {
-                var isWinner = winnerAlgo && r.algorithm === winnerAlgo;
-                return '<tr' + (isWinner ? ' class="winner-row"' : '') + '><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong>' +
-                    (isWinner ? ' <span class="winner-badge" title="Best-performing model (production choice)"><i class="fas fa-trophy"></i> Best</span>' : '') +
+                return '<tr><td><strong>' + modelPerfDisplayName(r.algorithm) + '</strong>' +
                     '</td><td>' + formatNumber(r.accuracy) + '</td><td>' + formatNumber(r.precision) + '</td><td>' + formatNumber(r.recall) + '</td><td>' + formatNumber(r.f1_score) + '</td><td><button class="btn btn-sm btn-primary" onclick="ADMIN.viewConfusionMatrix(\'' + r.algorithm + '\')" title="Confusion Matrix"><i class="fas fa-th"></i></button> <button class="btn btn-sm btn-outline" onclick="ADMIN.downloadModel(\'' + r.algorithm + '\')" title="Download"><i class="fas fa-download"></i></button></td></tr>';
             }).join('');
 

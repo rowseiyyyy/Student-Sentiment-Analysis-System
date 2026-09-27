@@ -388,8 +388,8 @@ a:hover {
 }
 
 /* The trend badge and the percentage share one row: one line shorter per card,
-   and the row lines up across all five. The min-height keeps a card that has
-   neither (Avg Confidence) exactly as tall as the rest. */
+   and the row lines up across all four. The min-height keeps a card that has
+   neither badge nor percentage exactly as tall as the rest. */
 .stat-meta {
   display: flex;
   align-items: center;
@@ -1262,35 +1262,6 @@ tbody tr:last-child td {
   font-size: .6rem;
   color: var(--ink-faint);
   text-align: right;
-}
-
-/* ============================================================
-   WINNING MODEL HIGHLIGHT (performance tables)
-   ============================================================ */
-.perf-table tr.winner-row td {
-  background: rgba(47, 111, 78, .07);
-  border-top: 1px solid rgba(47, 111, 78, .3);
-  border-bottom: 1px solid rgba(47, 111, 78, .3);
-}
-.perf-table tr.winner-row td:first-child {
-  border-left: 3px solid rgba(47, 111, 78, .55);
-}
-.winner-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: .25rem;
-  font-family: var(--font-mono);
-  font-size: .58rem;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--pos);
-  background: rgba(47, 111, 78, .12);
-  border: 1px solid rgba(47, 111, 78, .4);
-  border-radius: 999px;
-  padding: .1rem .45rem;
-  margin-left: .35rem;
-  vertical-align: middle;
 }
 
 /* ============================================================
