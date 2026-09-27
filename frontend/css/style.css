@@ -2290,25 +2290,37 @@ body.widget-resizing {
   box-shadow: 4px 0 0 0 var(--brand);
 }
 
-/* A chart card honours an administrator-set height via --widget-h. The
-   fallback is deliberately `unset` rather than a number: .chart-container
-   already has its own height (280px by default, and a couple of theme charts
-   set an inline 300px). Overriding that with a blanket value here would
-   silently resize existing charts on every page the admin never touched, so
-   an unsized chart keeps exactly the height it had before. */
-.chart-card .chart-container {
-  height: var(--widget-h, unset);
+/* A chart card honours an administrator-set height via --widget-h. The rule is
+   gated on .widget-h-exact, which layout.js adds only while a height is
+   actually saved, so an unsized chart keeps exactly the height the rest of the
+   stylesheet gives it (280px by default, 240px on a phone, and an inline 300px
+   on the couple of theme charts that set one).
+
+   It used to be written as `height: var(--widget-h, unset)`, on the reasoning
+   that `unset` would fall back to the stylesheet. It does not: `unset` on a
+   height means AUTO, not "whatever the cascade already decided". So clearing a
+   card's height did not restore the authored chart height, it collapsed the
+   canvas to its intrinsic size. A variable that is simply absent has to mean
+   "leave this alone", which needs the class. */
+.chart-card.widget-h-exact .chart-container {
+  height: var(--widget-h);
 }
 
 /* A chart's canvas takes --widget-h as an EXACT height, because the canvas is
    the card's whole body: a fixed height is what makes the plot readable.
 
-   A text or table card cannot do that -- a fixed height would clip a row or a
-   paragraph -- so it takes the same value as a MIN-height. The card can then be
-   made taller to line up with the cards beside it, while still growing if its
-   own content needs more room. `unset` means "no minimum", which is the state
-   of every card the admin has not given a height to. */
-.card {
+   A card with no chart body (the Overview's Term-over-Term card, a table card)
+   cannot do that -- a fixed height would clip a row or a paragraph -- so it
+   takes the same value as a MIN-height. The card can then be made taller to
+   line up with the cards beside it, while still growing if its own content
+   needs more room. `unset` means "no minimum", which is the state of every card
+   the admin has not given a height to.
+
+   layout.js adds .widget-h-min to those cards. It is set from script rather
+   than matched in CSS with `:has(.chart-container)` so the rule does not depend
+   on that selector being available. */
+.card,
+.chart-card.widget-h-min {
   min-height: var(--widget-h, unset);
 }
 
@@ -2325,12 +2337,13 @@ body.widget-resizing {
      The two theme charts that carry a literal inline height:300px are
      overridden further down, in the phone media query, where that inline
      style can be beaten. */
-  .chart-card .chart-container {
+  .chart-card.widget-h-exact .chart-container {
     height: var(--widget-h-mobile, 220px) !important;
   }
   /* Same reasoning for a card's minimum height: a height chosen on a desktop
      would waste most of a phone screen. */
-  .card {
+  .card,
+  .chart-card.widget-h-min {
     min-height: var(--widget-h-mobile, unset) !important;
   }
 }

@@ -50,7 +50,13 @@ const LAYOUT = {
     MIN_W: 1,
     MAX_W: 6,
     MIN_H: 120,
-    MAX_H: 900,
+    // Matches the server's own ceiling (MIN_H, MAX_H in
+    // app/schemas/dashboard_layout.py). These used to disagree: the UI stopped
+    // at 900px while the API would have accepted 1600, so a chart simply could
+    // not be made taller than 900 no matter how far the handle was dragged, and
+    // the stepper's "+" greyed out as though the limit were the design. Keep the
+    // two in step.
+    MAX_H: 1600,
     HEIGHT_STEP: 10,
 
     // Free pixel width. Once an admin resizes a card's width it is stored in
@@ -527,6 +533,22 @@ const LAYOUT = {
         return Math.round(px / this.PX_STEP) * this.PX_STEP;
     },
 
+    // The element a widget's height actually applies to.
+    //
+    // For a chart that is the canvas host, NOT the card. Measuring the card and
+    // then writing the result to the canvas is why dragging the bottom edge felt
+    // broken: a chart card is header + caption + canvas + padding, say 430px, so
+    // every 1px of drag asked for 431px of CANVAS. The chart grew by far more
+    // than the mouse moved and each successive drag compounded the error.
+    //
+    // A card with no chart body (the Overview's Term-over-Term card, a table
+    // card) is its own target, and the stylesheet gives it a MIN-height so
+    // shrinking one never clips a row of text.
+    _heightTarget(el) {
+        if (!el || !el.querySelector) return el;
+        return el.querySelector('.chart-container') || el;
+    },
+
     // The span a widget should take when nothing has been saved for it.
     //
     // Read from the markup's own .span-2 / .span-3 class, so a card that was
@@ -595,16 +617,29 @@ const LAYOUT = {
             //
             // It used to be gated on .chart-card because a fixed height on a
             // text card clips its content. That is still true of an exact
-            // height, which is why .card honours --widget-h as a MIN-height
-            // below (content may grow past it) while a chart's canvas takes it
-            // as an exact height. The upshot is that a table card can be made
-            // taller to line up with its neighbours without losing a row.
+            // height, which is why a card with no chart body honours
+            // --widget-h as a MIN-height below (content may grow past it) while
+            // a chart's canvas takes it as an exact height. The upshot is that a
+            // table card can be made taller to line up with its neighbours
+            // without losing a row.
+            const onChart = this._heightTarget(el) !== el;
             if (saved && saved.h) {
                 const h = Math.max(this.MIN_H, Math.min(this.MAX_H, saved.h));
                 el.style.setProperty('--widget-h', h + 'px');
+                // Present only while a height is saved, because the stylesheet
+                // rule that consumes the variable is gated on this class: an
+                // absent variable has to mean "leave the chart alone", and
+                // `var(--widget-h, unset)` cannot express that -- unset on a
+                // height is auto, which collapses the canvas.
+                el.classList.toggle('widget-h-exact', onChart);
             } else {
                 el.style.removeProperty('--widget-h');
+                el.classList.remove('widget-h-exact');
             }
+            // A card with no chart body carries the height itself, as a minimum.
+            // Marked from here rather than with a `:has()` selector in the
+            // stylesheet so it does not depend on that selector being supported.
+            el.classList.toggle('widget-h-min', !onChart);
             // Keep the editor's readout in step with the geometry actually
             // applied, so the stepper can never claim a width the grid refused.
             if (el.__layoutStepper) el.__layoutStepper.sync();
@@ -911,12 +946,13 @@ const LAYOUT = {
 
         // ---- height, in pixels ----
         // The saved height is authoritative when there is one. Otherwise the
-        // card is measured, so the readout starts at the height the card is
-        // actually rendering at rather than an arbitrary minimum.
+        // height TARGET is measured, so the readout starts at the height the
+        // chart is actually rendering at rather than at the card's total.
         const currentH = function () {
             const saved = self._sizes[self._keyOf(el)] || {};
             if (saved.h) return Math.max(self.MIN_H, Math.min(self.MAX_H, saved.h));
-            return Math.round(el.getBoundingClientRect().height / self.HEIGHT_STEP) * self.HEIGHT_STEP;
+            const target = self._heightTarget(el);
+            return Math.round(target.getBoundingClientRect().height / self.HEIGHT_STEP) * self.HEIGHT_STEP;
         };
         const nudgeH = function (delta) {
             const next = Math.max(self.MIN_H, Math.min(self.MAX_H, currentH() + delta));
@@ -945,11 +981,15 @@ const LAYOUT = {
 
                 const h = currentH();
                 heightCtl.readout.textContent = h + 'px';
-                // On a text/table card the height is a minimum, so say so:
-                // promising an exact height there would be a lie the card
-                // would immediately break by growing past it.
-                heightCtl.box.title = 'Height: ' + h + 'px' + (isChart ? '' :
-                    ' (minimum - this card holds text or a table, so it grows if it needs to)');
+                // Say which element the number belongs to. On a chart it is the
+                // canvas and the height is exact; on a card with no chart body it
+                // is the card and the height is a minimum, because promising an
+                // exact height there would be a lie the card would immediately
+                // break by growing past it to fit its text.
+                const onChart = self._heightTarget(el) !== el;
+                heightCtl.box.title = 'Height: ' + h + 'px of the ' +
+                    (onChart ? 'chart' : 'card') + (onChart ? '' :
+                    ' (minimum - it holds text or a table, so it grows if it needs to)');
 
                 const raw = el.style.getPropertyValue('--widget-h');
                 const appliedH = parseInt(raw, 10);
@@ -1133,7 +1173,8 @@ const LAYOUT = {
         handle.addEventListener('keydown', function (e) {
             const step = e.shiftKey ? 3 : 1;
             const saved = self._sizes[self._keyOf(el)] || {};
-            const h = saved.h || el.getBoundingClientRect().height;
+            // Same rule as the drag: measure the height target, not the card.
+            const h = saved.h || self._heightTarget(el).getBoundingClientRect().height;
             const nudgePx = function (delta) {
                 const m = self._gridMetrics(el);
                 const next = self._currentPx(el) + delta;
@@ -1171,7 +1212,11 @@ const LAYOUT = {
             // A card still on its authored column span is converted to pixels
             // on first drag, which is the moment it stops being responsive.
             const startPx = self._currentPx(el);
-            const startH = el.getBoundingClientRect().height;
+            // Measure the height TARGET, not the card. The card is header +
+            // caption + canvas + padding, so using its height here and writing
+            // the result to the canvas made every drag overshoot by the card's
+            // own chrome, compounding on every repetition.
+            const startH = self._heightTarget(el).getBoundingClientRect().height;
             // Suppress text selection for the sweep, otherwise dragging
             // highlights the whole dashboard.
             document.body.classList.add('widget-resizing');
