@@ -677,11 +677,84 @@ const LAYOUT = {
         return Object.assign({}, this._sizes);
     },
 
+    // The document actually sent to the server.
+    //
+    // `_sizes` is a record of what the admin TOUCHED, so a widget's entry can
+    // legitimately hold only one field: a width drag writes `wp` and nothing
+    // else, a reorder writes only `order`. That was fine while the server
+    // accepted partial rows, and it is the whole reason saving stopped working
+    // once free pixel widths landed -- WidgetSize requires BOTH `w` and `h`, so
+    // a payload of {"page:card": {"wp": 720}} came back 422 and every save
+    // reported "Could not save the layout" no matter what had been changed.
+    //
+    // So the stored record stays partial (that is what keeps an untouched card
+    // on its responsive authored span), and the SERIALIZED payload is
+    // normalised here instead: every entry is given a concrete `w` and `h`
+    // resolved from what the card is actually rendering at, plus any `wp` and
+    // `order` it carries. A partially-specified record therefore describes the
+    // same thing to the server as it does to applyTo().
+    //
+    // The resolved values are also written back into `_sizes`. Otherwise the
+    // next gesture would read the partial record again, and the readouts would
+    // fall back to measuring the DOM rather than to the number just stored.
+    _serialized() {
+        const page = this._page();
+        const root = this._root;
+        const byKey = {};
+        if (root && page) {
+            this.entries(root, page).forEach((e) => { byKey[e.key] = e.el; });
+        }
+        const out = {};
+        Object.keys(this._sizes).forEach((key) => {
+            const saved = Object.assign({}, this._sizes[key]);
+            const el = byKey[key] || null;
+
+            // `w`: the saved column count when there is one, otherwise the span
+            // the card is rendering at, which is the authored .span-N clamped to
+            // the grid's real column count. Kept even when `wp` is present,
+            // because the server requires it and because it is the fallback if
+            // the pixel width is ever dropped (a phone drops it).
+            if (saved.w == null) {
+                saved.w = el
+                    ? this._effectiveW(this._defaultSpan(el), el)
+                    : this.MIN_W;
+            }
+            saved.w = Math.max(this.MIN_W, Math.min(this.MAX_W, Math.round(saved.w)));
+
+            // `h`: the saved height when there is one. Otherwise measure the
+            // height TARGET, not the card -- same rule the drag and the stepper
+            // use, so the stored number is the canvas height on a chart rather
+            // than the canvas plus the card's own header and padding.
+            if (saved.h == null) {
+                let measured = 0;
+                if (el) measured = this._heightTarget(el).getBoundingClientRect().height;
+                // A card that is hidden or not yet laid out measures 0. Rather
+                // than storing a height nobody asked for -- and one the server
+                // would reject as below MIN_H -- leave the record without `h`
+                // and let the normaliser fall back to the minimum.
+                saved.h = measured > 0
+                    ? Math.round(measured / this.HEIGHT_STEP) * this.HEIGHT_STEP
+                    : this.MIN_H;
+            }
+            saved.h = Math.max(this.MIN_H, Math.min(this.MAX_H, Math.round(saved.h)));
+
+            if (saved.wp != null) {
+                saved.wp = Math.max(this.MIN_W_PX,
+                    Math.min(this.MAX_W_PX, Math.round(saved.wp)));
+            }
+            if (saved.order != null) saved.order = Math.max(0, Math.round(saved.order));
+
+            this._sizes[key] = saved;
+            out[key] = saved;
+        });
+        return out;
+    },
+
     async save() {
         const name = this.layoutNameFor(this._currentPage);
         if (!name || !this.canEdit()) return false;
         try {
-            await API.saveDashboardLayout(name, this._sizes);
+            await API.saveDashboardLayout(name, this._serialized());
             return true;
         } catch (err) {
             console.error('Layout save failed:', err);

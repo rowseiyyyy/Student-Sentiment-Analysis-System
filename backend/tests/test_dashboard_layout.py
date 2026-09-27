@@ -304,6 +304,30 @@ def test_pixel_width_is_snapped_to_ten(client):
     assert response.json()["widgets"]["a"]["wp"] == 730
 
 
+def test_partial_widget_records_are_rejected(client):
+    """``w`` and ``h`` are both required, so a record carrying only ``wp`` or
+    only ``order`` is a 422.
+
+    This is the contract the frontend has to satisfy, and it is worth pinning
+    down explicitly because it is easy to regress from the other direction: the
+    editor records only the axis an admin actually touched, so a document of
+    partial records is what a naive client sends and every save then fails.
+    """
+    admin = _admin(client)
+    for partial in (
+        {"wp": 720},
+        {"order": 0},
+        {"w": 2},
+        {"h": 300},
+    ):
+        response = client.put(
+            "/api/v1/dashboard-layout/admin_analytics",
+            headers=admin,
+            json={"name": "admin_analytics", "widgets": {"x": partial}},
+        )
+        assert response.status_code == 422, f"accepted {partial}"
+
+
 def test_omitted_pixel_width_is_optional(client):
     """A card nobody resized by hand has no ``wp``. It must stay optional, and
     must not be written into the stored document as a null."""
