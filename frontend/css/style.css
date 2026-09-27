@@ -1077,6 +1077,42 @@ tbody tr:last-child td {
   max-width: 100%;
 }
 
+/* The same packed treatment for .two-col.
+
+   .two-col is one of layout.js's SECTION_SELECTORs, so it gets .layout-packed
+   added to it exactly like .chart-grid -- but until this rule existed there was
+   no CSS to match, and the section silently stayed `display: grid` with
+   `grid-template-columns: 1.6fr 1fr`. That is the bug this fixes: layout.js
+   hands each card an exact pixel width and clears its grid-column (on a packed
+   row the width alone does the placing), so a 380px card ended up sitting at
+   the START of a ~950px track, and the next card sat at the start of its own
+   track -- leaving a huge dead gap between them and most of the row empty.
+   The pixel widths were being honoured; the placement was not. */
+.two-col.layout-packed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  /* The 1.6fr/1fr ratio is meaningless once the cards carry their own widths,
+     so the authored columns are dropped and the cards pack flush. */
+  grid-template-columns: none;
+}
+
+.two-col.layout-packed > * {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+/* A packed .two-col stacks on a phone. layout.js drops the pixel width below
+   900px (see _widthFor), which leaves `flex: 0 0 auto` sizing each card to its
+   content -- so the cards are pinned to full width here instead of collapsing
+   to whatever their text happens to be. */
+@media (max-width: 900px) {
+  .two-col.layout-packed > * {
+    flex: 1 1 100%;
+    width: auto !important;
+  }
+}
+
 /* Wide cards. --span is a plain custom property so a card can be told to take
    two columns (or the whole row) from the markup that emits it. */
 .chart-card[style*="--span:2"],
