@@ -61,7 +61,7 @@ async def import_evaluations(
         Respondent_ID. No ``category`` is needed — it is inferred per column.
 
     Do NOT include a Sentiment column — sentiment is always computed
-    fresh here via the live Multilingual MiniLM model, the same as a normal
+    fresh here via the live mBERT Hybrid model, the same as a normal
     student submission.
 
     Returns a summary with the number of rows imported, failed, and

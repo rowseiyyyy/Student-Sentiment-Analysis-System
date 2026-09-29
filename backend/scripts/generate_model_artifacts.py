@@ -13,7 +13,7 @@ Usage:
     python scripts/generate_model_artifacts.py "path/to/dashboard_export.json" [production_name]
         production_name defaults to the export's recommended model.
         Accepted values (must equal an approach exactly): SVM,
-        Naive Bayes, Logistic Regression, Multilingual MiniLM.
+        Naive Bayes, Logistic Regression, mBERT Hybrid.
 """
 from __future__ import annotations
 
@@ -39,8 +39,8 @@ def colab_key_to_approach(key) -> str | None:
         return "Naive Bayes"
     if canonical in ("logisticregression", "logreg", "lr"):
         return "Logistic Regression"
-    if "minilm" in canonical:
-        return "Multilingual MiniLM"
+    if "mbert" in canonical or "minilm" in canonical:
+        return "mBERT Hybrid"
     return None
 
 

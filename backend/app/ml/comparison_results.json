@@ -1,9 +1,9 @@
 {
-  "best_model": "Multilingual MiniLM",
+  "best_model": "mBERT Hybrid",
   "rows": {
     "SVM": {},
     "Naive Bayes": {},
     "Logistic Regression": {},
-    "Multilingual MiniLM": {}
+    "mBERT Hybrid": {}
   }
 }

@@ -92,9 +92,9 @@ assert_production_readiness()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup hook: ensure the MiniLM artifacts exist before serving traffic.
+    """Startup hook: ensure the mBERT Hybrid artifacts exist before serving traffic.
 
-    Multilingual MiniLM is the ONLY live model. On first boot for a fresh
+    mBERT Hybrid is the ONLY live model. On first boot for a fresh
     deployment, pull its private HF repository into the local ``app/ml/``
     path when missing (no-op when already present, which is the case for the
     pre-committed artifacts in this repo).
@@ -104,9 +104,10 @@ async def lifespan(app: FastAPI):
     ensure_hub_artifacts()
 
     # Bootstrap the model registry on a fresh database so the admin panel and the
-    # production-model selection reflect the hub-hosted MiniLM without a manual
-    # /ml/import-results. Idempotent + best-effort: it never overwrites an existing
-    # row or a selected production model, and a DB hiccup here must not block boot.
+    # production-model selection reflect the hub-hosted mBERT Hybrid without a
+    # manual /ml/import-results. Idempotent + best-effort: it never overwrites
+    # an existing row or a selected production model, and a DB hiccup here must
+    # not block boot.
     try:
         from app.core.database import SessionLocal
         from app.services.training import register_hub_models
@@ -287,10 +288,12 @@ def _database_is_ready() -> bool:
 
 def _models_are_ready() -> bool:
     required_paths = [
-        # Multilingual MiniLM - the ONLY live production sentiment model
-        # (config.json + INT8-quantized ONNX graph, downloaded at startup).
-        settings.MINILM_MODEL_PATH / "config.json",
-        settings.MINILM_MODEL_PATH / settings.MINILM_ONNX_FILE,
+        # mBERT Hybrid - the ONLY live production sentiment model: a frozen
+        # bert-base-multilingual-cased encoder (config.json + safetensors) and
+        # the scikit-learn hybrid head, both downloaded at startup.
+        settings.MBERT_MODEL_PATH / "config.json",
+        settings.MBERT_MODEL_PATH / settings.MBERT_SAFETENSORS_FILE,
+        settings.MBERT_MODEL_PATH / settings.MBERT_CLASSIFIER_FILE,
     ]
     for path in required_paths:
         if not path.exists():

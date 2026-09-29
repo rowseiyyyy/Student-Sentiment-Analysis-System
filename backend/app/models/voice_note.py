@@ -39,7 +39,7 @@ class VoiceNote(Base):
     sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     # Confidence score (0-1) of the sentiment prediction at submit time.
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Which approved model/ensemble produced the label (e.g. "Multilingual MiniLM").
+    # Which approved model/ensemble produced the label (e.g. "mBERT Hybrid").
     algorithm_used: Mapped[str | None] = mapped_column(String(120), nullable=True)
     # Inference wall time (ms) recorded for parity with evaluation predictions.
     processing_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)

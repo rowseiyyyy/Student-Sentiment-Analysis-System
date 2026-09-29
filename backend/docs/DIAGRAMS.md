@@ -99,7 +99,7 @@ flowchart TB
         I[SVM Service<br/>TF-IDF · research only]
         J[Naive Bayes Service<br/>TF-IDF · research only]
         K[Logistic Regression Service<br/>TF-IDF · research only]
-        R[Multilingual MiniLM Service<br/>ONNX Runtime · LIVE]
+        R[mBERT Hybrid Service<br/>PyTorch encoder + sklearn head · LIVE]
         L[Training / Import Orchestration Service]
         M[Prediction Pipeline Service]
         N[Analytics Service]
@@ -107,10 +107,10 @@ flowchart TB
 
     subgraph Data["Persistence"]
         O[(MySQL<br/>Users / Evaluations / Predictions / TrainingHistory)]
-        P[/ML Artifacts<br/>svm_model.pkl · naive_bayes_model.pkl · logreg_model.pkl<br/>tfidf_vectorizer_*.pkl · minilm_sentiment/onnx/]
+        P[/ML Artifacts<br/>svm_model.pkl · naive_bayes_model.pkl · logreg_model.pkl<br/>tfidf_vectorizer_*.pkl · mbert_hybrid/ (safetensors + joblib)]
     end
 
-    Q[HuggingFace Hub<br/>rowseiy/minilm-sentiment]
+    Q[HuggingFace Hub<br/>rowseiy/mbert-sentiment]
 
     A -->|HTTPS + JWT| B
     B --> C & D & E & F & G
@@ -149,19 +149,19 @@ sequenceDiagram
     actor Student
     participant API as FastAPI (/evaluation)
     participant Pipeline as Prediction Pipeline Service
-    participant MiniLM as Multilingual MiniLM Service (ONNX)
+    participant mbert as mBERT Hybrid Service (encoder + sklearn)
     participant DB as MySQL
 
     Student->>API: POST /evaluation {category, comment}
     API->>DB: INSERT Evaluation
     API->>Pipeline: run_prediction_pipeline(db, comment)
 
-    Pipeline->>DB: get_production_algorithm(db) → Multilingual MiniLM
+    Pipeline->>DB: get_production_algorithm(db) → mBERT Hybrid
     Pipeline->>Pipeline: clean_for_transformer(text)
-    Pipeline->>MiniLM: predict(text)
-    MiniLM-->>Pipeline: (label, confidence, probabilities)
+    Pipeline->>mbert: predict(text)
+    mbert-->>Pipeline: (label, confidence, probabilities)
 
-    Note over Pipeline,MiniLM: MiniLM is the ONLY live model — there is no
+    Note over Pipeline,mbert: mBERT Hybrid is the ONLY live model — there is no
     inference fallback. If it cannot serve, the request fails with HTTP 503.
 
     Pipeline-->>API: {official_prediction, algorithm_used, confidence_score}
@@ -186,12 +186,12 @@ sequenceDiagram
     API->>FS: save + validate CSV
     API-->>Admin: 201 {rows, categories, distribution}
 
-    Admin->>Colab: run SVM / Naive Bayes / Logistic Regression + MiniLM
+    Admin->>Colab: run SVM / Naive Bayes / Logistic Regression + mBERT
     Colab-->>Admin: metrics.json (dashboard_export)
     Colab->>API: POST /ml/import-results (metrics_json)
     API->>Training: normalize_metrics_payload(payload)
     Training->>DB: INSERT TrainingHistory per approved approach
-    Training->>DB: mark Multilingual MiniLM is_production_model = true
+    Training->>DB: mark mBERT Hybrid is_production_model = true
     Training->>FS: write comparison_results.json / model_metadata.json
     Training-->>API: {imported_algorithms, production_model, recommended_model}
     API-->>Admin: 200 Import complete
@@ -199,5 +199,5 @@ sequenceDiagram
 
 > There is no `POST /ml/train` endpoint — heavy training runs outside the
 > API (Colab or `scripts/train_models.py`) and only the resulting metrics
-> are imported. Research approaches are **display-only**; MiniLM always
+> are imported. Research approaches are **display-only**; mBERT always
 > remains the live production model.

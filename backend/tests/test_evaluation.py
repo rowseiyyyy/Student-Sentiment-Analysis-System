@@ -58,7 +58,7 @@ def test_submit_evaluation(mock_pipeline, client):
         "logistic_regression_prediction": "Positive",
         "logistic_regression_confidence": 0.90,
         "official_prediction": "Positive",
-        "algorithm_used": "Multilingual MiniLM",
+        "algorithm_used": "mBERT Hybrid",
         "confidence_score": 0.91,
         "processing_time_ms": 12.5,
     }
@@ -107,7 +107,7 @@ def test_faculty_can_list_all_evaluations_but_not_delete(mock_pipeline, client):
         "logistic_regression_prediction": "Positive",
         "logistic_regression_confidence": 0.90,
         "official_prediction": "Positive",
-        "algorithm_used": "Multilingual MiniLM",
+        "algorithm_used": "mBERT Hybrid",
         "confidence_score": 0.91,
         "processing_time_ms": 12.5,
     }
@@ -146,7 +146,7 @@ def test_student_can_only_see_own_submissions(mock_pipeline, client):
         "logistic_regression_prediction": "Positive",
         "logistic_regression_confidence": 0.90,
         "official_prediction": "Positive",
-        "algorithm_used": "Multilingual MiniLM",
+        "algorithm_used": "mBERT Hybrid",
         "confidence_score": 0.91,
         "processing_time_ms": 12.5,
     }

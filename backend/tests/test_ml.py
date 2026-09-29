@@ -100,11 +100,11 @@ def test_confusion_matrix_requires_trained_model(client, db_session):
     assert response.status_code == 404
 
 
-def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(client, tmp_path, monkeypatch):
+def test_imported_colab_metrics_appear_in_performance_but_mbert_is_production(client, tmp_path, monkeypatch):
     """Importing the Colab metrics JSON records SVM, Naive Bayes, Logistic
-    Regression and Multilingual MiniLM as research results. They must appear
+    Regression and mBERT Hybrid as research results. They must appear
     in /ml/performance, but the production model must remain Multilingual
-    MiniLM — the only live sentiment model."""
+    mbert — the only live sentiment model."""
     token = _register_admin_and_login(client, email="importperf@asiatech.edu.ph")
 
     # Keep comparison/deployment artifacts out of the real app/ml directory —
@@ -127,12 +127,12 @@ def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(c
                 "accuracy": 0.91, "precision": 0.91, "recall": 0.91,
                 "f1_score": 0.91, "macro_f1": 0.90, "weighted_f1": 0.91,
             },
-            "Multilingual MiniLM": {
+            "mBERT Hybrid": {
                 "accuracy": 0.95, "precision": 0.95, "recall": 0.95,
                 "f1_score": 0.95, "macro_f1": 0.94, "weighted_f1": 0.95,
             },
         },
-        "best_model": "Multilingual MiniLM",
+        "best_model": "mBERT Hybrid",
     }
 
     import_response = client.post(
@@ -143,11 +143,11 @@ def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(c
     assert import_response.status_code == 200
     outcome = import_response.json()
     assert set(outcome["imported_algorithms"]) == {
-        "SVM", "Naive Bayes", "Logistic Regression", "Multilingual MiniLM"
+        "SVM", "Naive Bayes", "Logistic Regression", "mBERT Hybrid"
     }
     # Production is pinned to the live model, never the best-imported one.
-    assert outcome["production_model"] == "Multilingual MiniLM"
-    assert outcome["recommended_model"] == "Multilingual MiniLM"
+    assert outcome["production_model"] == "mBERT Hybrid"
+    assert outcome["recommended_model"] == "mBERT Hybrid"
 
     performance = client.get(
         "/api/v1/ml/performance", headers={"Authorization": f"Bearer {token}"}
@@ -155,11 +155,11 @@ def test_imported_colab_metrics_appear_in_performance_but_minilm_is_production(c
     assert performance.status_code == 200
     perf_data = performance.json()
     algorithms = {row["algorithm"] for row in perf_data["rows"]}
-    assert {"SVM", "Naive Bayes", "Logistic Regression", "Multilingual MiniLM"} <= algorithms
-    assert perf_data["best_model"] == "Multilingual MiniLM"
+    assert {"SVM", "Naive Bayes", "Logistic Regression", "mBERT Hybrid"} <= algorithms
+    assert perf_data["best_model"] == "mBERT Hybrid"
     production_rows = [row for row in perf_data["rows"] if row["is_production_model"]]
     assert len(production_rows) == 1
-    assert production_rows[0]["algorithm"] == "Multilingual MiniLM"
+    assert production_rows[0]["algorithm"] == "mBERT Hybrid"
 
 
 def test_svm_train_save_load_predict_is_leakage_safe(tmp_path, monkeypatch):
@@ -237,5 +237,5 @@ from app.models.training_history import TrainingAlgorithm
 
 def test_approved_active_models_are_registered():
     active = {item.value for item in TrainingAlgorithm}
-    assert {"SVM", "Naive Bayes", "Logistic Regression", "Multilingual MiniLM"}.issubset(active)
-    assert {"SVM", "Naive Bayes", "Logistic Regression", "Multilingual MiniLM"}.issubset({item.value for item in AlgorithmName})
+    assert {"SVM", "Naive Bayes", "Logistic Regression", "mBERT Hybrid"}.issubset(active)
+    assert {"SVM", "Naive Bayes", "Logistic Regression", "mBERT Hybrid"}.issubset({item.value for item in AlgorithmName})

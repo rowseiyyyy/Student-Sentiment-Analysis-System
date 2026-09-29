@@ -302,7 +302,7 @@ def submit_evaluation(
         prediction = Prediction(
             evaluation_id=evaluation.id,
             # Research-set per-model fields — never run live, always None;
-            # the official prediction is Multilingual MiniLM.
+            # the official prediction is mBERT Hybrid.
             svm_prediction=prediction_result["svm_prediction"],
             svm_confidence=prediction_result["svm_confidence"],
             naive_bayes_prediction=prediction_result["naive_bayes_prediction"],

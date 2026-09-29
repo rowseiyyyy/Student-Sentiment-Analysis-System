@@ -6,7 +6,7 @@ computed on the untouched final test set):
     1. SVM (TF-IDF)
     2. Naive Bayes (TF-IDF)
     3. Logistic Regression (TF-IDF)
-    4. Multilingual MiniLM — the ONLY live production model
+    4. mBERT Hybrid — the ONLY live production model
 
 Colab training runs can be imported via ``import_training_results`` (the
 ``POST /ml/import-results`` endpoint) — no local training is required.
@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.training_history import TrainingAlgorithm, TrainingHistory, TrainingStatus
-from app.services.minilm_service import minilm_service
+from app.services.mbert_service import mbert_service
 from app.services.ensembles import CLASS_ORDER, SINGLE_MODELS, APPROVED_APPROACHES
 from app.utils.logger import logger
 
@@ -42,7 +42,7 @@ LABEL_COLUMN_ALIASES = ("sentiment", "label")
 # The ONLY model allowed to serve live production inference. Everything else
 # in TrainingHistory (SVM, Naive Bayes, Logistic Regression) is research data
 # and is display-only.
-LIVE_MODEL_NAME = "Multilingual MiniLM"
+LIVE_MODEL_NAME = "mBERT Hybrid"
 
 # ---------------------------------------------------------------------------
 # Colab export -> canonical approach-name resolution
@@ -62,7 +62,11 @@ def colab_key_to_approach(key) -> str | None:
         return "Naive Bayes"
     if canonical in ("logisticregression", "logreg", "lr"):
         return "Logistic Regression"
-    if "minilm" in canonical:
+    if "mbert" in canonical or "minilm" in canonical:
+        # ``minilm`` is a legacy alias: earlier Colab exports emitted the
+        # 4th-model key as "minilm" and duplicated it to keep this importer
+        # working. It now resolves to the same mBERT Hybrid approach rather
+        # than a retired model.
         return LIVE_MODEL_NAME
     return None
 
@@ -71,7 +75,7 @@ APPROACH_TO_ALGORITHM: dict[str, TrainingAlgorithm] = {
     "SVM": TrainingAlgorithm.SVM,
     "Naive Bayes": TrainingAlgorithm.NAIVE_BAYES,
     "Logistic Regression": TrainingAlgorithm.LOGISTIC_REGRESSION,
-    "Multilingual MiniLM": TrainingAlgorithm.MINILM,
+    "mBERT Hybrid": TrainingAlgorithm.MBERT_HYBRID,
 }
 
 
@@ -185,7 +189,7 @@ def _mark_production_model(
 
 
 def register_hub_models(db: Session, production: str) -> dict:
-    """Idempotent first-boot bootstrap: record the hub-hosted MiniLM in TrainingHistory.
+    """Idempotent first-boot bootstrap: record the hub-hosted mBERT in TrainingHistory.
 
     HF hubs serve weights, not eval metrics, so metric columns stay NULL. This
     only fills *gaps* on a fresh database — it never overwrites an existing row,
@@ -200,7 +204,7 @@ def register_hub_models(db: Session, production: str) -> dict:
         production = LIVE_MODEL_NAME
 
     registered: list[str] = []
-    # Multilingual MiniLM is the only live model — only its row is bootstrapped.
+    # mBERT Hybrid is the only live model — only its row is bootstrapped.
     algorithm = APPROACH_TO_ALGORITHM[LIVE_MODEL_NAME]
     exists = db.query(TrainingHistory).filter(TrainingHistory.algorithm == algorithm).first()
     if exists is None:
@@ -216,7 +220,7 @@ def register_hub_models(db: Session, production: str) -> dict:
     current_prod = db.query(TrainingHistory).filter(TrainingHistory.is_production_model.is_(True)).first()
     if current_prod is None:
         db.flush()  # persist new rows so _mark_production_model can find them
-        _mark_production_model(db, TrainingAlgorithm.MINILM, commit=False)
+        _mark_production_model(db, TrainingAlgorithm.MBERT_HYBRID, commit=False)
         selected = LIVE_MODEL_NAME
 
     if registered or selected is not None:
@@ -378,8 +382,8 @@ def normalize_metrics_payload(payload: dict) -> tuple[dict[str, dict], str | Non
 
     * **Colab export**: approaches nested under a top-level ``"models"``
       dict (keys like ``svm`` / ``naive_bayes`` / ``logistic_regression`` /
-      ``minilm``), with the recommendation in
-      ``recommended_production_model`` (or ``best_model``).
+      ``mbert_hybrid``, with ``minilm`` accepted as a legacy alias), with the
+      recommendation in ``recommended_production_model`` (or ``best_model``).
     * **Rows shape** (what the admin client / tests send): a top-level
       ``{"rows": {approach: metrics}, "best_model": ...}`` mapping whose
       keys are already canonical approach names.
@@ -431,7 +435,7 @@ def import_training_results(
 ) -> dict:
     """Persist imported metrics as TrainingHistory rows and select production.
 
-    Only Multilingual MiniLM rows can be marked ``is_production_model``; the
+    Only mBERT Hybrid rows can be marked ``is_production_model``; the
     classical research models (SVM / Naive Bayes / Logistic Regression) are
     stored display-only. Returns a summary dict for the API response.
 
@@ -475,7 +479,7 @@ def import_training_results(
             f"Requested production model '{requested}' is research-only; "
             f"production stays on '{LIVE_MODEL_NAME}'."
         )
-    _mark_production_model(db, TrainingAlgorithm.MINILM, commit=False)
+    _mark_production_model(db, TrainingAlgorithm.MBERT_HYBRID, commit=False)
     db.commit()
 
     # Surface the best-scoring imported approach as the *recommendation*
@@ -503,17 +507,17 @@ def import_training_results(
 # Local training pipeline (scripts/train_models.py)
 # ---------------------------------------------------------------------------
 
-def _run_minilm_eval(test_df) -> dict:
-    """Evaluate the pretrained Multilingual MiniLM on the held-out test set.
+def _run_mbert_eval(test_df) -> dict:
+    """Evaluate the hub-hosted mBERT Hybrid model on the held-out test set.
 
-    MiniLM is not fine-tuned here (it is trained in Colab); this produces
-    leakage-safe test metrics for the comparison table.
+    mBERT Hybrid is trained in Colab, not here; this produces leakage-safe
+    test metrics for the comparison table.
     """
     texts = test_df["comment"].astype(str).tolist()
     labels = test_df["sentiment"].tolist()
     preds: list[str] = []
     for text in texts:
-        label, _conf, _probs = minilm_service.predict(text)
+        label, _conf, _probs = mbert_service.predict(text)
         preds.append(label)
     return _metrics_for_labels(labels, preds)
 
@@ -525,10 +529,10 @@ def run_full_training(
     label_column: str | None = None,
 ) -> dict:
     """Train the approved model set (SVM, Naive Bayes, Logistic Regression,
-    Multilingual MiniLM) on ``csv_path`` and persist everything.
+    mBERT Hybrid) on ``csv_path`` and persist everything.
 
     All approaches are evaluated on the SAME untouched test split (leakage
-    safe). Production stays on Multilingual MiniLM; the classical models are
+    safe). Production stays on mBERT Hybrid; the classical models are
     research results only. Returns ``{"results", "best_model"}``.
     """
     from app.services.classical_service import (
@@ -556,17 +560,17 @@ def run_full_training(
         logger.info(f"Training {name}...")
         results[name] = service.train_on_split(train_texts, train_labels, test_texts, test_labels)
 
-    logger.info("Evaluating Multilingual MiniLM on the held-out test set...")
+    logger.info("Evaluating mBERT Hybrid on the held-out test set...")
     try:
-        results[LIVE_MODEL_NAME] = _run_minilm_eval(test_df)
-    except Exception as exc:  # noqa: BLE001 — MiniLM eval is best-effort offline
-        logger.error(f"MiniLM evaluation failed (skipping its row): {exc}")
+        results[LIVE_MODEL_NAME] = _run_mbert_eval(test_df)
+    except Exception as exc:  # noqa: BLE001 — mBERT eval is best-effort offline
+        logger.error(f"mBERT Hybrid evaluation failed (skipping its row): {exc}")
 
     elapsed = time.perf_counter() - started
     logger.info(f"Full training pipeline completed in {elapsed:.1f}s")
 
     # Best classical result by weighted F1 — informational only; production
-    # remains Multilingual MiniLM regardless.
+    # remains mBERT Hybrid regardless.
     best_classical = max(
         (n for n in results if n != LIVE_MODEL_NAME),
         key=lambda n: float(results[n].get("weighted_f1") or 0.0),
@@ -585,7 +589,7 @@ def run_full_training(
             is_production_model=False,
         )
         _persist_history(db, history, metrics, TrainingStatus.COMPLETED, commit=False)
-    _mark_production_model(db, TrainingAlgorithm.MINILM, commit=False)
+    _mark_production_model(db, TrainingAlgorithm.MBERT_HYBRID, commit=False)
     db.commit()
 
     _write_comparison_artifacts(results, LIVE_MODEL_NAME)

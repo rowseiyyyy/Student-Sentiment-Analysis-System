@@ -80,7 +80,7 @@ async def upload_dataset(
 # rows — they appear in the model comparison but are excluded from
 # production rollback and live inference.
 APPROVED_ALGORITHMS = (
-    TrainingAlgorithm.MINILM,
+    TrainingAlgorithm.MBERT_HYBRID,
 )
 
 
@@ -132,7 +132,7 @@ async def import_results(
 
     Only the metrics JSON is accepted; no model weight archives are uploaded.
     The approved set is SVM, Naive Bayes, Logistic Regression and
-    Multilingual MiniLM — but only MiniLM is the live model and its weights
+    mBERT Hybrid — but only mBERT Hybrid is the live model and its weights
     are fetched directly from the private Hugging Face Hub repo at startup.
     """
     try:
@@ -182,8 +182,8 @@ def get_model_performance(db: Session = Depends(get_db), current_user: User = De
 
     Approaches imported from a Colab metrics JSON (SVM, Naive Bayes,
     Logistic Regression) appear here as research results alongside
-    Multilingual MiniLM. ``best_model`` is always
-    the LIVE production model (Multilingual MiniLM) — legacy/imported rows are
+    mBERT Hybrid. ``best_model`` is always
+    the LIVE production model (mBERT Hybrid) — legacy/imported rows are
     display-only and can never serve live inference.
     """
     rows = []
@@ -268,7 +268,7 @@ def rollback_production_model(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Rolls back production to a previous Multilingual MiniLM training run.
+    """Rolls back production to a previous mBERT Hybrid training run.
     Imported legacy approaches (SVM, Naive Bayes, Logistic Regression) are
     research results only and are NOT eligible
     for live production."""
@@ -279,7 +279,7 @@ def rollback_production_model(
     if target.algorithm not in APPROVED_ALGORITHMS:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Rollback is only available for Multilingual MiniLM — the only live production model.",
+            detail="Rollback is only available for mBERT Hybrid — the only live production model.",
         )
 
     db.query(TrainingHistory).update({TrainingHistory.is_production_model: False})
@@ -299,12 +299,12 @@ def download_trained_model(algorithm: TrainingAlgorithm, current_user: User = De
 
     The classical research models (SVM / Naive Bayes / Logistic Regression)
     serialize to a single ``.pkl`` (model) plus a paired TF-IDF vectorizer.
-    Multilingual MiniLM is an ONNX directory under ``app/ml/minilm_sentiment``.
+    mBERT Hybrid is an encoder + hybrid-head directory under ``app/ml/mbert_hybrid``.
     """
     if algorithm not in APPROVED_ALGORITHMS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only the approved model set (SVM, Naive Bayes, Logistic Regression, Multilingual MiniLM) is downloadable.",
+            detail="Only the approved model set (SVM, Naive Bayes, Logistic Regression, mBERT Hybrid) is downloadable.",
         )
 
     CLASSICAL_PATHS = {
@@ -324,13 +324,13 @@ def download_trained_model(algorithm: TrainingAlgorithm, current_user: User = De
             "note": "Classical models are stored as a Joblib file with a paired TF-IDF vectorizer pickle.",
         })
 
-    # Multilingual MiniLM: ONNX artifacts directory.
-    path = Path(settings.MINILM_MODEL_PATH)
+    # mBERT Hybrid: frozen encoder + hybrid-head artifacts directory.
+    path = Path(settings.MBERT_MODEL_PATH)
     if not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="MiniLM ONNX artifact directory not found on disk.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="mBERT Hybrid artifact directory not found on disk.")
     return JSONResponse({
         "algorithm": algorithm.value,
         "artifact_type": "directory",
         "path": str(path),
-        "note": "Multilingual MiniLM is stored as an ONNX directory of artifacts under app/ml/.",
+        "note": "mBERT Hybrid is stored as a directory of artifacts under app/ml/ (encoder safetensors + scikit-learn hybrid head).",
     })

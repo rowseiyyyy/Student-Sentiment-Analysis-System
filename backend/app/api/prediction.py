@@ -31,8 +31,8 @@ def predict_sentiment(
 
     return PredictionResponse(
         text=payload.text,
-        minilm=SingleModelResult(
-            prediction=result["minilm_prediction"], confidence=result["minilm_confidence"]
+        mbert=SingleModelResult(
+            prediction=result["mbert_prediction"], confidence=result["mbert_confidence"]
         ),
         official_prediction=result["official_prediction"],
         algorithm_used=result["algorithm_used"],

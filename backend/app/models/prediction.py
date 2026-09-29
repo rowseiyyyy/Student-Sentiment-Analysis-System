@@ -20,7 +20,7 @@ class AlgorithmName(str, enum.Enum):
     SVM = "SVM"
     NAIVE_BAYES = "Naive Bayes"
     LOGISTIC_REGRESSION = "Logistic Regression"
-    MINILM = "Multilingual MiniLM"
+    MBERT_HYBRID = "mBERT Hybrid"
 
 
 class Prediction(Base):
@@ -31,7 +31,7 @@ class Prediction(Base):
         String(36), ForeignKey("evaluations.id", ondelete="CASCADE"), unique=True, nullable=False
     )
 
-    # ----- Per-model predictions (research set; MiniLM is the only live
+    # ----- Per-model predictions (research set; mBERT Hybrid is the only live
     # model and is not stored per-row here — only the official result is) -----
     svm_prediction: Mapped[SentimentLabel | None] = mapped_column(Enum(SentimentLabel), nullable=True)
     svm_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)

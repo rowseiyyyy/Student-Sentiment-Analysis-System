@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Asiatech Sentiment Analysis API",
-    "description": "Sentiment Analysis of Student Feedback from Asiatech College of Sta. Rosa, Laguna using SVM, Naive Bayes, Logistic Regression and Multilingual MiniLM.",
+    "description": "Sentiment Analysis of Student Feedback from Asiatech College of Sta. Rosa, Laguna using SVM, Naive Bayes, Logistic Regression and mBERT Hybrid.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -249,11 +249,11 @@
               "formdata": [{ "key": "metrics_json", "type": "file", "src": "" }]
             },
             "url": {
-              "raw": "{{base_url}}/ml/import-results?set_production=Multilingual%20MiniLM",
+              "raw": "{{base_url}}/ml/import-results?set_production=mBERT%20Hybrid",
               "host": ["{{base_url}}"], "path": ["ml", "import-results"],
-              "query": [{ "key": "set_production", "value": "Multilingual MiniLM" }]
+              "query": [{ "key": "set_production", "value": "mBERT Hybrid" }]
             },
-            "description": "Upload the metrics JSON exported by the Colab training run. Only approved approaches (SVM, Naive Bayes, Logistic Regression, Multilingual MiniLM) are imported. There is no /ml/train endpoint."
+            "description": "Upload the metrics JSON exported by the Colab training run. Only approved approaches (SVM, Naive Bayes, Logistic Regression, mBERT Hybrid) are imported. There is no /ml/train endpoint."
           }
         },
         {
@@ -314,8 +314,8 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
             "url": {
-              "raw": "{{base_url}}/ml/models/Multilingual%20MiniLM/download",
-              "host": ["{{base_url}}"], "path": ["ml", "models", "Multilingual MiniLM", "download"]
+              "raw": "{{base_url}}/ml/models/mBERT%20Hybrid/download",
+              "host": ["{{base_url}}"], "path": ["ml", "models", "mBERT Hybrid", "download"]
             }
           }
         }

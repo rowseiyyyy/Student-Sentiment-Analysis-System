@@ -1,8 +1,8 @@
 
 """Active prediction pipeline for the approved research model set.
 
-The LIVE production sentiment model is Multilingual MiniLM — the only live
-model. There is no inference fallback: if MiniLM cannot serve, the pipeline
+The LIVE production sentiment model is mBERT Hybrid — the only live
+model. There is no inference fallback: if mBERT cannot serve, the pipeline
 raises and the API returns a clean 503. The classical research models
 (SVM, Naive Bayes, Logistic Regression) are offline-only and are never run
 in the request path.
@@ -19,13 +19,13 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.training_history import TrainingHistory
 from app.services.ensembles import CLASS_ORDER, APPROVED_APPROACHES
-from app.services.minilm_service import minilm_service
+from app.services.mbert_service import mbert_service
 from app.utils.logger import logger
 
-# Multilingual MiniLM is the ONLY live model. The classical research services
+# mBERT Hybrid is the ONLY live model. The classical research services
 # (SVM, Naive Bayes, Logistic Regression) are intentionally NOT imported here —
 # they are only used by the offline training paths in training.py.
-LIVE_MODEL_NAME = "Multilingual MiniLM"
+LIVE_MODEL_NAME = "mBERT Hybrid"
 
 
 def _usable(label: Optional[str], conf: Optional[float]) -> bool:
@@ -67,7 +67,7 @@ def get_production_algorithm(db: Session) -> str:
     """Return the currently selected approach (approved only).
 
     Uses the persisted ``is_production_model`` row and defaults to
-    Multilingual MiniLM when no database selection exists. Deployment
+    mBERT Hybrid when no database selection exists. Deployment
     metadata is an artifact-level hint only — the database wins."""
     current = (
         db.query(TrainingHistory)
@@ -88,7 +88,7 @@ def get_production_algorithm(db: Session) -> str:
 def get_deployment_config(db: Session) -> dict:
     """Return the inference configuration for the selected production model.
 
-    Multilingual MiniLM is the only live model, so the config is always a
+    mBERT Hybrid is the only live model, so the config is always a
     single-model configuration."""
     return {
         "production_model": get_production_algorithm(db),
@@ -101,38 +101,38 @@ def get_deployment_config(db: Session) -> dict:
 def run_prediction_pipeline(db: Session, text: str) -> dict:
     """Run the live prediction pipeline for one comment.
 
-    Only Multilingual MiniLM performs inference. The classical research
-    models (SVM, Naive Bayes, Logistic Regression) never run in the request
+    Only mBERT Hybrid performs inference. The classical research models
+    (SVM, Naive Bayes, Logistic Regression) never run in the request
     path — their result fields are always None. There is no inference
-    fallback: if MiniLM cannot serve, a RuntimeError is raised and the API
+    fallback: if mBERT cannot serve, a RuntimeError is raised and the API
     returns a clean 503.
     """
     start = time.perf_counter()
 
-    # ----- LIVE model: Multilingual MiniLM --------------------------------
-    minilm_label: Optional[str] = None
-    minilm_conf: Optional[float] = None
-    minilm_probs: Optional[list[float]] = None
-    if minilm_service.can_run_live_inference():
+    # ----- LIVE model: mBERT Hybrid ----------------------------------------
+    mbert_label: Optional[str] = None
+    mbert_conf: Optional[float] = None
+    mbert_probs: Optional[list[float]] = None
+    if mbert_service.can_run_live_inference():
         try:
-            minilm_label, minilm_conf, minilm_probs = minilm_service.predict(text)
+            mbert_label, mbert_conf, mbert_probs = mbert_service.predict(text)
         except Exception as exc:  # noqa: BLE001
-            logger.error("Multilingual MiniLM inference failed: %s", exc)
+            logger.error("mBERT Hybrid inference failed: %s", exc)
 
     # ----- Classical research models: NOT run in the request path ---------
     svm_label = svm_conf = None
     naive_bayes_label = naive_bayes_conf = None
     logreg_label = logreg_conf = None
 
-    official_label = minilm_label
-    official_conf = minilm_conf
+    official_label = mbert_label
+    official_conf = mbert_conf
     production_algo = LIVE_MODEL_NAME
 
     if not _usable(official_label, official_conf):
         raise RuntimeError(
-            "Multilingual MiniLM (the only live sentiment model) is unavailable. "
+            "mBERT Hybrid (the only live sentiment model) is unavailable. "
             "Check the server logs and restart, or disable the memory guard via "
-            "MINILM_MIN_RAM_MB=0 if the host has enough RAM."
+            "MBERT_MIN_RAM_MB=0 if the host has enough RAM."
         )
 
     processing_time_ms = (time.perf_counter() - start) * 1000
@@ -144,8 +144,8 @@ def run_prediction_pipeline(db: Session, text: str) -> dict:
         "naive_bayes_confidence": naive_bayes_conf,
         "logistic_regression_prediction": logreg_label,
         "logistic_regression_confidence": logreg_conf,
-        "minilm_prediction": minilm_label,
-        "minilm_confidence": minilm_conf,
+        "mbert_prediction": mbert_label,
+        "mbert_confidence": mbert_conf,
         "official_prediction": official_label,
         "algorithm_used": production_algo,
         "confidence_score": official_conf,

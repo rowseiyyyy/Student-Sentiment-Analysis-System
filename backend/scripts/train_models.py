@@ -7,9 +7,9 @@ Usage:
 
 This performs the same pipeline as ``POST /ml/train``: trains the
 classical research models (SVM, Naive Bayes, Logistic Regression) on an
-identical split, evaluates Multilingual MiniLM on the same held-out data,
+identical split, evaluates mBERT Hybrid on the same held-out data,
 records everything to the database (TrainingHistory) and to
-app/ml/comparison_results.json. Production stays on Multilingual MiniLM
+app/ml/comparison_results.json. Production stays on mBERT Hybrid
 (the only live model).
 """
 import argparse
@@ -23,7 +23,7 @@ from app.services.training import run_full_training  # noqa: E402
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train SVM / Naive Bayes / Logistic Regression and evaluate Multilingual MiniLM.")
+    parser = argparse.ArgumentParser(description="Train SVM / Naive Bayes / Logistic Regression and evaluate mBERT Hybrid.")
     parser.add_argument("--dataset", required=True, help="Path to a labeled CSV (id, category, comment, sentiment).")
     args = parser.parse_args()
 

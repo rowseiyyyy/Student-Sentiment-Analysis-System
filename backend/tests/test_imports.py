@@ -10,7 +10,7 @@ PREDICTION_RESULT = {
     "logistic_regression_prediction": "Positive",
     "logistic_regression_confidence": 0.90,
     "official_prediction": "Positive",
-    "algorithm_used": "Multilingual MiniLM",
+    "algorithm_used": "mBERT Hybrid",
     "confidence_score": 0.91,
     "processing_time_ms": 12.5,
 }

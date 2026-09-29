@@ -131,7 +131,7 @@ def _seed_evaluation(
         Prediction(
             evaluation_id=evaluation_id,
             official_prediction=SentimentLabel(sentiment),
-            algorithm_used=AlgorithmName.MINILM,
+            algorithm_used=AlgorithmName.MBERT_HYBRID,
             confidence_score=0.9,
             processing_time_ms=12.0,
             created_at=created_at,
@@ -319,7 +319,7 @@ def _seed_course_evaluation(
         Prediction(
             evaluation_id=evaluation_id,
             official_prediction=SentimentLabel(sentiment),
-            algorithm_used=AlgorithmName.MINILM,
+            algorithm_used=AlgorithmName.MBERT_HYBRID,
             confidence_score=0.9,
             processing_time_ms=12.0,
             created_at=stamp,

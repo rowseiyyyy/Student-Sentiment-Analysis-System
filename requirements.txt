@@ -2,7 +2,14 @@
 # Streamlit Community Cloud only auto-installs a file named exactly
 # "requirements.txt" at the repo root.
 streamlit>=1.36
-onnxruntime>=1.17
-tokenizers>=0.15
 numpy>=1.26
 huggingface_hub>=0.23
+scikit-learn>=1.3
+joblib>=1.3
+# mBERT Hybrid runs a frozen bert-base-multilingual-cased encoder in PyTorch.
+# Note: this needs a host with roughly 2 GB of RAM — it is no longer the
+# lightweight INT8 ONNX model the previous deployment used. transformers must
+# be >= 4.56 to parse the exported config.json's `dtype` field.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.2,<3
+transformers>=4.56,<5

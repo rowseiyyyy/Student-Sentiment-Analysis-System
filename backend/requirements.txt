@@ -30,6 +30,17 @@ slowapi==0.1.9
 # Machine Learning / NLP
 # ==============================
 huggingface_hub==0.25.0
+# mBERT Hybrid is served as a frozen bert-base-multilingual-cased encoder in
+# PyTorch (the retired INT8 ONNX MiniLM path is gone), so torch/transformers
+# are runtime requirements now, not just training-time ones. The pinned CPU
+# wheel index keeps the image small - no CUDA payload.
+#
+# transformers must be >= 4.56: the exported mBERT config.json uses the
+# `dtype` field introduced in that release, and older versions raise
+# "Unrecognized arguments: dtype" when loading it.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
+transformers>=4.56,<5
 onnxruntime==1.19.2
 tokenizers==0.19.1
 scikit-learn==1.6.1

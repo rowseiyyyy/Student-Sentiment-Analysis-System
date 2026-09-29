@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Asiatech Sentiment Analysis API"
     PROJECT_DESCRIPTION: str = (
         "Sentiment Analysis of Student Feedback from Asiatech College of "
-        "Sta. Rosa, Laguna using SVM, Naive Bayes, Logistic Regression and Multilingual MiniLM."
+        "Sta. Rosa, Laguna using SVM, Naive Bayes, Logistic Regression and mBERT Hybrid."
     )
     VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
@@ -349,42 +349,46 @@ class Settings(BaseSettings):
     # Private repos holding the tuned sentiment artifacts. The downloader pulls
     # these into the corresponding app/ml/ paths at startup only when the local
     # files are missing, using HF_TOKEN to authenticate.
-    HF_MINILM_REPO: str = "rowseiy/minilm-sentiment"
+    HF_MBERT_REPO: str = "rowseiy/mbert-sentiment"
 
     # Approved approach to register as production on a fresh database when the
     # models are pulled from the private hub at startup. Must match an approved
     # approach name (see training.APPROACH_TO_ALGORITHM). The live production
-    # sentiment model is Multilingual MiniLM — small enough to serve within the
-    # free-tier RAM budget.
-    HF_PRODUCTION_MODEL: str = "Multilingual MiniLM"
+    # sentiment model is mBERT Hybrid.
+    HF_PRODUCTION_MODEL: str = "mBERT Hybrid"
 
-    MINILM_ONNX_FILE: str = "model.onnx"
+    # mBERT Hybrid — the ONLY live production model. Trained in Colab and served
+    # from a frozen bert-base-multilingual-cased encoder plus a scikit-learn
+    # hybrid head (word TF-IDF + char TF-IDF + scaled encoder embedding ->
+    # LinearSVC). See services/mbert_service.py.
+    MBERT_MODEL_NAME: str = "bert-base-multilingual-cased"
+    MBERT_MODEL_PATH: Path = ML_DIR / "mbert_hybrid"
+    # meta.json on the hub pins max_len=96; the encoder is truncated to this.
+    MBERT_MAX_SEQ_LENGTH: int = 96
+    # Filenames inside MBERT_MODEL_PATH.
+    MBERT_SAFETENSORS_FILE: str = "model.safetensors"
+    MBERT_CLASSIFIER_FILE: str = "model.joblib"
+    MBERT_LABEL_ENCODER_FILE: str = "label_encoder.joblib"
+    # Feature weight of the encoder embedding in the hybrid feature union.
+    # Mirrors the "w" key persisted in model.joblib (training used 1.0).
+    MBERT_EMBEDDING_WEIGHT: float = 1.0
 
-    # Multilingual MiniLM — the ONLY live production model. Trained in Colab
-    # and served from its quantized ONNX artifact (see minilm_service).
-    MINILM_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-    MINILM_MODEL_PATH: Path = ML_DIR / "minilm_sentiment"
-    MINILM_MAX_SEQ_LENGTH: int = 128
-
-    # Live inference for MiniLM is memory-gated. Measured footprint of this
-    # ONNX path (app baseline + fast tokenizer + the 119 MB quantized session)
-    # is ~570-640 MB RSS, so a 512 MB instance (e.g. Render's free tier) cannot
-    # host it: the worker gets OOM-killed mid-request and the browser reports
-    # "Unable to connect to the server. Please ensure the backend is running."
-    # When the host reports less than MINILM_MIN_RAM_MB of memory, live
-    # inference is refused — MiniLM is the ONLY live model, so prediction
-    # requests then fail with a clean 503 instead of silently serving a
-    # different model.
-    # ENABLE_MINILM_INFERENCE=false disables MiniLM everywhere (also 503);
-    # set MINILM_MIN_RAM_MB=0 to disable the memory guard entirely.
-    ENABLE_MINILM_INFERENCE: bool = True
-    MINILM_MIN_RAM_MB: int = 900
+    # Live inference for mBERT is memory-gated. Unlike the previous INT8 ONNX
+    # path (~570-640 MB RSS), this one loads a full fp32 BertModel in PyTorch
+    # (711 MB of safetensors) plus the scikit-learn vectorizers, so the real
+    # footprint is ~1.6-2.0 GB. Free 512 MB tiers cannot host it at all.
+    # When the host reports less than MBERT_MIN_RAM_MB the request fails with a
+    # clean 503 rather than being OOM-killed mid-request.
+    # ENABLE_MBERT_INFERENCE=false disables mBERT everywhere (also 503);
+    # set MBERT_MIN_RAM_MB=0 to disable the memory guard entirely.
+    ENABLE_MBERT_INFERENCE: bool = True
+    MBERT_MIN_RAM_MB: int = 2048
 
     # Optional override of the host memory limit the guard above compares
     # against. Platforms that expose no usable cgroup limit can set this to
-    # make the decision deterministic (e.g. MINILM_HOST_RAM_MB=512 on a 512 MB
+    # make the decision deterministic (e.g. MBERT_HOST_RAM_MB=2048 on a 2 GB
     # instance). Unset -> the limit is auto-detected; 0 -> unlimited.
-    MINILM_HOST_RAM_MB: int | None = None
+    MBERT_HOST_RAM_MB: int | None = None
 
     TRANSFORMER_DEVICE: str = "cpu"
 
@@ -404,12 +408,12 @@ class Settings(BaseSettings):
     LOGREG_C: float = 1.0
     LOGREG_MAX_ITER: int = 1000
 
-    # Shared transformer fine-tune defaults (used by the MiniLM training path).
-    MINILM_EPOCHS: int = 3
-    MINILM_BATCH_SIZE: int = 8
-    MINILM_LEARNING_RATE: float = 2e-5
-    MINILM_WEIGHT_DECAY: float = 0.01
-    MINILM_WARMUP_RATIO: float = 0.1
+    # Shared transformer fine-tune defaults (used by the transformer training path).
+    MBERT_EPOCHS: int = 3
+    MBERT_BATCH_SIZE: int = 8
+    MBERT_LEARNING_RATE: float = 2e-5
+    MBERT_WEIGHT_DECAY: float = 0.01
+    MBERT_WARMUP_RATIO: float = 0.1
 
     # Stopword removal is OFF by default. Set
     # `PREPROCESSING_REMOVE_STOPWORDS=true` in `.env` to enable.
@@ -440,7 +444,7 @@ def get_settings() -> Settings:
         settings.NAIVE_BAYES_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_naive_bayes.pkl"
         settings.LOGREG_MODEL_PATH = settings.ML_DIR / "logreg_model.pkl"
         settings.LOGREG_VECTORIZER_PATH = settings.ML_DIR / "tfidf_vectorizer_logreg.pkl"
-        settings.MINILM_MODEL_PATH = settings.ML_DIR / "minilm_sentiment"
+        settings.MBERT_MODEL_PATH = settings.ML_DIR / "mbert_hybrid"
         settings.MODEL_METADATA_PATH = settings.ML_DIR / "model_metadata.json"
         settings.COMPARISON_RESULTS_PATH = settings.ML_DIR / "comparison_results.json"
 

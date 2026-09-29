@@ -4,7 +4,7 @@ The approved research model set is:
     1. SVM (TF-IDF)
     2. Naive Bayes (TF-IDF)
     3. Logistic Regression (TF-IDF)
-    4. Multilingual MiniLM  (the ONLY live production model)
+    4. mBERT Hybrid  (the ONLY live production model)
 
 Ensembles were retired — the registry now contains single models only. The
 ``CLASS_ORDER`` constant is shared by every model service, training and the
@@ -21,7 +21,7 @@ SINGLE_MODELS: tuple[str, ...] = (
     "SVM",
     "Naive Bayes",
     "Logistic Regression",
-    "Multilingual MiniLM",
+    "mBERT Hybrid",
 )
 
 # Complete approved approach set (no ensembles remain).

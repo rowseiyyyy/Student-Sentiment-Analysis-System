@@ -1,19 +1,20 @@
-"""Streamlit front-end for the Multilingual MiniLM sentiment model.
+"""Streamlit front-end for the mBERT Hybrid sentiment model.
 
-Self-contained: it reuses the same ONNX inference contract proven in
-``backend/app/services/minilm_service.py`` (required int64 ``token_type_ids``,
-dtype-cast inputs, label order 0=Negative / 1=Neutral / 2=Positive) without
-importing the backend package, so it can be deployed standalone on
-Streamlit Community Cloud or any host.
+Self-contained: it mirrors the inference contract proven in
+``backend/app/services/mbert_service.py`` (word + char TF-IDF union with a
+mean-pooled, StandardScaler-normalized ``bert-base-multilingual-cased``
+embedding feeding a LinearSVC, label order 0=Negative / 1=Neutral /
+2=Positive) without importing the backend package, so it can be deployed
+standalone on Streamlit Community Cloud or any host.
 
 Model resolution order:
-1. ``MINILM_LOCAL_DIR`` env var (explicit path to the artifact folder)
-2. ``backend/app/ml/minilm_sentiment`` next to this repo (local dev)
-3. snapshot download of the private hub repo (needs ``HF_TOKEN`` with read
+1. ``MBERT_LOCAL_DIR`` env var (explicit path to the artifact folder)
+2. ``backend/app/ml/mbert_hybrid`` next to this repo (local dev)
+3. snapshot download of the hub repo (needs ``HF_TOKEN`` with read
    access) into a cache dir
 
 Run locally:
-    pip install -r requirements-streamlit.txt
+    pip install -r requirements.txt
     streamlit run streamlit_app.py
 """
 
@@ -26,35 +27,23 @@ from pathlib import Path
 import numpy as np
 import streamlit as st
 
-MODEL_REPO = os.environ.get("MODEL_REPO", "rowseiy/minilm-sentiment")
-DEFAULT_LOCAL_DIR = Path(__file__).resolve().parent / "backend" / "app" / "ml" / "minilm_sentiment"
+MODEL_REPO = os.environ.get("MODEL_REPO", "rowseiy/mbert-sentiment")
+DEFAULT_LOCAL_DIR = Path(__file__).resolve().parent / "backend" / "app" / "ml" / "mbert_hybrid"
 MAX_INPUT_CHARS = 2000
-MAX_SEQ_LENGTH = 128
+MAX_SEQ_LENGTH = 96
 CLASS_ORDER = ("Negative", "Neutral", "Positive")
-
-_ONNX_INPUT_DTYPES = {
-    "tensor(float)": np.float32,
-    "tensor(float16)": np.float16,
-    "tensor(double)": np.float64,
-    "tensor(int64)": np.int64,
-    "tensor(int32)": np.int32,
-    "tensor(int16)": np.int16,
-    "tensor(int8)": np.int8,
-    "tensor(uint8)": np.uint8,
-    "tensor(bool)": np.bool_,
-}
 
 
 def resolve_model_dir() -> Path:
-    """Locate (or download) the ONNX artifact folder."""
-    explicit = os.environ.get("MINILM_LOCAL_DIR")
+    """Locate (or download) the artifact folder."""
+    explicit = os.environ.get("MBERT_LOCAL_DIR")
     if explicit:
         path = Path(explicit)
-        if (path / "model.onnx").is_file():
+        if (path / "model.joblib").is_file():
             return path
-        raise FileNotFoundError(f"MINILM_LOCAL_DIR={explicit!r} has no model.onnx")
+        raise FileNotFoundError(f"MBERT_LOCAL_DIR={explicit!r} has no model.joblib")
 
-    if (DEFAULT_LOCAL_DIR / "model.onnx").is_file():
+    if (DEFAULT_LOCAL_DIR / "model.joblib").is_file():
         return DEFAULT_LOCAL_DIR
 
     from huggingface_hub import snapshot_download
@@ -69,48 +58,29 @@ def resolve_model_dir() -> Path:
 
 @lru_cache(maxsize=1)
 def load_resources(model_dir: str):
-    """Load the raw ``tokenizers`` tokenizer + ONNX session once per process.
+    """Load the frozen encoder, tokenizer and hybrid head once per process.
 
-    ``tokenizers.Tokenizer`` is used instead of ``AutoTokenizer`` (same as the
-    backend): byte-identical ids for this checkpoint, and far lighter on RAM —
-    which matters on free-tier Streamlit containers (~690 MB, and the session
-    alone holds ~119 MB of INT8 weights).
+    The fitted vectorizers/scaler/classifier are read straight out of
+    ``model.joblib`` rather than rebuilt from hyperparameters — reconstructing
+    a TfidfVectorizer would change its vocabulary and corrupt the scores.
     """
-    import onnxruntime as ort
-    import tokenizers
+    import joblib
+    import torch
+    from transformers import AutoModel, AutoTokenizer
 
     root = Path(model_dir)
-    tokenizer = tokenizers.Tokenizer.from_file(str(root / "tokenizer.json"))
-    tokenizer.enable_truncation(max_length=MAX_SEQ_LENGTH)
+    tokenizer = AutoTokenizer.from_pretrained(str(root))
 
-    session = ort.InferenceSession(
-        str(root / "model.onnx"),
-        providers=["CPUExecutionProvider"],
-    )
-    return tokenizer, session
+    encoder = AutoModel.from_pretrained(str(root), dtype=torch.float32)
+    encoder.eval()
+
+    bundle = joblib.load(root / "model.joblib")
+    word_vec, char_vec, scaler = bundle["vecs"]
+    weight = float(bundle.get("w", 1.0))
+
+    return tokenizer, encoder, word_vec, char_vec, scaler, bundle["clf"], weight
 
 
-def build_feed(session, inputs: dict) -> dict:
-    """Mirror of ``minilm_service._build_onnx_feed``.
-
-    * synthesizes the ``token_type_ids`` the traced graph requires but the
-      sentencepiece tokenizer does not emit;
-    * casts each tensor to the graph's declared element type (int64 vs int32).
-    """
-    feed: dict = {}
-    for spec in session.get_inputs():
-        name = spec.name
-        if name in inputs:
-            value = inputs[name]
-        elif name == "token_type_ids":
-            value = np.zeros_like(inputs["input_ids"])
-        else:
-            raise ValueError(f"Unexpected ONNX model input {name!r}.")
-        dtype = _ONNX_INPUT_DTYPES.get(spec.type)
-        if dtype is not None:
-            value = np.asarray(value, dtype=dtype)
-        feed[name] = value
-    return feed
 def clean_text(text: str) -> str:
     """Light cleaning consistent with the backend pipeline.
 
@@ -127,15 +97,37 @@ def clean_text(text: str) -> str:
 
 
 def predict(text: str) -> tuple[str, float, list[float]]:
-    tokenizer, session = load_resources(_MODEL_DIR)
-    encoding = tokenizer.encode(clean_text(text))
-    inputs = {
-        "input_ids": np.array([encoding.ids], dtype=np.int64),
-        "attention_mask": np.array([encoding.attention_mask], dtype=np.int64),
-        "token_type_ids": np.array([encoding.type_ids], dtype=np.int64),
-    }
-    logits = session.run(None, build_feed(session, inputs))[0][0]
-    probs = np.exp(logits - logits.max())
+    from scipy import sparse
+    import torch
+
+    tokenizer, encoder, word_vec, char_vec, scaler, clf, weight = load_resources(_MODEL_DIR)
+
+    encoded = tokenizer(
+        clean_text(text),
+        return_tensors="pt",
+        truncation=True,
+        max_length=MAX_SEQ_LENGTH,
+    )
+    with torch.no_grad():
+        hidden = encoder(**encoded).last_hidden_state
+    mask = encoded["attention_mask"].unsqueeze(-1).to(hidden.dtype)
+    embedding = ((hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9))
+    embedding = embedding.squeeze(0).cpu().numpy().astype(np.float64)
+
+    features = sparse.hstack(
+        [
+            # Sparse TF-IDF blocks plus a dense scaled embedding, combined with
+            # scipy's sparse hstack (np.hstack would object-ify the CSR blocks).
+            word_vec.transform([text]),
+            char_vec.transform([text]),
+            sparse.csr_matrix(scaler.transform(embedding.reshape(1, -1)) * weight),
+        ],
+        format="csr",
+    )
+    # LinearSVC yields decision margins, not probabilities; softmax them so the
+    # UI shows a comparable 0-1 score.
+    scores = np.asarray(clf.decision_function(features)[0], dtype=np.float64)
+    probs = np.exp(scores - scores.max())
     probs = probs / probs.sum()
     idx = int(np.argmax(probs))
     return CLASS_ORDER[idx], float(probs[idx]), [float(p) for p in probs]
@@ -148,7 +140,7 @@ def main() -> None:
     global _MODEL_DIR
     st.set_page_config(page_title="Student Sentiment", page_icon="🎓", layout="centered")
     st.title("🎓 Student Sentiment Analysis")
-    st.caption("Multilingual MiniLM (INT8 ONNX) — Negative / Neutral / Positive")
+    st.caption("mBERT Hybrid (mBERT encoder + word/char TF-IDF) — Negative / Neutral / Positive")
 
     with st.spinner("Loading model…"):
         try:

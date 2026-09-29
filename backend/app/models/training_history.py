@@ -14,7 +14,7 @@ class TrainingAlgorithm(str, enum.Enum):
     SVM = "SVM"
     NAIVE_BAYES = "Naive Bayes"
     LOGISTIC_REGRESSION = "Logistic Regression"
-    MINILM = "Multilingual MiniLM"
+    MBERT_HYBRID = "mBERT Hybrid"
 
 
 class TrainingStatus(str, enum.Enum):

@@ -18,7 +18,7 @@ class PredictionOut(BaseModel):
     id: str
     evaluation_id: str
     # Research-set per-model results (never run live — always None; kept so
-    # historical rows stay readable). The official result is Multilingual MiniLM.
+    # historical rows stay readable). The official result is mBERT Hybrid.
     svm_prediction: SentimentLabel | None = None
     svm_confidence: float | None = None
     naive_bayes_prediction: SentimentLabel | None = None
@@ -36,13 +36,13 @@ class PredictionOut(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    """Live ad-hoc prediction result. Multilingual MiniLM is the ONLY live
+    """Live ad-hoc prediction result. mBERT Hybrid is the ONLY live
     model, so the response carries its result plus the official (production)
     prediction — no per-model fields (SVM / Naive Bayes / Logistic
     Regression) are included."""
 
     text: str
-    minilm: SingleModelResult | None = None
+    mbert: SingleModelResult | None = None
     official_prediction: SentimentLabel
     algorithm_used: str
     confidence_score: float

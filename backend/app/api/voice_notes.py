@@ -3,7 +3,7 @@
 A separate feedback stream from the evaluation-form responses:
 
 * ``POST /voice-notes`` — fully anonymous, no auth required. Runs the
-  SAME live ML sentiment pipeline (Multilingual MiniLM via
+  SAME live ML sentiment pipeline (mBERT Hybrid via
   ``run_prediction_pipeline``) used for evaluation responses, so each
   entry gets a Positive/Neutral/Negative label + confidence score.
   No student identifier is accepted or stored.

@@ -37,8 +37,8 @@ def colab_key_to_approach(key) -> str | None:
         return "Naive Bayes"
     if canonical in ("logisticregression", "logreg", "lr"):
         return "Logistic Regression"
-    if "minilm" in canonical:
-        return "Multilingual MiniLM"
+    if "mbert" in canonical or "minilm" in canonical:
+        return "mBERT Hybrid"
     return None
 # ---------------------------------------------------------------------------
 
@@ -47,7 +47,7 @@ APPROACH_TO_ALGORITHM = {
     "SVM": "SVM",
     "Naive Bayes": "NAIVE_BAYES",
     "Logistic Regression": "LOGISTIC_REGRESSION",
-    "Multilingual MiniLM": "MINILM",
+    "mBERT Hybrid": "MBERT_HYBRID",
 }
 APPROVED = set(APPROACH_TO_ALGORITHM)
 

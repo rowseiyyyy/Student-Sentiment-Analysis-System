@@ -2,7 +2,7 @@
 
 A **web-based student feedback evaluation and sentiment analysis system** developed for **Asia Technological School of Science and Arts (Asiatech), Sta. Rosa, Laguna, Philippines**.
 
-The system collects student evaluations and analyzes open-ended feedback using **SVM, Naive Bayes and Logistic Regression (TF-IDF) alongside Multilingual MiniLM**, then serves the live classification as **Positive, Neutral, or Negative**.
+The system collects student evaluations and analyzes open-ended feedback using **SVM, Naive Bayes and Logistic Regression (TF-IDF) alongside mBERT Hybrid**, then serves the live classification as **Positive, Neutral, or Negative**.
 
 ---
 
@@ -49,15 +49,15 @@ The system compares **four machine learning approaches** on identical train/test
 | **SVM (TF-IDF)**             | Linear support-vector classifier over TF-IDF features (research/comparison)  |
 | **Naive Bayes (TF-IDF)**     | Multinomial Naive Bayes over TF-IDF features (research/comparison)           |
 | **Logistic Regression (TF-IDF)** | Linear logistic classifier over TF-IDF features (research/comparison)    |
-| **Multilingual MiniLM**      | Fine-tuned sentence-transformer served as a quantized ONNX model — the **only live production model** |
+| **mBERT Hybrid**      | Frozen `bert-base-multilingual-cased` encoder + scikit-learn hybrid head (word/char TF-IDF + scaled embedding → LinearSVC) — the **only live production model** |
 
 ### Production inference
 
 The classical TF-IDF models (SVM, Naive Bayes, Logistic Regression) are
 **offline research baselines** — they are trained/evaluated outside the API
 (Colab or `scripts/train_models.py`) and shown in the admin comparison view
-only. Live predictions are always produced by **Multilingual MiniLM**; there
-is no fallback model (a failed MiniLM load returns HTTP 503).
+only. Live predictions are always produced by **mBERT Hybrid**; there
+is no fallback model (a failed mbert load returns HTTP 503).
 
 ---
 
@@ -75,8 +75,8 @@ is no fallback model (a failed MiniLM load returns HTTP 503).
 ### Machine Learning / NLP
 
 * **Scikit-learn** (SVM, Naive Bayes, Logistic Regression)
-* **Multilingual MiniLM** (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`)
-* **ONNX Runtime** (quantized live inference)
+* **mBERT Hybrid** (`sentence-transformers/paraphrase-multilingual-mbert-L12-v2`)
+* **PyTorch + HuggingFace Transformers** (frozen mBERT encoder) with a scikit-learn hybrid head
 * **Hugging Face Transformers**
 * **PyTorch**
 * **TF-IDF**

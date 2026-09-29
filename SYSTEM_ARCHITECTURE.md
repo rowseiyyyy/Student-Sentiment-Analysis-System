@@ -15,7 +15,7 @@ template. File references are given so each claim can be re-checked.
 
 A **three-tier web system** that collects student evaluations of Faculty, Staff,
 Payment Services and School Facilities, runs each open-ended comment through a
-**quantized multilingual MiniLM ONNX model**, stores the resulting sentiment
+**frozen mBERT encoder + scikit-learn hybrid head**, stores the resulting sentiment
 (Positive / Neutral / Negative), and exposes aggregate dashboards and reports to
 Faculty and Administrators.
 
@@ -25,7 +25,7 @@ Faculty and Administrators.
 | API | FastAPI 0.115 on Uvicorn/Gunicorn (`backend/main.py`) |
 | Business logic | Service layer (`backend/app/services/`) |
 | Persistence | MySQL 8 via SQLAlchemy 2.0 + PyMySQL, schema by Alembic |
-| Live inference | Multilingual MiniLM, INT8-quantized ONNX (`onnxruntime`) — **only** live model |
+| Live inference | mBERT Hybrid, PyTorch encoder + scikit-learn head — **only** live model |
 | Research baselines | SVM / Naive Bayes / Logistic Regression over TF-IDF (display/compare only) |
 | Auth | JWT (HS256) issued by the API, bcrypt password hashing |
 | Real-time prototype | Optional standalone Streamlit demo (`streamlit_app.py`) |
@@ -33,7 +33,7 @@ Faculty and Administrators.
 ### 1.1 Architectural principles enforced in code
 
 1. **One live model, no fallback.** `README.md` and `backend/docs/DIAGRAMS.md` state that
-   classical TF-IDF models are offline research baselines; a failed MiniLM load
+   classical TF-IDF models are offline research baselines; a failed mbert load
    returns HTTP 503 instead of silently serving another algorithm.
 2. **Fail loudly at boot.** `main.py` refuses to start when production is
    mis-configured (`assert_production_readiness()` in `app/core/config.py`) and
@@ -79,7 +79,7 @@ flowchart TB
     subgraph SVC["Service layer (backend/app/services)"]
         P["preprocessing.py<br/>clean_for_classical / clean_for_transformer"]
         PL["prediction.py<br/>run_prediction_pipeline"]
-        ML["minilm_service.py<br/>ONNX Runtime + memory guard — LIVE"]
+        ML["mbert_service.py<br/>PyTorch encoder + sklearn hybrid head + memory guard — LIVE"]
         CL["classical_service.py · ensembles.py<br/>SVM / NB / LogReg (research only)"]
         AN["analytics.py<br/>aggregations, trends, word freq"]
         TR["training.py<br/>metrics import, production model registry"]
@@ -90,10 +90,10 @@ flowchart TB
 
     subgraph Data["Data tier"]
         DB[("MySQL 8<br/>users · evaluations · predictions<br/>training_history · action_updates · voice_notes")]
-        FS[/"Filesystem artifacts<br/>app/ml/*.pkl · tfidf_vectorizer_*.pkl<br/>app/ml/minilm_sentiment/{config.json,model.onnx}<br/>app/datasets/ · logs/app.log"/]
+        FS[/"Filesystem artifacts<br/>app/ml/*.pkl · tfidf_vectorizer_*.pkl<br/>app/ml/mbert_hybrid/{config.json,model.safetensors}<br/>app/datasets/ · logs/app.log"/]
     end
 
-    EXT["HuggingFace Hub — private repo<br/>rowseiy/minilm-sentiment"]
+    EXT["HuggingFace Hub — private repo<br/>rowseiy/mbert-sentiment"]
 
     UI -->|fetch, Bearer JWT, CORS-origin checked| RP --> MW
     MW --> R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 & H
@@ -168,21 +168,21 @@ flowchart LR
 | 3306/TCP | mysql container | MySQL wire protocol (intra-compose only) | App connects with `DB_HOST=mysql`, `DB_PORT=3306` |
 | 3309/TCP | host | Host-side mapping of MySQL | `docker-compose.yml` publishes `3309:3306`; do **not** expose publicly |
 | 80 / 443 | nginx (optional) | HTTP → HTTPS, static `frontend/`, proxy to `:8000` | Not in the repo — see §8.4 |
-| 8501 | Streamlit (optional) | `streamlit_app.py` standalone MiniLM demo | Separate app, not part of the API |
+| 8501 | Streamlit (optional) | `streamlit_app.py` standalone mbert demo | Separate app, not part of the API |
 
 ### 3.3 What the app requires from the host
 
-* **RAM:** MiniLM ONNX live inference is memory-gated. `MINILM_MIN_RAM_MB=900`
-  by default (`app/core/config.py:381`), measured footprint ≈ 570–640 MB RSS;
+* **RAM:** mBERT live inference is memory-gated. `MBERT_MIN_RAM_MB=2048`
+  by default (`app/core/config.py:381`), measured footprint ≈ 1.6-2.0 GB RSS;
   on a smaller instance every prediction fails with a clean 503 rather than
-  OOM-killing the worker. Override with `MINILM_HOST_RAM_MB` on hosts that
+  OOM-killing the worker. Override with `MBERT_HOST_RAM_MB` on hosts that
   expose no cgroup limit.
 * **CPU:** `TRANSFORMER_DEVICE=cpu` by default — no GPU required; a CUDA host is
   optional.
 * **Disk:** persistent storage for the MySQL volume **and** `backend/app/ml/`
   (model artifacts) + `backend/app/datasets/` (admin uploads) + `backend/logs/`.
 * **Egress:** HTTPS to `huggingface.co` on first boot when the private
-  `rowseiy/minilm-sentiment` artifacts are not already on disk (`HF_TOKEN`).
+  `rowseiy/mbert-sentiment` artifacts are not already on disk (`HF_TOKEN`).
 
 ---
 
@@ -208,9 +208,9 @@ flowchart LR
 | `app/api/imports.py` | Bulk import of compiled `.xlsx/.xls/.csv` evaluation files (admin) |
 | `app/api/action_updates.py` | Public bulletin read + admin CRUD for action updates |
 | `app/api/voice_notes.py` | Anonymous "Voice in a Box" submissions + staff feed/stats/delete |
-| `app/services/minilm_service.py` | ONNX Runtime session + fast tokenizer; the live classifier |
-| `app/services/hub_downloader.py` | Pulls the private MiniLM repo from HuggingFace when artifacts are missing |
-| `app/services/prediction.py` | Orchestrates preprocessing → MiniLM → `predictions` row |
+| `app/services/mbert_service.py` | PyTorch `BertModel` + fitted TF-IDF/scaler/`LinearSVC`; the live classifier |
+| `app/services/hub_downloader.py` | Pulls the private mbert repo from HuggingFace when artifacts are missing |
+| `app/services/prediction.py` | Orchestrates preprocessing → mbert → `predictions` row |
 | `app/services/analytics.py` | All aggregate SQL/derivations behind `/analytics` |
 | `app/services/training.py` | Metrics normalisation, `training_history` writes, production-model selection, rollback |
 | `app/services/import_service.py` | Row parsing/validation + bulk persistence for `/imports` |
@@ -221,7 +221,7 @@ flowchart LR
 | `app/utils/{logger,email}.py` | Loguru logging to `logs/app.log`, reset-mail helper |
 | `alembic/versions/0001…0016+` | Schema history (initial schema → enum alignment → likert/mismatch → action updates → voice notes → legacy column retirement) |
 | `scripts/` | Operational tooling: `create_admin.py`, `train_models.py`, `generate_model_artifacts.py`, `resave_models.py`, `e2e_voice_notes.py` |
-| `tests/` | Pytest suite (hermetic SQLite, MiniLM stubbed) |
+| `tests/` | Pytest suite (hermetic SQLite, mbert stubbed) |
 
 ### 4.2 Presentation tier — `frontend/`
 
@@ -242,7 +242,7 @@ flowchart LR
 | `.github/workflows/ci.yml` | Compose build/up smoke test, MySQL health wait, then `pytest -q` on the runner (SQLite, `ENVIRONMENT=development`) |
 | `backend/docs/DIAGRAMS.md` | ER diagram, architecture diagram, submission/import sequence diagrams (Mermaid) |
 | `backend/docs/postman_collection.json` | Importable Postman collection for every endpoint |
-| `streamlit_app.py` | Self-contained Streamlit UI for the MiniLM model only (separate deploy; not part of the API) |
+| `streamlit_app.py` | Self-contained Streamlit UI for the mbert model only (separate deploy; not part of the API) |
 | `finetune_transformer.py`, `train.csv`, `val.csv`, `test.csv` | Offline fine-tuning / research dataset inputs |
 
 ---
@@ -307,7 +307,7 @@ student data. Full column-level ER diagram: `backend/docs/DIAGRAMS.md`.
 | Path | Contents | Persistence requirement |
 | --- | --- | --- |
 | `backend/app/ml/*.pkl` + `tfidf_vectorizer_*.pkl` | Classical research models | Survive redeploys (or restore from HF/artifacts) |
-| `backend/app/ml/minilm_sentiment/` | `config.json`, `tokenizer.json`, `model.onnx` (INT8) | **Required for `/ready` and all live predictions** |
+| `backend/app/ml/mbert_hybrid/` | `config.json`, tokenizer files, `model.safetensors` (fp32, 711 MB), `model.joblib` | **Required for `/ready` and all live predictions** |
 | `backend/app/datasets/` | Admin-uploaded training datasets | Volume or object store |
 | `backend/logs/app.log` | Rotated Loguru log | Ship to log aggregation; persist for audits |
 | `backend/*.db` | Local SQLite dev DBs (`app.db`, `asiatech_sentiment.db`) | Dev-only artifacts — not for deployment |
@@ -335,8 +335,8 @@ sequenceDiagram
         Note over Cfg,DB: missing schema → RuntimeError, process exits
     end
     Cfg->>Cfg: assert_production_readiness()
-    App->>Hub: ensure_hub_artifacts() (skipped if app/ml/minilm_sentiment exists)
-    App->>DB: register_hub_models("Multilingual MiniLM") — idempotent bootstrap
+    App->>Hub: ensure_hub_artifacts() (skipped if app/ml/mbert_hybrid exists)
+    App->>DB: register_hub_models("mBERT Hybrid") — idempotent bootstrap
     App-->>Boot: serving on 0.0.0.0:8000
 ```
 
@@ -348,7 +348,7 @@ sequenceDiagram
     participant FE as frontend/js/api.js
     participant API as POST /api/v1/evaluation
     participant Svc as services/prediction.py
-    participant Mim as services/minilm_service.py (ONNX)
+    participant Mim as services/mbert_service.py (encoder + sklearn)
     participant DB as MySQL
 
     Student->>FE: Likert answers + open-ended comment
@@ -362,7 +362,7 @@ sequenceDiagram
     Svc->>DB: INSERT predictions (official_prediction, algorithm_used, confidence_score, processing_time_ms)
     Svc-->>API: prediction payload
     API-->>FE: 201 Created (evaluation + prediction)
-    Note over Mim,API: MiniLM is the ONLY live model — no fallback.<br/>Unavailable or insufficient RAM ⇒ HTTP 503, never another algorithm.
+    Note over Mim,API: mbert is the ONLY live model — no fallback.<br/>Unavailable or insufficient RAM ⇒ HTTP 503, never another algorithm.
 ```
 
 ### 7.3 Admin imports research results and compares models
@@ -378,11 +378,11 @@ sequenceDiagram
 
     Admin->>API: POST /ml/dataset/upload (CSV)
     API->>FS: validate + record dataset metadata
-    Admin->>Colab: train SVM / NB / LogReg (+ MiniLM) on identical splits
+    Admin->>Colab: train SVM / NB / LogReg (+ mbert) on identical splits
     Colab-->>Admin: metrics.json (dashboard export)
-    Admin->>API: POST /ml/import-results?set_production=Multilingual MiniLM
+    Admin->>API: POST /ml/import-results?set_production=mBERT Hybrid
     API->>Tr: normalize_metrics_payload()
-    Tr->>DB: INSERT training_history rows (is_production_model for MiniLM)
+    Tr->>DB: INSERT training_history rows (is_production_model for mbert)
     Tr->>FS: write comparison_results.json / model_metadata.json
     API-->>Admin: 200 {imported_algorithms, production_model, recommended_model}
     Note over API: There is NO POST /ml/train — heavy training stays offline by design.
@@ -400,14 +400,14 @@ Two payload shapes are accepted by `normalize_metrics_payload()`:
 
 | Shape | Skeleton | Notes |
 | --- | --- | --- |
-| **A — Colab `dashboard_export.json`** | `{"label_map": {...}, "recommended_production_model": "...", "models": {"svm": {...}, "naive_bayes": {...}, "logistic_regression": {...}, "minilm": {...}}}` | Chosen whenever `models` is an object. |
-| **B — flat rows** (admin UI / tests) | `{"rows": {"SVM": {...}, "Naive Bayes": {...}, "Logistic Regression": {...}, "Multilingual MiniLM": {...}}, "best_model": "Multilingual MiniLM"}` | Read only when `models` is absent. Keys must already be canonical or match an alias. |
+| **A — Colab `dashboard_export.json`** | `{"label_map": {...}, "recommended_production_model": "...", "models": {"svm": {...}, "naive_bayes": {...}, "logistic_regression": {...}, "mbert": {...}}}` | Chosen whenever `models` is an object. |
+| **B — flat rows** (admin UI / tests) | `{"rows": {"SVM": {...}, "Naive Bayes": {...}, "Logistic Regression": {...}, "mBERT Hybrid": {...}}, "best_model": "mBERT Hybrid"}` | Read only when `models` is absent. Keys must already be canonical or match an alias. |
 
 Model keys are canonicalized by `colab_key_to_approach()` (lowercased, non
 alphanumerics stripped): `svm|svc|supportvectormachine` → **SVM**;
 `naivebayes|nb|multinomialnb` → **Naive Bayes**;
 `logisticregression|logreg|lr` → **Logistic Regression**; any key containing
-`minilm` → **Multilingual MiniLM**; anything else is skipped with a warning in
+`mbert` → **mBERT Hybrid**; anything else is skipped with a warning in
 `app.log`. Values in `APPROVED_APPROACHES` are the only ones persisted.
 
 Per-model field mapping performed by `_normalize_colab_model()`:
@@ -431,11 +431,11 @@ map falls back to `CLASS_ORDER` = Negative, Neutral, Positive.
 Invariants this contract preserves:
 
 1. **Production cannot be imported.** `set_production`/`recommended_model` are
-   advisory only: `_mark_production_model(MINILM)` runs unconditionally, so
-   `production_model` in the response is always `Multilingual MiniLM`, and the
+   advisory only: `_mark_production_model(mbert)` runs unconditionally, so
+   `production_model` in the response is always `mBERT Hybrid`, and the
    best-scoring imported approach is surfaced as `recommended_model`. `POST
-   /ml/rollback` likewise rejects anything but MiniLM (409).
-2. **Metrics only, never weights.** No model archive is uploaded; the live ONNX
+   /ml/rollback` likewise rejects anything but mbert (409).
+2. **Metrics only, never weights.** No model archive is uploaded; the live encoder
    artifacts are pulled from the private Hugging Face Hub at boot. The 2 MB cap
    and the 413 message exist precisely to prevent weight-archive uploads.
 3. **Empty imports are rejected transactionally** — if no approved approach
@@ -452,7 +452,7 @@ Invariants this contract preserves:
 | --- | --- | --- |
 | `GET /` | Liveness metadata (project, version, docs link) | Humans / smoke tests |
 | `GET /health` | Process liveness (`{"status":"healthy"}`) | `docker-compose` healthcheck, load balancer |
-| `GET /ready` | Dependency readiness: DB `SELECT 1` **and** presence of `minilm_sentiment/config.json` + `model.onnx`; returns 503 with a per-dependency breakdown when not ready | Deployment monitoring / your PuTTY smoke test |
+| `GET /ready` | Dependency readiness: DB `SELECT 1` **and** presence of `mbert_hybrid/config.json` + `model.safetensors`; returns 503 with a per-dependency breakdown when not ready | Deployment monitoring / your PuTTY smoke test |
 | `X-Process-Time-Ms` | Per-response latency header | Perf debugging |
 | `backend/logs/app.log` | Structured, rotated application log (Loguru) | Log shipping / audit |
 
@@ -558,9 +558,15 @@ nano backend/.env      # ENVIRONMENT=production, DEBUG=false,
                        # DB_NAME=asiatech_sentiment_db,
                        # CORS_ORIGINS=https://<frontend-domain>,
                        # FRONTEND_URL=https://<frontend-domain>,
-                       # HF_TOKEN=hf_xxx (private MiniLM repo), TRANSFORMER_DEVICE=cpu
+                       # HF_TOKEN=hf_xxx (mbert-sentiment repo), TRANSFORMER_DEVICE=cpu,
+                       # MBERT_MIN_RAM_MB=2048 (default; lower only on a big host)
 
 # 3. Build + start (MySQL health → alembic upgrade head → gunicorn)
+#    NOTE: mBERT Hybrid loads a full fp32 encoder per Gunicorn worker
+#    (~1.6-2.0 GB RSS each). With 2 workers the host needs >= 4 GB of RAM.
+#    Check `free -m` BEFORE starting; on a smaller host either resize the
+#    instance or drop to 1 worker (see §8.4 "Sizing the host").
+free -m
 sudo docker compose up -d --build
 
 # 4. Verify
@@ -568,6 +574,44 @@ sudo docker compose ps
 sudo docker compose logs --tail 100 web
 curl -s http://127.0.0.1:8000/health   # {"status":"healthy"}
 curl -s http://127.0.0.1:8000/ready    # database connected + models ready
+# Confirm the memory guard did NOT disable inference on this host.
+# NOTE: `cmd | grep ... || echo OK` reports "OK" even when `cmd` itself fails
+# (e.g. "docker: command not found"), so probe the log source explicitly first.
+if sudo docker compose ps --status running 2>/dev/null | grep -q web; then
+  sudo docker compose logs web 2>&1 | grep -qi "live inference skipped" \
+    && echo "WARNING: memory guard DISABLED inference (see MBERT_MIN_RAM_MB)" \
+    || echo "memory guard OK - inference enabled"
+else
+  echo "ERROR: web container is not running - cannot check the model"
+fi
+```
+
+> **The model artifacts are not in git.** `backend/app/ml/mbert_hybrid/` holds a
+> 711 MB `model.safetensors` that `.gitignore` excludes, so a fresh `git clone`
+> does **not** contain it. `ensure_hub_artifacts()` downloads it at startup, but
+> only when `HF_TOKEN` is set. If the container logs *"HF_TOKEN is not set —
+> skipping private hub downloads"* and `/ready` reports `models: missing`, set
+> `HF_TOKEN` in `backend/.env` and restart, or copy the artifact directory in
+> manually with `pscp`.
+
+**Sizing the host for mBERT Hybrid**
+
+| Gunicorn workers | Approx. RSS total | Minimum host RAM |
+| --- | --- | --- |
+| 1 | ~1.8 GB | 2 GB |
+| 2 (shipped default) | ~3.6 GB | **4 GB** |
+| 4 | ~7.2 GB | 8 GB |
+
+This replaces the old INT8 ONNX MiniLM path, which needed only ~570-640 MB and
+ran on 512 MB free tiers. On a host below `MBERT_MIN_RAM_MB` (default `2048`)
+the service refuses inference and **every** prediction returns 503 — there is no
+fallback model by design. To run a single worker instead, override the start
+command:
+
+```bash
+# docker-compose.yml -> services.web.command
+sh -c "cd backend && alembic upgrade head && gunicorn main:app \
+  --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
 ```
 
 **Option B — bare-metal venv + Gunicorn + systemd (no Docker)**
@@ -630,7 +674,7 @@ server {
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;   # keeps HTTPS detection correct
-        proxy_read_timeout 120s;                      # MiniLM first-load can be slow
+        proxy_read_timeout 120s;                      # mbert first-load can be slow
     }
 
     location /health { proxy_pass http://127.0.0.1:8000; proxy_set_header X-Forwarded-Proto $scheme; }
@@ -679,11 +723,11 @@ Settings load from the process environment first, then `backend/.env`
 | `RATE_LIMIT_DEFAULT` / `_PREDICT` / `_AUTH` | ❌ | `100/minute`, `20/minute`, `10/minute` |
 | `LIKERT_MIN_QUESTIONS` | ❌ | `5` (server-side floor for rating submissions) |
 | `LOW_CONFIDENCE_THRESHOLD` | ❌ | `0.5` (Overview "low confidence" flag) |
-| `HF_TOKEN` | ✅ (fresh host) | Read token for the private `rowseiy/minilm-sentiment` repo; empty ⇒ hub download skipped |
-| `HF_MINILM_REPO`, `HF_PRODUCTION_MODEL`, `MINILM_ONNX_FILE`, `MINILM_MODEL_NAME`, `MINILM_MAX_SEQ_LENGTH` | ❌ | `rowseiy/minilm-sentiment`, `Multilingual MiniLM`, `model.onnx`, `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, `128` |
-| `ENABLE_MINILM_INFERENCE` | ❌ | `true`; `false` ⇒ all predictions return 503 (no fallback model by design) |
-| `MINILM_MIN_RAM_MB` | ❌ | `900` — refuse inference on smaller hosts instead of OOM-crashing |
-| `MINILM_HOST_RAM_MB` | ❌ | unset ⇒ auto-detect; `0` ⇒ no limit |
+| `HF_TOKEN` | ✅ (fresh host) | Read token for the private `rowseiy/mbert-sentiment` repo; empty ⇒ hub download skipped |
+| `HF_MBERT_REPO`, `HF_PRODUCTION_MODEL`, `MBERT_SAFETENSORS_FILE, MBERT_CLASSIFIER_FILE`, `MBERT_MODEL_NAME`, `MBERT_MAX_SEQ_LENGTH` | ❌ | `rowseiy/mbert-sentiment`, `mBERT Hybrid`, `model.safetensors`, `bert-base-multilingual-cased`, `128` |
+| `ENABLE_MBERT_INFERENCE` | ❌ | `true`; `false` ⇒ all predictions return 503 (no fallback model by design) |
+| `MBERT_MIN_RAM_MB` | ❌ | `2048` — refuse inference on smaller hosts instead of OOM-crashing |
+| `MBERT_HOST_RAM_MB` | ❌ | unset ⇒ auto-detect; `0` ⇒ no limit |
 | `TRANSFORMER_DEVICE` | ❌ | `cpu` (`cuda` where available) |
 | `TEST_SIZE`, `RANDOM_STATE`, `BOOTSTRAP_*`, `ACADEMIC_TERM_MONTHS` | ❌ | Research/analytics parameters (bootstrap CI, academic-term buckets) |
 
@@ -698,11 +742,13 @@ PuTTY-managed box:
    (`app/core/limiter.py`), so with the shipped 2 Gunicorn workers a client can
    consume up to ~2× the configured window, and limits reset on restart. Multi-node
    deployments need a Redis `storage_uri`.
-2. **MiniLM is a single point of failure by design.** No fallback model exists:
-   wrong RAM sizing (`MINILM_MIN_RAM_MB`), missing artifacts, or a corrupted ONNX
+2. **mBERT Hybrid is a single point of failure by design.** No fallback model exists:
+   wrong RAM sizing (`MBERT_MIN_RAM_MB`), missing artifacts, or a corrupted artifact
    file turns every prediction into a 503. `/ready` is the early-warning signal.
-3. **Gunicorn workers each load the ONNX model** (~570–640 MB RSS per worker). Plan
-   **≥ 2 GB RAM for 2 workers**; measure before adding workers.
+3. **Gunicorn workers each load the fp32 encoder** (~1.6–2.0 GB RSS per worker). Plan
+   **≥ 4 GB RAM for 2 workers**; measure before adding workers. The retired INT8 ONNX
+   MiniLM path needed ~570–640 MB, so this is a large increase — free 512 MB/1 GB
+   tiers can no longer host the live model.
 4. **The frontend is not served by FastAPI.** There is no `StaticFiles` mount, so a
    deployment must independently host `frontend/` and set `window.ASIATECH_API_BASE`
    to the API origin (which must also appear in `CORS_ORIGINS`).
@@ -737,7 +783,7 @@ PuTTY-managed box:
 # 1. Processes / containers
 sudo docker compose ps                 # or: sudo systemctl status ssas-api --no-pager
 
-# 2. Liveness + readiness (readiness proves DB AND MiniLM artifacts)
+# 2. Liveness + readiness (readiness proves DB AND mbert artifacts)
 curl -s http://127.0.0.1:8000/          | python3 -m json.tool
 curl -s http://127.0.0.1:8000/health    | python3 -m json.tool
 curl -s http://127.0.0.1:8000/ready     | python3 -m json.tool   # expect models: ready
@@ -748,10 +794,18 @@ cd /opt/ssas/backend && alembic current && alembic heads
 # 4. Logs are clean (no PRODUCTION GUARD / schema errors)
 sudo docker compose logs --tail 200 web | grep -iE "guard|error|traceback" || echo "clean"
 
-# 5. Model artifacts present and non-empty
-ls -lh app/ml/minilm_sentiment/config.json app/ml/minilm_sentiment/model.onnx
+# 5. Model artifacts present and non-empty (711 MB encoder + hybrid head)
+ls -lh app/ml/mbert_hybrid/config.json \
+      app/ml/mbert_hybrid/model.safetensors \
+      app/ml/mbert_hybrid/model.joblib
 
-# 6. End-to-end through the proxy (once nginx + DNS are set)
+# 6. The 4th model is mBERT Hybrid, and no MiniLM rows remain
+#    (migration 0018 re-points them; the ENUM no longer accepts the old value)
+cd /opt/ssas/backend && alembic current   # expect 0018
+sudo docker compose exec web python -c "
+from app.services.training import LIVE_MODEL_NAME; print('live model:', LIVE_MODEL_NAME)"
+
+# 7. End-to-end through the proxy (once nginx + DNS are set)
 curl -s https://api.asiatech.example/ready | python3 -m json.tool
 ```
 

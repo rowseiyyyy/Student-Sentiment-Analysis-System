@@ -7,7 +7,7 @@ each persists its own fitted TF-IDF vectorizer alongside the model so that
 inference-time preprocessing always matches training-time preprocessing
 (leakage-safe: vectorizer is fitted on train split only).
 
-Multilingual MiniLM remains the ONLY live production model — the classical
+mBERT Hybrid remains the ONLY live production model — the classical
 services are never imported at app startup, only lazily by the training
 pipeline.
 """

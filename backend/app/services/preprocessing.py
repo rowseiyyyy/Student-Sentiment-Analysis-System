@@ -13,7 +13,7 @@ Two preprocessing paths are exposed:
   opt-in flag (off by default) so the academic writeup can compare
   configurations.
 
-* ``clean_for_transformer(text)`` -> used by the Multilingual MiniLM
+* ``clean_for_transformer(text)`` -> used by the mBERT Hybrid
   pipeline. Light cleaning only: URLs, HTML, and emojis removed. The
   HuggingFace tokenizer handles casing, punctuation, and grammar.
 
@@ -58,7 +58,7 @@ Preprocessing decisions (classical TF-IDF path)
 
 2. Emojis are converted to their CLDR short name via `emoji.demojize`
    (e.g. `😊` -> `:smiling_face:`). The token is preserved. The
-   Multilingual MiniLM pipeline handles emojis natively and does not
+   mBERT Hybrid pipeline handles emojis natively and does not
    need this conversion.
 
 3. A small built-in emoticon lexicon maps ASCII emoticons to
@@ -326,7 +326,7 @@ def clean_for_classical(
 
 
 def clean_for_transformer(text: str) -> str:
-    """Light preprocessing for Multilingual MiniLM. Preserves case,
+    """Light preprocessing for mBERT Hybrid. Preserves case,
     grammar, and most punctuation so the transformer's contextual
     embeddings stay meaningful.
 

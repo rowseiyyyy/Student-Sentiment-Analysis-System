@@ -48,6 +48,17 @@ cd backend
 gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 ```
 
+> **Worker count vs. RAM.** The live sentiment model (mBERT Hybrid) loads a full
+> fp32 encoder into every Gunicorn worker: ~1.6–2.0 GB RSS each. The command
+> above therefore needs a host with **>= 4 GB** of RAM. On a 2 GB host, run a
+> single worker instead (`--workers 1`). If the host reports less than
+> `MBERT_MIN_RAM_MB` (default `2048`), the memory guard refuses inference and
+> every prediction returns 503 — there is no fallback model.
+>
+> The mBERT artifacts (~711 MB) are not committed to git; on a fresh host set
+> `HF_TOKEN` in `backend/.env` so the startup downloader can fetch them, then
+> confirm `GET /ready` reports `"models": "ready"`.
+
 ## 4. HTTPS and CORS
 
 - Keep HTTPS forced in production.

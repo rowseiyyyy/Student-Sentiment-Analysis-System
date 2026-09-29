@@ -1,5 +1,5 @@
 {
-  "production_model": "Multilingual MiniLM",
+  "production_model": "mBERT Hybrid",
   "approach_type": "single",
   "selection_metric": "weighted_f1",
   "selection_score": 0.0,
@@ -7,6 +7,6 @@
     "SVM": {},
     "Naive Bayes": {},
     "Logistic Regression": {},
-    "Multilingual MiniLM": {}
+    "mBERT Hybrid": {}
   }
 }

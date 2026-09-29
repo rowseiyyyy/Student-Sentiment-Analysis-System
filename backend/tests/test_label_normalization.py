@@ -75,11 +75,11 @@ def test_normalize_metrics_payload_no_label_map_falls_back():
     assert flat["Logistic Regression"]["labels"] == list(CLASS_ORDER)
 
 
-def test_normalize_metrics_payload_minilm_key():
-    """The MiniLM export key resolves to the live production model name."""
-    payload = {"models": {"minilm": SAMPLE_MODEL}}
+def test_normalize_metrics_payload_mbert_key():
+    """The mbert_hybrid export key resolves to the live production model name."""
+    payload = {"models": {"mbert_hybrid": SAMPLE_MODEL}}
     flat, _ = normalize_metrics_payload(payload)
-    assert flat["Multilingual MiniLM"]["labels"] == list(CLASS_ORDER)
+    assert flat["mBERT Hybrid"]["labels"] == list(CLASS_ORDER)
 
 
 def test_label_map_values_not_keys():

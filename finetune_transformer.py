@@ -15,8 +15,8 @@ that no duplicate Comments leak between the train, validation and test sets.
 
 Usage examples
 --------------
-    python finetune_transformer.py                              # MiniLM, 3-class
-    python finetune_transformer.py --target rating              # MiniLM, 5-class
+    python finetune_transformer.py                              # mBERT, 3-class
+    python finetune_transformer.py --target rating              # mBERT, 5-class
     python finetune_transformer.py --epochs 4
     python finetune_transformer.py --train a.csv --val b.csv --test c.csv
 """
@@ -55,11 +55,14 @@ COMMENT_COL = "Comment"
 SENTIMENT_COL = "Sentiment"
 RATING_COL = "Rating"
 
-DEFAULT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+# The live production model is the mBERT Hybrid ensemble; this script fine-tunes
+# a single encoder checkpoint, so the default is the same multilingual base
+# encoder the hybrid uses (frozen in the hybrid, fine-tuned here).
+DEFAULT_MODEL = "bert-base-multilingual-cased"
 SUPPORTED_MODELS = {
-    "minilm": DEFAULT_MODEL,
-    "multilingual-minilm": DEFAULT_MODEL,
-    "paraphrase-multilingual-minilm-l12-v2": DEFAULT_MODEL,
+    "mbert": DEFAULT_MODEL,
+    "bert-base-multilingual-cased": DEFAULT_MODEL,
+    "multilingual-cased": DEFAULT_MODEL,
 }
 
 # Reference baselines reported by the user, as percentages.
@@ -369,8 +372,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Fine-tune a Hugging Face transformer for 3-class sentiment or 5-class rating.")
     parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=("HF model name. Shortcuts: minilm, multilingual-minilm. "
-                              "Default: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"))
+                        help=("HF model name. Shortcuts: mbert, multilingual-cased. "
+                              "Default: bert-base-multilingual-cased"))
     parser.add_argument("--target", choices=["sentiment", "rating"], default="sentiment",
                         help="Prediction target (default: sentiment)")
     parser.add_argument("--train", default=None, help="Path to train.csv (auto-discovered if omitted)")

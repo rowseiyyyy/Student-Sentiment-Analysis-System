@@ -1,6 +1,6 @@
 {
   "label_map": { "0": "Negative", "1": "Neutral", "2": "Positive" },
-  "recommended_production_model": "minilm",
+  "recommended_production_model": "mbert_hybrid",
   "models": {
     "svm": {
       "accuracy": 0.908,
@@ -51,7 +51,7 @@
       "inference_time_ms": 0.5,
       "memory_usage_mb": 30.5
     },
-    "minilm": {
+    "mbert_hybrid": {
       "accuracy": 0.957,
       "precision_weighted": 0.957,
       "recall_weighted": 0.957,

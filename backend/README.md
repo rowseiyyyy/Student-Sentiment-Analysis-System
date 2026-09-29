@@ -7,7 +7,7 @@ A production-ready FastAPI backend that classifies open-ended student
 evaluation comments (Faculty, Staff, Payment, Facilities) into
 **Positive / Neutral / Negative** sentiment, comparing four approaches —
 **SVM (TF-IDF)**, **Naive Bayes (TF-IDF)**, **Logistic Regression (TF-IDF)**,
-and **Multilingual MiniLM** — with Multilingual MiniLM serving every live
+and **mBERT Hybrid** — with mBERT Hybrid serving every live
 prediction.
 
 ## Quick Start (Windows)
@@ -53,23 +53,23 @@ python run.py
 ## Features
 
 - **Four-approach sentiment pipeline**: SVM, Naive Bayes, and Logistic
-  Regression over TF-IDF features, plus **Multilingual MiniLM**
+  Regression over TF-IDF features, plus **mBERT Hybrid**
   (HuggingFace Transformers, quantized ONNX) — trained/evaluated on
   identical splits.
 - **Research mode**: `/ml/import-results` records training metrics from the
   Colab notebook — accuracy, precision, recall, F1,
   macro F1, weighted F1, confusion matrices, classification reports,
   training time, inference time, and memory usage for every model.
-- **Production mode**: **Multilingual MiniLM** is the only live model —
+- **Production mode**: **mBERT Hybrid** is the only live model —
   every new student evaluation is officially scored with it. The classical
   TF-IDF models are research baselines and are never used for live
-  inference (no fallback; a failed MiniLM load returns HTTP 503).
+  inference (no fallback; a failed mbert load returns HTTP 503).
 - **Full CRUD + analytics** for evaluations, with role-based access
   control (student vs. administrator), JWT auth, rate limiting, and CSV
   export.
 - **Admin panel API**: dataset upload/validation, metrics import, model
   comparison table, confusion matrix, classification report, rollback to
-  a previous run, and downloadable MiniLM artifacts.
+  a previous run, and downloadable mbert artifacts.
 
 ---
 
@@ -214,7 +214,7 @@ sentiment classes) so you can exercise the full pipeline immediately.
 
 There is **no `/ml/train` endpoint** — training runs outside the API
 (Colab notebook or the CLI script) and the resulting metrics are imported
-back through `/ml/import-results`. Only **Multilingual MiniLM** serves live
+back through `/ml/import-results`. Only **mBERT Hybrid** serves live
 inference; the classical approaches are research/comparison entries.
 
 ### Option A — Colab notebook + metrics import (recommended)
@@ -240,14 +240,14 @@ inference; the classical approaches are research/comparison entries.
 4. Run the Colab training notebook and export its metrics JSON, then import it:
 
    ```bash
-   curl -X POST "http://localhost:8000/api/v1/ml/import-results?set_production=Multilingual%20MiniLM" \
+   curl -X POST "http://localhost:8000/api/v1/ml/import-results?set_production=Multilingual%20mbert" \
      -H "Authorization: Bearer <TOKEN>" \
      -F "metrics_json=@metrics.json"
    ```
 
 5. Inspect results: `GET /api/v1/ml/performance`,
    `GET /api/v1/ml/confusion-matrix?algorithm=SVM`,
-   `GET /api/v1/ml/classification-report?algorithm=Multilingual%20MiniLM`, etc.
+   `GET /api/v1/ml/classification-report?algorithm=Multilingual%20mbert`, etc.
 
 #### Metrics JSON format (the `metrics_json` file)
 
@@ -269,7 +269,7 @@ Two payload shapes are accepted.
 ```json
 {
   "label_map": { "0": "Negative", "1": "Neutral", "2": "Positive" },
-  "recommended_production_model": "minilm",
+  "recommended_production_model": "mbert",
   "models": {
     "svm": {
       "accuracy": 0.908,
@@ -290,7 +290,7 @@ Two payload shapes are accepted.
     },
     "naive_bayes": { },
     "logistic_regression": { },
-    "minilm": { }
+    "mbert": { }
   }
 }
 ```
@@ -303,9 +303,9 @@ Two payload shapes are accepted.
     "SVM": { "accuracy": 0.90, "precision": 0.90, "recall": 0.90, "f1_score": 0.90, "macro_f1": 0.89, "weighted_f1": 0.90 },
     "Naive Bayes": { },
     "Logistic Regression": { },
-    "Multilingual MiniLM": { }
+    "mBERT Hybrid": { }
   },
-  "best_model": "Multilingual MiniLM"
+  "best_model": "mBERT Hybrid"
 }
 ```
 
@@ -326,7 +326,7 @@ Top-level keys:
 | `svm`, `svc`, `supportvectormachine` | SVM |
 | `naivebayes`, `nb`, `multinomialnb` | Naive Bayes |
 | `logisticregression`, `logreg`, `lr` | Logistic Regression |
-| anything containing `minilm` (`minilm`, `multilingualminilm`, ...) | Multilingual MiniLM |
+| anything containing `mbert` (`mbert`, `multilingualmbert`, ...) | mBERT Hybrid |
 | anything else | skipped, with a warning in the log |
 
 Per-model fields (`_normalize_colab_model`):
@@ -348,12 +348,12 @@ Things worth knowing:
 - `classification_report` is **not** a field you send - the server builds it
   from `per_class`.
 - `set_production` can never promote a classical model. The importer always
-  pins `is_production_model` to Multilingual MiniLM and returns the
+  pins `is_production_model` to mBERT Hybrid and returns the
   best-scoring import as `recommended_model` instead.
 - If no key resolves to an approved approach the request fails with **422**
   (`No approved approaches found in the metrics payload.`).
 - The import records metrics only - it never uploads or replaces the live
-  MiniLM weights (those are pulled from the Hugging Face Hub at boot).
+  mbert weights (those are pulled from the Hugging Face Hub at boot).
 
 | Response | Meaning |
 | --- | --- |
@@ -370,12 +370,12 @@ python scripts/train_models.py --dataset app/datasets/sample_feedback.csv
 ```
 
 The full pipeline fits the TF-IDF classical models (SVM, Naive Bayes,
-Logistic Regression) and evaluates Multilingual MiniLM on the same splits,
+Logistic Regression) and evaluates mBERT Hybrid on the same splits,
 writing the metrics artifacts that the API/Admin panel reads.
 
 After training, `app/ml/comparison_results.json` and
 `app/ml/model_metadata.json` are updated. All subsequent `POST /evaluation`
-and `POST /predict` calls use **Multilingual MiniLM** for the **official**
+and `POST /predict` calls use **mBERT Hybrid** for the **official**
 prediction.
 
 ---
@@ -465,10 +465,10 @@ Set the following in production (never commit real secrets):
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 - `CORS_ORIGINS` — restrict to your actual frontend domain(s)
 - `HF_TOKEN` — Hugging Face read token for the private
-  `HF_MINILM_REPO` (`rowseiy/minilm-sentiment`) that serves the live model
+  `HF_MBERT_REPO` (`rowseiy/mbert-sentiment`) that serves the live model
 - `TRANSFORMER_DEVICE=cuda` if a GPU is available (falls back to `cpu` otherwise)
-- `ENABLE_MINILM_INFERENCE` / `MINILM_MIN_RAM_MB` — the memory guard that
-  protects the free-tier instance from MiniLM OOM crashes
+- `ENABLE_MBERT_INFERENCE` / `MBERT_MIN_RAM_MB` — the memory guard that
+  protects the free-tier instance from mbert OOM crashes
 
 ### Recommended production checklist
 
@@ -483,7 +483,7 @@ Set the following in production (never commit real secrets):
 
 3. Put a reverse proxy (Nginx / Traefik) in front for TLS termination and
    static file caching.
-4. Pre-warm the Multilingual MiniLM ONNX model at startup (the first request
+4. Pre-warm the mBERT Hybrid ONNX model at startup (the first request
    will otherwise pay the load cost) if desired.
 5. Persist `app/ml/` and `app/datasets/` on a volume that survives
    deployments/restarts (or move them to object storage and adjust
