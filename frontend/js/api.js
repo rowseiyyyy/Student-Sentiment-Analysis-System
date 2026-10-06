@@ -307,6 +307,24 @@ async getEvaluations(params = {}) {
         return this.del(`/dashboard-layout/${encodeURIComponent(name)}`);
     },
 
+    // ---- Faculty chart visibility (admin-managed) ------------------------
+    // GET returns { charts: [{ key, label, visible }], updated_at }: the
+    // global map of which analytics charts the whole faculty role may see.
+    // The faculty dashboard uses it to decide which panels to build and
+    // which data endpoints to call; the admin panel uses it for the badges
+    // and the "Manage faculty access" checkboxes. Metadata only — the chart
+    // DATA endpoints are gated server-side by this same map (403).
+    async getFacultyCharts() {
+        return this.get('/analytics/faculty-charts');
+    },
+
+    // `charts` is { "<key>": true|false } and REPLACES the saved map
+    // wholesale (admin only; the server enforces that). Changes apply on
+    // the faculty side on the next page load — nothing is cached client-side.
+    async saveFacultyCharts(charts) {
+        return this.put('/analytics/faculty-charts', { charts: charts });
+    },
+
     async getDailyTrend(params) {
         return this.get('/analytics/daily' + this._buildQuery(params));
     },

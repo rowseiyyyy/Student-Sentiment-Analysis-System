@@ -101,10 +101,59 @@ const FACULTY = {
         }
     },
 
+    // ---- Chart visibility (admin-managed, global for all faculty) --------
+    // Removes the card of every chart the administrator has NOT shared with
+    // faculty from the freshly rendered Analytics tab. Called synchronously
+    // right after the markup is inserted — before any await — so the layout
+    // mount never sees a card that is about to disappear, and a disabled
+    // chart renders nothing, fetches nothing and leaves no placeholder.
+    _applyChartVisibility(enabled) {
+        // chart key -> the element that anchors its card.
+        const HOSTS = {
+            sentiment_split: 'faculty-chart-sentiment-split',
+            rating_distribution: 'faculty-chart-ratings',
+            aspect_averages: 'faculty-chart-aspects',
+            sentiment_courses: 'faculty-chart-courses',
+            top_comments: 'faculty-top-comments',
+        };
+        Object.keys(HOSTS).forEach((key) => {
+            if (enabled.has(key)) return;
+            const host = document.getElementById(HOSTS[key]);
+            const card = host && host.closest('.chart-card');
+            if (card && card.parentNode) card.parentNode.removeChild(card);
+        });
+    },
+
     // ============================================================
     // ANALYTICS TAB — Paper theme design
     // ============================================================
     async renderAnalytics(container) {
+        // Which charts has the administrator shared with faculty? Fetched
+        // fresh on every render (page load / tab entry) and never cached:
+        // a change applies on the next page load, with no logout/login
+        // round-trip. This only decides what to BUILD — every data call
+        // below is gated to 403 server-side as well (app/api/analytics.py,
+        // _require_faculty_chart).
+        let visibility;
+        try {
+            visibility = await API.getFacultyCharts();
+        } catch (error) {
+            container.innerHTML = `
+                <div class="card">
+                    <div class="empty-state">
+                        <div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div>
+                        <h3>Analytics Error</h3>
+                        <p>${escapeHtml(error.message)}</p>
+                    </div>
+                </div>`;
+            return;
+        }
+        const enabled = new Set((visibility.charts || []).filter(c => c.visible).map(c => c.key));
+        const on = (key) => enabled.has(key);
+
+        // The markup below authors all five cards so the captions live in
+        // exactly one place; cards for disabled charts are dropped right
+        // after this template is assigned.
         container.innerHTML = `
             <div class="page-header">
                 <div>
@@ -114,10 +163,13 @@ const FACULTY = {
                 </div>
                 <!-- Lived on the (removed) Overview tab; moved here so the
                      report download survives the tab removal. Scoped to
-                     Professors on the server for faculty accounts. -->
-                <button class="btn btn-success" onclick="FACULTY.exportCSV()">
+                     Professors on the server for faculty accounts.
+                     With NOTHING shared the button is omitted entirely —
+                     the server answers 403 to the export when no chart is
+                     enabled (and strips hidden charts' columns otherwise). -->
+                ${enabled.size ? `<button class="btn btn-success" onclick="FACULTY.exportCSV()">
                     <i class="fas fa-download"></i> Download Report
-                </button>
+                </button>` : ''}
             </div>
             <!-- One grid for every panel below, not one per panel: separate
                  grids each resolved their own auto-fit, so a lone card
@@ -156,198 +208,77 @@ const FACULTY = {
             </div>
         `;
 
+        // ---- Visibility: empty state, or drop the disabled cards ----------
+        if (!enabled.size) {
+            // Nothing has been shared with this faculty account yet: a
+            // friendly card rather than five empty charts (and no Download
+            // Report button — see the header above).
+            container.innerHTML = `
+                <div class="card">
+                    <div class="empty-state">
+                        <div class="empty-icon"><i class="fas fa-eye-slash" style="color:var(--ink-faint);"></i></div>
+                        <h3>No analytics shared</h3>
+                        <p>No analytics have been shared with you yet.</p>
+                    </div>
+                </div>`;
+            return;
+        }
+        // Disable-by-removal happens here, synchronously — no await between
+        // the innerHTML above and this call, so the layout mount (which runs
+        // once LAYOUT.load resolves) only ever sees the cards that stay.
+        this._applyChartVisibility(enabled);
+
         showLoading('Loading analytics...');
         try {
             // Professors-only view: the category filter rides along on every
             // panel in this tab, so none of these charts can mix in Staff /
-            // Facilities / Payments rows.
+            // Facilities / Payments rows. Only ENABLED charts are fetched at
+            // all — a disabled chart's endpoint is never called here, and the
+            // server would answer 403 anyway if it were called by hand.
             const scope = `category=${encodeURIComponent(this.SCOPED_CATEGORY)}`;
             const [complaints, appreciations, courses, split, ratings, aspects] =
                 await Promise.all([
-                    API.getTopComplaints(5, scope),
-                    API.getTopAppreciations(5, scope),
+                    on('top_comments') ? API.getTopComplaints(5, scope) : Promise.resolve(null),
+                    on('top_comments') ? API.getTopAppreciations(5, scope) : Promise.resolve(null),
                     // Individually guarded: a failure in one panel must degrade
                     // to that panel's own "no data" caption, not blank the tab.
-                    API.getCourseAnalytics(scope).catch(() => null),
-                    API.getOverallAnalytics(scope).catch(() => null),
-                    API.getRatingDistribution(scope).catch(() => null),
-                    API.getAspectAverages(scope).catch(() => null)
+                    on('sentiment_courses') ? API.getCourseAnalytics(scope).catch(() => null) : Promise.resolve(null),
+                    on('sentiment_split') ? API.getOverallAnalytics(scope).catch(() => null) : Promise.resolve(null),
+                    on('rating_distribution') ? API.getRatingDistribution(scope).catch(() => null) : Promise.resolve(null),
+                    on('aspect_averages') ? API.getAspectAverages(scope).catch(() => null) : Promise.resolve(null)
                 ]);
 
-            // Shared empty-state for a panel with nothing to draw: the same
-            // readable caption the courses chart uses, instead of a bare axis.
-            const showEmpty = (host, message) => {
-                host.style.display = 'flex';
-                host.style.alignItems = 'center';
-                host.style.justifyContent = 'center';
-                host.innerHTML = `<p class="text-muted text-center">${message}</p>`;
-            };
-            // A canvas is created by hand (rather than declared in the markup)
-            // so one host can serve either the chart or the caption.
-            const mountCanvas = (host) => {
-                host.style.display = '';
-                host.innerHTML = '';
-                const canvas = document.createElement('canvas');
-                host.appendChild(canvas);
-                return canvas;
-            };
+            // The empty-state / canvas helpers and the drawing itself now
+            // live in CHARTS (frontend/js/charts.js), so the admin Analytics
+            // tab renders these very same panels from the same code.
 
             // ---- Sentiment split (doughnut) --------------------------------
             // The only "how many" view on this tab: /analytics/overall, scoped.
-            const splitHost = document.getElementById('faculty-chart-sentiment-split');
-            const breakdown = (split && split.breakdown) || {};
-            if (splitHost) {
-                if (!breakdown.total) {
-                    showEmpty(splitHost, 'No sentiment data available.');
-                } else {
-                    setTimeout(() => {
-                        this.charts.split = new Chart(mountCanvas(splitHost), {
-                            type: 'doughnut',
-                            data: {
-                                labels: ['Positive', 'Neutral', 'Negative'],
-                                datasets: [{
-                                    data: [breakdown.positive || 0, breakdown.neutral || 0, breakdown.negative || 0],
-                                    backgroundColor: ['#2f6f4e', '#b7791f', '#b33a3a'],
-                                    borderWidth: 2,
-                                    borderColor: '#f8f9f5'
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    legend: { position: 'bottom' },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: (ctx) => {
-                                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                                                const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
-                                                return `${ctx.label}: ${ctx.parsed} (${pct}%)`;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    }, 100);
-                }
-            }
+            CHARTS.sentimentSplit(
+                document.getElementById('faculty-chart-sentiment-split'),
+                split, this.charts, 'split'
+            );
 
             // ---- Rating distribution (stacked 1-5 histogram) ---------------
             // The API returns all five bands zero-filled, so the x-axis keeps a
             // stable 1-5 scale instead of collapsing to whichever bands happen
             // to hold data. Each stack segment is the sentiment of the
             // submissions that landed in that band.
-            const ratingsHost = document.getElementById('faculty-chart-ratings');
-            const bands = (ratings && ratings.points) || [];
-            const ratingsSummary = document.getElementById('faculty-ratings-summary');
-            if (ratingsHost) {
-                if (!ratings || !ratings.total) {
-                    showEmpty(ratingsHost, 'No rating data available.');
-                    if (ratingsSummary) ratingsSummary.textContent = '';
-                } else {
-                    if (ratingsSummary) {
-                        const mean = typeof ratings.average === 'number'
-                            ? ratings.average.toFixed(2) : '—';
-                        ratingsSummary.textContent =
-                            `Mean rating ${mean} / 5 · ${ratings.total} rated submission${ratings.total === 1 ? '' : 's'}`;
-                    }
-                    setTimeout(() => {
-                        this.charts.ratings = new Chart(mountCanvas(ratingsHost), {
-                            type: 'bar',
-                            data: {
-                                labels: bands.map(b => `${b.band} · ${b.label}`),
-                                datasets: [
-                                    { label: 'Positive', data: bands.map(b => b.positive || 0), backgroundColor: '#2f6f4e' },
-                                    { label: 'Neutral', data: bands.map(b => b.neutral || 0), backgroundColor: '#b7791f' },
-                                    { label: 'Negative', data: bands.map(b => b.negative || 0), backgroundColor: '#b33a3a' }
-                                ]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                scales: {
-                                    x: { stacked: true },
-                                    // Submissions are whole people: no fractional ticks.
-                                    y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
-                                },
-                                plugins: {
-                                    legend: { position: 'bottom' },
-                                    tooltip: {
-                                        callbacks: {
-                                            // Add the band's own total to the
-                                            // per-segment default, so a tooltip
-                                            // reads "Negative: 3" plus "5 in band".
-                                            footer: (items) => {
-                                                const band = bands[items[0].dataIndex];
-                                                return band ? `Total in band: ${band.total}` : '';
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    }, 100);
-                }
-            }
+            CHARTS.ratingDistribution(
+                document.getElementById('faculty-chart-ratings'),
+                ratings,
+                document.getElementById('faculty-ratings-summary'),
+                this.charts, 'ratings'
+            );
 
             // ---- Average by aspect (horizontal bars, fixed 1-5 axis) ---------
             // The API sorts strongest-first, which is the order Chart.js plots
             // a vertical category axis (first label at the top), so no reversal
             // is needed and the weakest aspect lands at the bottom.
-            const aspectsHost = document.getElementById('faculty-chart-aspects');
-            const aspectPoints = (aspects && aspects.points) || [];
-            if (aspectsHost) {
-                if (!aspectPoints.length) {
-                    showEmpty(aspectsHost, 'No aspect data available.');
-                } else {
-                    // ~30px per bar so nine aspects don't collapse into
-                    // slivers, same growth rule the courses chart uses.
-                    const height = Math.max(280, Math.min(560, aspectPoints.length * 30 + 70));
-                    if (height > aspectsHost.clientHeight) aspectsHost.style.height = `${height}px`;
-                    setTimeout(() => {
-                        this.charts.aspects = new Chart(mountCanvas(aspectsHost), {
-                            type: 'bar',
-                            data: {
-                                labels: aspectPoints.map(p => p.label),
-                                datasets: [{
-                                    label: 'Average score',
-                                    data: aspectPoints.map(p => p.average || 0),
-                                    // Colour bands the 1-5 scale the way the
-                                    // paper theme colours sentiment elsewhere.
-                                    backgroundColor: aspectPoints.map(p =>
-                                        p.average >= 4 ? '#2f6f4e' : (p.average >= 3 ? '#b7791f' : '#b33a3a')),
-                                    borderWidth: 0
-                                }]
-                            },
-                            options: {
-                                indexAxis: 'y',
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    legend: { display: false },
-                                    tooltip: {
-                                        callbacks: {
-                                            // A 4.6 from three students must not
-                                            // read like a 4.6 from three hundred.
-                                            label: ctx => {
-                                                const point = aspectPoints[ctx.dataIndex] || {};
-                                                return `Average ${(point.average || 0).toFixed(2)} / 5 · n=${point.responses || 0}`;
-                                            }
-                                        }
-                                    }
-                                },
-                                scales: {
-                                    // Fixed 1-5 so bar lengths are comparable
-                                    // between aspects and between reloads.
-                                    x: { min: 1, max: 5, ticks: { stepSize: 1 } },
-                                    y: { ticks: { autoSkip: false } }
-                                }
-                            }
-                        });
-                    }, 100);
-                }
-            }
+            CHARTS.aspectAverages(
+                document.getElementById('faculty-chart-aspects'),
+                aspects, this.charts, 'aspects'
+            );
 
             // Sentiment by Courses: one horizontal bar per course, scored
             // (Positive - Negative) / total x 100 on a fixed -100..+100 axis so
@@ -356,70 +287,10 @@ const FACULTY = {
             // vertical category axis at the top (chart.js 4.4.0, per
             // index.html), so the best-scoring course sits at the top of the
             // chart with no reversal needed here.
-            const coursePoints = (courses && courses.points) ? courses.points : [];
-            const courseHost = document.getElementById('faculty-chart-courses');
-            if (courseHost && coursePoints.length === 0) {
-                // Empty dataset: show the same readable placeholder the admin
-                // charts use instead of a broken axis-only canvas.
-                courseHost.style.display = 'flex';
-                courseHost.style.alignItems = 'center';
-                courseHost.style.justifyContent = 'center';
-                courseHost.innerHTML = '<p class="text-muted text-center">No course data available.</p>';
-            } else if (courseHost) {
-                // A program list runs longer than the stylesheet's chart height
-                // (280px, or 240px on small screens), so give the bars ~30px
-                // each rather than squeezing a dozen of them into slivers. Only
-                // grows, and is capped so the card cannot run away down the page.
-                const courseHeight = Math.max(280, Math.min(560, coursePoints.length * 30 + 70));
-                if (courseHeight > courseHost.clientHeight) courseHost.style.height = `${courseHeight}px`;
-                setTimeout(() => {
-                    courseHost.innerHTML = '';
-                    const canvas = document.createElement('canvas');
-                    courseHost.appendChild(canvas);
-                    this.charts.courses = new Chart(canvas, {
-                        type: 'bar',
-                        data: {
-                            labels: coursePoints.map(p => p.course),
-                            datasets: [{
-                                label: 'Sentiment score',
-                                data: coursePoints.map(p => p.sentiment_score || 0),
-                                backgroundColor: coursePoints.map(p => p.sentiment_score > 0 ? '#2f6f4e' : (p.sentiment_score < 0 ? '#b33a3a' : '#b7791f')),
-                                borderWidth: 0
-                            }]
-                        },
-                        options: {
-                            indexAxis: 'y',
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: false },
-                                tooltip: {
-                                    callbacks: {
-                                        // Shows the submission count, so a score
-                                        // carried by a couple of responses is
-                                        // readable as thin data.
-                                        label: ctx => {
-                                            const point = coursePoints[ctx.dataIndex] || {};
-                                            return `Score ${(point.sentiment_score || 0).toFixed(1)} \u00b7 n=${point.total || 0} (P${point.positive || 0} / Neu${point.neutral || 0} / Neg${point.negative || 0})`;
-                                        }
-                                    }
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    min: -100,
-                                    max: 100,
-                                    title: { display: true, text: 'Sentiment score (-100 to +100)' }
-                                },
-                                // reverse:false pins descending order (best
-                                // course at the top); autoSkip:false keeps every
-                                // course named.
-                                y: { reverse: false, ticks: { autoSkip: false } }
-                            }
-                        }
-                    });
-                }, 100);
-            }
+            CHARTS.sentimentCourses(
+                document.getElementById('faculty-chart-courses'),
+                courses, this.charts, 'courses'
+            );
 
             // Two side-by-side columns: complaints on the left, appreciations
             // on the right. Each column scrolls on its own (.faculty-comments-col)
@@ -427,28 +298,27 @@ const FACULTY = {
             // off-screen. Card styling is unchanged — same h4 headings, same
             // dashed dividers, same truncated quote.
             const commentsDiv = document.getElementById('faculty-top-comments');
-            const complaintItems = (complaints && complaints.items) || [];
-            const appreciationItems = (appreciations && appreciations.items) || [];
+            // Null when the Top Comments card was dropped by the visibility
+            // pass — then there is nothing to fill in.
+            if (commentsDiv) {
+                const complaintItems = (complaints && complaints.items) || [];
+                const appreciationItems = (appreciations && appreciations.items) || [];
 
-            const commentColumn = (title, color, icon, items) => `
-                <div class="faculty-comments-col">
-                    <h4 style="color:${color};margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas ${icon}"></i> ${title}</h4>
-                    ${items.length ? items.map(c => `
-                        <div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);">
-                            <p style="font-size:.85rem;">"${escapeHtml(c.comment.substring(0, 120))}"</p>
-                            <small style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-faint);">${escapeHtml(c.category)}</small>
-                        </div>
-                    `).join('') : '<p class="text-muted">No comments available.</p>'}
-                </div>
-            `;
+                const commentColumn = (title, color, icon, items) => `
+                    <div class="faculty-comments-col">
+                        <h4 style="color:${color};margin-bottom:.5rem;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;"><i class="fas ${icon}"></i> ${title}</h4>
+                        ${items.length ? items.map(c => CHARTS.commentRowHtml(c, { truncate: 120 })).join('') : '<p class="text-muted">No comments available.</p>'}
+                    </div>
+                `;
 
-            if (!complaintItems.length && !appreciationItems.length) {
-                commentsDiv.innerHTML =
-                    '<p class="text-muted text-center">No comment data available.</p>';
-            } else {
-                commentsDiv.innerHTML =
-                    commentColumn('Top Complaints', 'var(--neg)', 'fa-exclamation-circle', complaintItems) +
-                    commentColumn('Top Appreciations', 'var(--pos)', 'fa-star', appreciationItems);
+                if (!complaintItems.length && !appreciationItems.length) {
+                    commentsDiv.innerHTML =
+                        '<p class="text-muted text-center">No comment data available.</p>';
+                } else {
+                    commentsDiv.innerHTML =
+                        commentColumn('Top Complaints', 'var(--neg)', 'fa-exclamation-circle', complaintItems) +
+                        commentColumn('Top Appreciations', 'var(--pos)', 'fa-star', appreciationItems);
+                }
             }
 
         } catch (error) {

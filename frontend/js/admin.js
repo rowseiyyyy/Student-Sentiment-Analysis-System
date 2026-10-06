@@ -1735,7 +1735,12 @@ predictionHtml +
         var scopeNote = escapeHtml(this.scopeLabel());
         var deptCompareHidden = this.departmentCompareSuppressed();
         container.innerHTML = '' +
-            '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span><h1>Trends &amp; top signals</h1></div></div>' +
+            '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span><h1>Trends &amp; top signals</h1></div>' +
+                // Global (not per-user) chart sharing for the faculty role:
+                // opens the panel with the checkboxes, select-all / clear-all
+                // and Save. The badges on the cards below show the result.
+                '<button class="btn btn-outline" onclick="ADMIN.openFacultyAccess()"><i class="fas fa-user-shield"></i> Manage faculty access</button>' +
+            '</div>' +
             this.scopeBanner() +
             '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
                 '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">— every section on this tab is drawn from evaluation-form submissions. Nothing here reflects ML training runs.</span>' +
@@ -1747,6 +1752,17 @@ predictionHtml +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category. This panel always compares all four departments, so the department filter does not apply to it.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
                 '<div class="chart-card"><h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Volume and sentiment for each of the eight grading periods (Term 1 Prelim to Finals, then Term 2 Prelim to Finals), from each submission\'s month. Break / enrollment months (Nov, Dec, Jan, Jun) belong to no grading period and are intentionally not plotted.</p><div class="chart-container" id="chart-host-term-sentiment"></div></div>' +
+                // ---- Faculty-facing charts (shared with the faculty view) ----
+                // Drawn by the SAME CHARTS renderers the faculty dashboard uses
+                // (frontend/js/charts.js) — one implementation, two views — and
+                // scoped like every other card on this tab (this._qs(): all
+                // departments by default, honouring the filters and the faculty
+                // preview). The badge on each card reports whether these are
+                // currently shared with faculty accounts; clicking "Manage
+                // faculty access" above is what changes them.
+                '<div class="chart-card"><h3><i class="fas fa-chart-pie"></i> Sentiment Split <span class="badge" data-fac-chart="sentiment_split" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">How the submissions read in ' + scopeNote + ': every submission that carries a sentiment, counted once. This is the same panel faculty see as their Sentiment Split chart.</p><div class="chart-container" id="chart-host-faculty-split"></div></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Rating Distribution <span class="badge" data-fac-chart="rating_distribution" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Each submission&rsquo;s 1-5 average, stacked by that same submission&rsquo;s sentiment — so a tall 4-5 block that is mostly red is the case worth looking at. Comment-only submissions have no rating and are not counted. This is the same panel faculty see as their Rating Distribution chart.</p><div class="chart-container" id="chart-host-faculty-ratings"></div><p class="source-note" id="chart-faculty-ratings-summary" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.5rem 0 0;text-align:center;"></p></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-star"></i> Average by Aspect <span class="badge" data-fac-chart="aspect_averages" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per rating aspect, strongest at the top — the &ldquo;strong on clarity, weak on punctuality&rdquo; view. Hover a bar for how many students answered that aspect. This is the same panel faculty see as their Average by Aspect chart.</p><div class="chart-container" id="chart-host-faculty-aspects"></div></div>' +
             '</div>' +
             // ---- Per-department rating panels -----------------------------
             // Rating distribution and per-aspect means side by side across all
@@ -1774,11 +1790,11 @@ predictionHtml +
                   // A bar per course reads better wide, and it is the last
                   // chart before the comment lists, so nothing follows to
                   // backfill beside it: it takes the full row.
-                  '<div class="chart-card span-3"><h3><i class="fas fa-book"></i> Sentiment by Courses</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>') +
+                  '<div class="chart-card span-3"><h3><i class="fas fa-book"></i> Sentiment by Courses <span class="badge" data-fac-chart="sentiment_courses" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>') +
             '</div>' +
             '<div class="two-col">' +
-                '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-complaints-list"></div></div>' +
-                '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations</h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-appreciations-list"></div></div>' +
+                '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints <span class="badge" data-fac-chart="top_comments" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-complaints-list"></div></div>' +
+                '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations <span class="badge" data-fac-chart="top_comments" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-appreciations-list"></div></div>' +
             '</div>';
 
         showLoading('Loading analytics...');
@@ -1793,15 +1809,47 @@ predictionHtml +
                 // Per-department rating panels. Suppressed when the scope is
                 // already narrowed to a single department, so they are not
                 // fetched at all in that case.
-                deptCompareHidden ? Promise.resolve(null) : this.fetchDepartmentRatings()
+                deptCompareHidden ? Promise.resolve(null) : this.fetchDepartmentRatings(),
+                // Faculty-facing chart sharing: the badge map (metadata only)
+                // plus the two scope-level Likert panels the three new cards
+                // need. Each is individually guarded so a failure degrades to
+                // that card's own caption, never the whole tab.
+                API.getFacultyCharts().catch(function() { return null; }),
+                API.getRatingDistribution(qs).catch(function() { return null; }),
+                API.getAspectAverages(qs).catch(function() { return null; })
             ]);
             var overall = results[0];
             var complaints = results[1];
             var appreciations = results[2];
             var deptRatings = results[3];
+            var facultyVis = results[4];
+            var facultyRatings = results[5];
+            var facultyAspects = results[6];
+
+            // Badge every faculty-shared chart card with its current status.
+            this.paintFacultyBadges(facultyVis);
 
             document.getElementById('ana-pos-pct').textContent = (overall.breakdown.positive_pct || 0).toFixed(1) + '%';
             document.getElementById('ana-total').textContent = overall.evaluation_volume || 0;
+
+            // ---- Faculty-facing charts (shared CHARTS renderers) ----------
+            // Same drawing code as the faculty dashboard (charts.js); hosts
+            // resolve to null when a card was removed, and CHARTS no-ops.
+            // Sentiment Split reuses the overall payload fetched above.
+            CHARTS.sentimentSplit(
+                document.getElementById('chart-host-faculty-split'),
+                overall, this.charts, 'facultySplit'
+            );
+            CHARTS.ratingDistribution(
+                document.getElementById('chart-host-faculty-ratings'),
+                facultyRatings,
+                document.getElementById('chart-faculty-ratings-summary'),
+                this.charts, 'facultyRatings'
+            );
+            CHARTS.aspectAverages(
+                document.getElementById('chart-host-faculty-aspects'),
+                facultyAspects, this.charts, 'facultyAspects'
+            );
 
             // ---- Per-department rating panels -----------------------------
             // deptRatings is null when the scope is already one department; the
@@ -1979,90 +2027,36 @@ predictionHtml +
             // best-to-worst and Chart.js plots the first label of a vertical
             // category axis at the TOP (verified against chart.js 4.4.0, the
             // version index.html loads), so the highest-scoring course lands at
-            // the top with no reversal here.
-            var coursePoints = (courseData && courseData.points) ? courseData.points : [];
-            var hasCourseData = coursePoints.length > 0;
-            var courseHost = document.getElementById('chart-host-course-sentiment');
-            if (courseHost && hasCourseData) {
-                // A program list runs longer than the stylesheet's chart height
-                // (280px, or 240px on small screens), so give the bars ~30px
-                // each rather than squeezing a dozen into slivers. Only grows --
-                // a short list keeps the stylesheet's own height, and a long one
-                // is capped so the card cannot run away down the page.
-                var courseHeight = Math.max(280, Math.min(560, coursePoints.length * 30 + 70));
-                if (courseHeight > courseHost.clientHeight) courseHost.style.height = courseHeight + 'px';
-            }
-            var courseBarColor = function(score) {
-                if (score > 0) return '#2f6f4e';
-                if (score < 0) return '#b33a3a';
-                return '#b7791f';
-            };
-            setTimeout(function() {
-                ADMIN.mountChart('chart-host-course-sentiment', hasCourseData, function(canvas) {
-                    ADMIN.charts.courseSentiment = new Chart(canvas, {
-                        type: 'bar',
-                        data: {
-                            labels: coursePoints.map(function(p) { return p.course; }),
-                            datasets: [{
-                                label: 'Sentiment score',
-                                data: coursePoints.map(function(p) { return p.sentiment_score || 0; }),
-                                backgroundColor: coursePoints.map(function(p) { return courseBarColor(p.sentiment_score); }),
-                                borderWidth: 0
-                            }]
-                        },
-                        options: {
-                            indexAxis: 'y',
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: false },
-                                tooltip: {
-                                    callbacks: {
-                                        // Thin data is visible here: a score at the
-                                        // extremes carried by "n=1" is a flag, not
-                                        // a verdict on the whole program.
-                                        label: function(ctx) {
-                                            var point = coursePoints[ctx.dataIndex] || {};
-                                            return 'Score ' + (point.sentiment_score || 0).toFixed(1) +
-                                                ' \u00b7 n=' + (point.total || 0) +
-                                                ' (P' + (point.positive || 0) + ' / Neu' + (point.neutral || 0) + ' / Neg' + (point.negative || 0) + ')';
-                                        }
-                                    }
-                                }
-                            },
-                            scales: {
-                                // Fixed bounds keep every course on one ruler.
-                                x: {
-                                    min: -100,
-                                    max: 100,
-                                    title: { display: true, text: 'Sentiment score (-100 to +100)' }
-                                },
-                                // reverse:false pins the descending order as-is:
-                                // first (best) course at the top, worst at the
-                                // bottom. autoSkip:false keeps every course named.
-                                y: { reverse: false, ticks: { autoSkip: false } }
-                            }
-                        }
-                    });
-                }, 'No course data available.');
-            }, 100);
+            // the top with no reversal here. Drawn by the SHARED CHARTS
+            // renderer the faculty view uses, so the two can never drift.
+            CHARTS.sentimentCourses(
+                document.getElementById('chart-host-course-sentiment'),
+                courseData, this.charts, 'courseSentiment'
+            );
 
             var complaintsList = document.getElementById('top-complaints-list');
-            if (complaints.items && complaints.items.length > 0) {
-                complaintsList.innerHTML = complaints.items.map(function(c) {
-                    return '<div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);"><p style="font-size:.88rem;">"' + escapeHtml(c.comment.substring(0, 150)) + '"</p><small class="text-muted" style="font-family:var(--font-mono);font-size:.72rem;">' + escapeHtml(c.category) + ' | Confidence: ' + formatNumber(c.confidence) + '</small></div>';
-                }).join('');
-            } else {
-                complaintsList.innerHTML = '<p class="text-muted text-center">No complaints data available.</p>';
+            // Same quote-row markup the faculty Top Comments card uses
+            // (CHARTS.commentRowHtml), plus the model confidence the admin
+            // presentation shows.
+            if (complaintsList) {
+                if (complaints.items && complaints.items.length > 0) {
+                    complaintsList.innerHTML = complaints.items.map(function(c) {
+                        return CHARTS.commentRowHtml(c, { truncate: 150, showConfidence: true });
+                    }).join('');
+                } else {
+                    complaintsList.innerHTML = '<p class="text-muted text-center">No complaints data available.</p>';
+                }
             }
 
             var appreciationsList = document.getElementById('top-appreciations-list');
-            if (appreciations.items && appreciations.items.length > 0) {
-                appreciationsList.innerHTML = appreciations.items.map(function(a) {
-                    return '<div style="padding:.5rem 0;border-bottom:1px dashed var(--paper-line);"><p style="font-size:.88rem;">"' + escapeHtml(a.comment.substring(0, 150)) + '"</p><small class="text-muted" style="font-family:var(--font-mono);font-size:.72rem;">' + escapeHtml(a.category) + ' | Confidence: ' + formatNumber(a.confidence) + '</small></div>';
-                }).join('');
-            } else {
-                appreciationsList.innerHTML = '<p class="text-muted text-center">No appreciations data available.</p>';
+            if (appreciationsList) {
+                if (appreciations.items && appreciations.items.length > 0) {
+                    appreciationsList.innerHTML = appreciations.items.map(function(a) {
+                        return CHARTS.commentRowHtml(a, { truncate: 150, showConfidence: true });
+                    }).join('');
+                } else {
+                    appreciationsList.innerHTML = '<p class="text-muted text-center">No appreciations data available.</p>';
+                }
             }
         } catch (error) {
             container.innerHTML += '<div class="card"><div class="empty-state"><div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div><h3>Analytics Error</h3><p>' + error.message + '</p></div>';

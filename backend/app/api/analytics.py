@@ -3,7 +3,7 @@ import io
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from app.schemas.analytics import (
 )
 from app.schemas.evaluation import NormalizedCategory
 from app.services import analytics as analytics_service
+from app.services import faculty_charts as faculty_chart_visibility
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -62,6 +63,37 @@ def _scoped_category(
     return category
 
 
+# ---- Faculty chart visibility (admin-managed, enforced here) --------------
+#
+# The Analytics tab's "Manage faculty access" panel toggles which charts the
+# whole faculty role may see. Hiding a panel in the UI is not enough: a
+# faculty token could call the backing endpoint by hand, so every endpoint
+# that feeds a faculty chart passes through _require_faculty_chart first.
+# Administrators are never gated -- including in "preview the faculty view"
+# mode, which must keep showing whatever the admin is inspecting.
+#
+# Chart key -> endpoint mapping (one gate per faculty chart):
+#   sentiment_split    -> GET /analytics/overall
+#   rating_distribution-> GET /analytics/ratings/distribution
+#   aspect_averages    -> GET /analytics/ratings/aspects
+#   sentiment_courses  -> GET /analytics/courses
+#   top_comments       -> GET /analytics/top-complaints, GET /analytics/top-appreciations
+# The CSV export applies the same map column-by-column; see export_evaluations_csv.
+
+
+def _require_faculty_chart(db: Session, current_user: User, chart_key: str) -> None:
+    """Raise 403 when the caller is faculty and this chart is not shared with them."""
+    if current_user.role != UserRole.FACULTY:
+        return
+    if faculty_chart_visibility.is_enabled(db, chart_key):
+        return
+    label = faculty_chart_visibility.FACULTY_CHARTS.get(chart_key, (chart_key, chart_key))[0]
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"The '{label}' analytics chart is not currently shared with faculty accounts.",
+    )
+
+
 @router.get("/overall", response_model=OverallAnalyticsResponse)
 @retry_on_disconnect()
 def get_overall_analytics(
@@ -70,6 +102,7 @@ def get_overall_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
+    _require_faculty_chart(db, current_user, "sentiment_split")
     return analytics_service.overall_analytics(
         db,
         category=_scoped_category(category, current_user),
@@ -170,6 +203,7 @@ def get_course_analytics(
     horizontal bar chart (course names on the Y axis, score on the X axis).
     Rows come back sorted by descending score, which is the order the chart
     plots them in: the best-scoring course sits at the top."""
+    _require_faculty_chart(db, current_user, "sentiment_courses")
     return analytics_service.course_analytics(
         db,
         days=_days_param(days),
@@ -219,6 +253,7 @@ def get_rating_distribution(
     Backs the faculty "Rating Distribution" chart: are students ticking 4-5
     while writing negative comments, or genuinely unhappy?
     """
+    _require_faculty_chart(db, current_user, "rating_distribution")
     return analytics_service.rating_distribution(
         db,
         days=_days_param(days),
@@ -241,6 +276,7 @@ def get_aspect_averages(
     Backs the faculty "Average by Aspect" chart — the "strong on clarity,
     weak on punctuality" view, read straight from Evaluation.ratings.
     """
+    _require_faculty_chart(db, current_user, "aspect_averages")
     return analytics_service.aspect_averages(
         db,
         days=_days_param(days),
@@ -258,6 +294,7 @@ def get_top_complaints(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
+    _require_faculty_chart(db, current_user, "top_comments")
     return analytics_service.top_comments(
         db,
         kind="complaints",
@@ -276,6 +313,7 @@ def get_top_appreciations(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
+    _require_faculty_chart(db, current_user, "top_comments")
     return analytics_service.top_comments(
         db,
         kind="appreciations",
@@ -299,7 +337,33 @@ def export_evaluations_csv(
     rest of their dashboard — see _scoped_category), so the report cannot be
     used as a back door to the Staff / Facilities / Payments comments.
     Administrators get every category unless they narrow it themselves.
+
+    The report is the raw data behind the charts, so the admin's chart
+    visibility map applies to it too — strictly, column by column:
+
+    * ``top_comments`` hidden  -> the ``comment`` column is omitted (that
+      column IS the Top Comments panel's data).
+    * ``sentiment_split`` hidden -> ``sentiment`` and every prediction /
+      confidence column are omitted (they are what the split counts).
+    * EVERY chart hidden       -> 403: nothing has been shared with faculty,
+      so there is no report to download. The faculty UI hides the button in
+      this state as well; this is the server-side guarantee behind it.
+    * Administrators are unaffected: full export, always.
     """
+    is_faculty = current_user.role == UserRole.FACULTY
+    if is_faculty:
+        visible = faculty_chart_visibility.resolve(db)
+        if not any(visible.values()):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No analytics are currently shared with faculty accounts.",
+            )
+        include_comment = visible.get("top_comments", False)
+        include_sentiment = visible.get("sentiment_split", False)
+    else:
+        include_comment = True
+        include_sentiment = True
+
     query = db.query(Evaluation, Prediction).join(
         Prediction, Prediction.evaluation_id == Evaluation.id
     )
@@ -308,27 +372,40 @@ def export_evaluations_csv(
         query = query.filter(Evaluation.category == scoped)
     rows = query.order_by(Evaluation.created_at.desc()).all()
 
+    # Header and rows are built from the same column plan, so the two can
+    # never drift. Original column order is preserved when everything is on.
+    header = ["evaluation_id", "category"]
+    if include_comment:
+        header.append("comment")
+    if include_sentiment:
+        header.extend([
+            "sentiment", "official_prediction", "algorithm_used", "confidence_score",
+            "svm_prediction", "svm_confidence",
+            "naive_bayes_prediction", "naive_bayes_confidence",
+            "logistic_regression_prediction", "logistic_regression_confidence",
+        ])
+    header.append("created_at")
+
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow([
-        "evaluation_id", "category", "comment", "sentiment", "official_prediction", "algorithm_used",
-        "confidence_score", "svm_prediction", "svm_confidence",
-        "naive_bayes_prediction", "naive_bayes_confidence",
-        "logistic_regression_prediction", "logistic_regression_confidence",
-        "created_at",
-    ])
+    writer.writerow(header)
     for ev, pred in rows:
-        writer.writerow([
-            ev.id, ev.category.value, ev.comment, ev.sentiment or "", pred.official_prediction.value,
-            pred.algorithm_used.value, pred.confidence_score,
-            pred.svm_prediction.value if pred.svm_prediction else "",
-            pred.svm_confidence if pred.svm_confidence else "",
-            pred.naive_bayes_prediction.value if pred.naive_bayes_prediction else "",
-            pred.naive_bayes_confidence if pred.naive_bayes_confidence else "",
-            pred.logistic_regression_prediction.value if pred.logistic_regression_prediction else "",
-            pred.logistic_regression_confidence if pred.logistic_regression_confidence else "",
-            ev.created_at.isoformat(),
-        ])
+        row = [ev.id, ev.category.value]
+        if include_comment:
+            row.append(ev.comment)
+        if include_sentiment:
+            row.extend([
+                ev.sentiment or "", pred.official_prediction.value,
+                pred.algorithm_used.value, pred.confidence_score,
+                pred.svm_prediction.value if pred.svm_prediction else "",
+                pred.svm_confidence if pred.svm_confidence else "",
+                pred.naive_bayes_prediction.value if pred.naive_bayes_prediction else "",
+                pred.naive_bayes_confidence if pred.naive_bayes_confidence else "",
+                pred.logistic_regression_prediction.value if pred.logistic_regression_prediction else "",
+                pred.logistic_regression_confidence if pred.logistic_regression_confidence else "",
+            ])
+        row.append(ev.created_at.isoformat())
+        writer.writerow(row)
     buffer.seek(0)
 
     return StreamingResponse(

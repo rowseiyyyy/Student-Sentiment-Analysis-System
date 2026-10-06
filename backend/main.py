@@ -37,6 +37,7 @@ from app.api import (
     auth,
     dashboard_layout,
     evaluation,
+    faculty_charts,
     imports,
     ml,
     prediction,
@@ -334,5 +335,6 @@ app.include_router(imports.router, prefix=settings.API_V1_PREFIX)
 app.include_router(action_updates.router, prefix=settings.API_V1_PREFIX)
 app.include_router(voice_notes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(dashboard_layout.router, prefix=settings.API_V1_PREFIX)
+app.include_router(faculty_charts.router, prefix=settings.API_V1_PREFIX)
 
 logger.info(f"{settings.PROJECT_NAME} v{settings.VERSION} started in {settings.ENVIRONMENT} mode.")
