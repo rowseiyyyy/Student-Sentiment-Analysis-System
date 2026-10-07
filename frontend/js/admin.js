@@ -1803,9 +1803,9 @@ predictionHtml +
         var qs = scopeQs || null;
         try {
             var results = await Promise.all([
-                API.getOverallAnalytics(qs),
-                API.getTopComplaints(5, qs),
-                API.getTopAppreciations(5, qs),
+                API.getOverallAnalytics(qs).catch(function() { return null; }),
+                API.getTopComplaints(5, qs).catch(function() { return null; }),
+                API.getTopAppreciations(5, qs).catch(function() { return null; }),
                 // Per-department rating panels. Suppressed when the scope is
                 // already narrowed to a single department, so they are not
                 // fetched at all in that case.
@@ -1829,8 +1829,12 @@ predictionHtml +
             // Badge every faculty-shared chart card with its current status.
             this.paintFacultyBadges(facultyVis);
 
-            document.getElementById('ana-pos-pct').textContent = (overall.breakdown.positive_pct || 0).toFixed(1) + '%';
-            document.getElementById('ana-total').textContent = overall.evaluation_volume || 0;
+            document.getElementById('ana-pos-pct').textContent = overall
+                ? (overall.breakdown.positive_pct || 0).toFixed(1) + '%'
+                : '—';
+            document.getElementById('ana-total').textContent = overall
+                ? (overall.evaluation_volume || 0)
+                : '—';
 
             // ---- Faculty-facing charts (shared CHARTS renderers) ----------
             // Same drawing code as the faculty dashboard (charts.js); hosts
@@ -2039,7 +2043,7 @@ predictionHtml +
             // (CHARTS.commentRowHtml), plus the model confidence the admin
             // presentation shows.
             if (complaintsList) {
-                if (complaints.items && complaints.items.length > 0) {
+                if (complaints && complaints.items && complaints.items.length > 0) {
                     complaintsList.innerHTML = complaints.items.map(function(c) {
                         return CHARTS.commentRowHtml(c, { truncate: 150, showConfidence: true });
                     }).join('');
@@ -2050,7 +2054,7 @@ predictionHtml +
 
             var appreciationsList = document.getElementById('top-appreciations-list');
             if (appreciationsList) {
-                if (appreciations.items && appreciations.items.length > 0) {
+                if (appreciations && appreciations.items && appreciations.items.length > 0) {
                     appreciationsList.innerHTML = appreciations.items.map(function(a) {
                         return CHARTS.commentRowHtml(a, { truncate: 150, showConfidence: true });
                     }).join('');
