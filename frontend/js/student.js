@@ -377,15 +377,15 @@ const STUDENT = {
     professorFormContent() {
         return `<div class="form-section" style="margin-top:1.5rem;">
             <h4 style="margin-bottom:0.75rem;">Rate the following aspects:</h4>
-            ${likertScale("teaching_quality", "The professor delivers lessons with good teaching quality.")}
-            ${likertScale("mastery", "The professors demonstrates mastery of the subject matter.")}
-            ${likertScale("clarity", "The professors communicates and explains lessons clearly.")}
-            ${likertScale("fairness", "The professors grades and evaluates students fairly.")}
-            ${likertScale("punctuality", "The professors are punctual and has regular attendance.")}
-            ${likertScale("approachability", "The professors are approachable and willing to help students.")}
-            ${likertScale("feedback", "The professors provides timely and constructive feedback on students' performance.")}
-            ${likertScale("classroom_mgmt", "The professors manages the classroom effectively.")}
-            ${likertScale("teaching_style", "The professors teaching style is effective this semester.")}
+            ${likertScale("teaching_quality", "The professors deliver lessons with good teaching quality")}
+            ${likertScale("mastery", "The professors demonstrate mastery of the subject matter.")}
+            ${likertScale("clarity", "The professors communicate and explain lessons clearly.")}
+            ${likertScale("fairness", "The professors grade and evaluate students fairly.")}
+            ${likertScale("punctuality", "Rate the professors punctuality and attendance")}
+            ${likertScale("approachability", "Rate the professors approachability and willingness to help students")}
+            ${likertScale("feedback", "The professors provide timely and constructive feedback on students performance.")}
+            ${likertScale("classroom_mgmt", "Rate the professors classroom management")}
+            ${likertScale("teaching_style", "The professors teaching style are effective this semester.")}
         </div>
         ${textareaField("share_your_thoughts", "Share Your Thoughts", "")}`;
     },
@@ -394,12 +394,12 @@ const STUDENT = {
         return `<div class="form-section" style="margin-top:1.5rem;">
             <h4 style="margin-bottom:0.75rem;">Rate the following aspects:</h4>
             ${likertScale("safety", "The guards make me feel safe and greet me warmly whenever I enter the campus.")}
-            ${likertScale("registrar", "The registrar's office staff are patient and helpful when answering questions about documents, records, and enrollment.")}
-            ${likertScale("cashier", "Transactions at the cashier or accounting window are stress-free and handled with professionalism.")}
+            ${likertScale("registrar", "The registrar's office staff are patient and helpful when answering questions about anything that concerns documents, records and enrollment")}
+            ${likertScale("cashier", "Transactions at the cashier or accounting window are stress-free and handled with great professionalism.")}
             ${likertScale("canteen", "The canteen staff serve us warmly and keep the food service area clean and organized.")}
             ${likertScale("substitute", "Substitutes and temporary staff are well-prepared and keep our regular routines going smoothly.")}
-            ${likertScale("office_staff", "The office staff quickly reply whenever I ask for help or need paperwork done.")}
-            ${likertScale("admin_comm", "The school administration keeps us well updated through social media about campus announcements and events.")}
+            ${likertScale("office_staff", "The office staff quickly replies whenever I ask for help or need paperwork done")}
+            ${likertScale("admin_comm", "The school administration keeps us well updated on everything through social media about campus announcement and events.")}
             ${likertScale("maintenance", "The maintenance and hallway staff do a wonderful job keeping our school surroundings safe and clean.")}
         </div>
         ${textareaField("share_your_thoughts", "Share Your Thoughts", "")}`;
@@ -409,12 +409,12 @@ const STUDENT = {
             <h4 style="margin-bottom:0.75rem;">Rate the following aspects:</h4>
             ${likertScale("spaces", "The school has great spaces like hanging spots, benches, and trees.")}
             ${likertScale("furniture", "The classroom tables and chairs are all in good condition.")}
-            ${likertScale("cleanliness", "General cleanliness in all facilities is observed.")}
+            ${likertScale("cleanliness", "General cleanliness in all facilities are observed.")}
             ${likertScale("bathrooms", "The bathrooms are always clean and smell fresh.")}
             ${likertScale("cafeteria", "The cafeteria or canteen has a clean dining space with plenty of room to sit and eat.")}
-            ${likertScale("monitors", "The monitor systems in the classrooms are all working properly.")}
+            ${likertScale("monitors", "The monitor systems in the classrooms are all well-working.")}
             ${likertScale("computers", "The lab computers are all easy to use and are well-managed.")}
-            ${likertScale("classrooms", "The classrooms are always bright, clean, and well-maintained, making me comfortable to work properly.")}
+            ${likertScale("classrooms", "The classrooms are always bright, clean and well-maintained and makes me comfortable to work properly.")}
         </div>
         ${textareaField("share_your_thoughts", "Share Your Thoughts", "")}`;
     },
@@ -427,6 +427,9 @@ const STUDENT = {
             ${likertScale("queues", "The on-site payment queues move quickly and efficiently, even during peak days.")}
             ${likertScale("courteous", "Payment personnel are courteous, helpful, and prompt in addressing payment-related inquiries or concerns.")}
             ${likertScale("accounting", "Accounting and registrar personnel are helpful, polite, and responsive when addressing payment and document-related inquiries or issues.")}
+            ${likertScale("security", "I feel confident that my personal and financial information is secure when making transactions.")}
+            ${likertScale("info_clarity", "The payments process provides clear and accurate information about my fees, balances, and transactions.")}
+            ${likertScale("digital_trust", "I trust that my personal and financial information is protected when using the digital bank information system for transactions.")}
         </div>
         ${textareaField("share_your_thoughts", "Share Your Thoughts", "")}`;
     },
@@ -479,7 +482,7 @@ const STUDENT = {
         professor: ["teaching_quality", "mastery", "clarity", "fairness", "punctuality", "approachability", "feedback", "classroom_mgmt", "teaching_style"],
         staff: ["safety", "registrar", "cashier", "canteen", "substitute", "office_staff", "admin_comm", "maintenance"],
         facilities: ["spaces", "furniture", "cleanliness", "bathrooms", "cafeteria", "monitors", "computers", "classrooms"],
-        payments: ["accessibility", "processing", "queues", "courteous", "accounting"]
+        payments: ["accessibility", "processing", "queues", "courteous", "accounting", "security", "info_clarity", "digital_trust"]
     },
 
     // Get required questions for a category

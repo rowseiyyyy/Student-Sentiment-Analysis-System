@@ -493,11 +493,27 @@ def test_import_single_payment_alias_resolves_ratings(mock_process, client, tmp_
     captured = {}
     mock_process.side_effect = _capture_process(captured)
 
+    headers = [
+        "Timestamp", "Course",
+        "The payment portal/counter is easily accessible at convenient times for my schedule.",
+        "My payments or fee clearances are processed and posted to my account in a timely manner.",
+        "The on-site payment queues move quickly and efficiently, even during peak days.",
+        "Payment personnel are courteous, helpful, and prompt in addressing payment-related inquiries or concerns.",
+        "Accounting and registrar personnel are helpful, polite, and responsive when addressing payment and document-related inquiries or issues.",
+        "I feel confident that my personal and financial information is secure when making transactions.",
+        "The payments process provides clear and accurate information about my fees, balances, and transactions.",
+        "I trust that my personal and financial information is protected when using the digital bank information system for transactions.",
+        "Share your thoughts",
+    ]
+    buffer = _io.StringIO()
+    writer = _csv.writer(buffer)
+    writer.writerow(headers)
+    writer.writerow(["8/25/2026", "BSCS", 5, 4, 3, 4, 5, 4, 3, 5, "Quick and easy."])
+
     response = _post_single(
         client,
         tmp_path,
-        "Timestamp,Course,The payment portal is easily accessible,Share your thoughts\n"
-        "8/25/2026,BSCS,5,Quick and easy.\n",
+        buffer.getvalue(),
         "Payment",
     )
 
@@ -505,7 +521,16 @@ def test_import_single_payment_alias_resolves_ratings(mock_process, client, tmp_
     row = captured["clean_rows"][0]
     assert row["category"] == "Payment"
     assert row["course"] == "BSCS"
-    assert row["ratings"] == {"accessibility": 5}
+    assert row["ratings"] == {
+        "accessibility": 5,
+        "processing": 4,
+        "queues": 3,
+        "courteous": 4,
+        "accounting": 5,
+        "security": 4,
+        "info_clarity": 3,
+        "digital_trust": 5,
+    }
 
 
 @patch("app.api.imports.process_imported_evaluations")
