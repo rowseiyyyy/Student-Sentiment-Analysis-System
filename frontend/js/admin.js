@@ -1843,7 +1843,6 @@ predictionHtml +
                 // faculty access" above is what changes them.
                 '<div class="chart-card"><h3><i class="fas fa-chart-pie"></i> Sentiment Split <span class="badge" data-fac-chart="sentiment_split" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">How the submissions read in ' + scopeNote + ': every submission that carries a sentiment, counted once. This is the same panel faculty see as their Sentiment Split chart.</p><div class="chart-container" id="chart-host-faculty-split"></div></div>' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Rating Distribution <span class="badge" data-fac-chart="rating_distribution" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Each submission&rsquo;s 1-5 average, stacked by that same submission&rsquo;s sentiment — so a tall 4-5 block that is mostly red is the case worth looking at. Comment-only submissions have no rating and are not counted. This is the same panel faculty see as their Rating Distribution chart.</p><div class="chart-container" id="chart-host-faculty-ratings"></div><p class="source-note" id="chart-faculty-ratings-summary" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.5rem 0 0;text-align:center;"></p></div>' +
-                '<div class="chart-card"><h3><i class="fas fa-star"></i> Average by Aspect <span class="badge" data-fac-chart="aspect_averages" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per rating aspect, strongest at the top — the &ldquo;strong on clarity, weak on punctuality&rdquo; view. Hover a bar for how many students answered that aspect. This is the same panel faculty see as their Average by Aspect chart.</p><div class="chart-container" id="chart-host-faculty-aspects"></div></div>' +
             '</div>' +
             // ---- Per-department rating panels -----------------------------
             // Rating distribution and per-aspect means side by side across all
@@ -1892,12 +1891,11 @@ predictionHtml +
                 // fetched at all in that case.
                 deptCompareHidden ? Promise.resolve(null) : this.fetchDepartmentRatings(),
                 // Faculty-facing chart sharing: the badge map (metadata only)
-                // plus the two scope-level Likert panels the three new cards
-                // need. Each is individually guarded so a failure degrades to
+                // plus the scope-level Likert panel this card needs. Each is
+                // individually guarded so a failure degrades to
                 // that card's own caption, never the whole tab.
                 API.getFacultyCharts().catch(function() { return null; }),
-                API.getRatingDistribution(qs).catch(function() { return null; }),
-                API.getAspectAverages(qs).catch(function() { return null; })
+                API.getRatingDistribution(qs).catch(function() { return null; })
             ]);
             var overall = results[0];
             var complaints = results[1];
@@ -1905,7 +1903,6 @@ predictionHtml +
             var deptRatings = results[3];
             var facultyVis = results[4];
             var facultyRatings = results[5];
-            var facultyAspects = results[6];
 
             // Badge every faculty-shared chart card with its current status.
             this.paintFacultyBadges(facultyVis);
@@ -1931,11 +1928,6 @@ predictionHtml +
                 document.getElementById('chart-faculty-ratings-summary'),
                 this.charts, 'facultyRatings'
             );
-            CHARTS.aspectAverages(
-                document.getElementById('chart-host-faculty-aspects'),
-                facultyAspects, this.charts, 'facultyAspects'
-            );
-
             // ---- Per-department rating panels -----------------------------
             // deptRatings is null when the scope is already one department; the
             // markup explains that case instead of drawing a one-bar chart.

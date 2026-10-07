@@ -243,7 +243,10 @@ const CHARTS = {
             store[key] = new Chart(this.mountCanvas(host), {
                 type: 'bar',
                 data: {
-                    labels: points.map(point => point.term),
+                    labels: points.map(point => {
+                        const match = point.term.match(/^(Term \d+)\s+(.+)$/);
+                        return match ? [match[1], match[2]] : point.term;
+                    }),
                     datasets: [
                         { label: 'Positive', data: points.map(point => point.positive || 0), backgroundColor: '#2f6f4e' },
                         { label: 'Neutral', data: points.map(point => point.neutral || 0), backgroundColor: '#b7791f' },
@@ -254,7 +257,7 @@ const CHARTS = {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        x: { stacked: true, ticks: { autoSkip: false, maxRotation: 35, minRotation: 0 } },
+                        x: { stacked: true, ticks: { autoSkip: false, maxRotation: 0, minRotation: 0 } },
                         y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
                     },
                     plugins: { legend: { position: 'bottom' } }
