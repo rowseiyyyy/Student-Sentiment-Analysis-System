@@ -1726,6 +1726,20 @@ predictionHtml +
     // ============================================================
     // ANALYTICS TAB — Paper theme design
     // ============================================================
+    paintFacultyBadges: function(visibility) {
+        if (!visibility || !Array.isArray(visibility.charts)) return;
+        var visibleByKey = {};
+        visibility.charts.forEach(function(chart) {
+            visibleByKey[chart.key] = !!chart.visible;
+        });
+        document.querySelectorAll('[data-fac-chart]').forEach(function(badge) {
+            var key = badge.getAttribute('data-fac-chart');
+            if (!Object.prototype.hasOwnProperty.call(visibleByKey, key)) return;
+            badge.textContent = visibleByKey[key] ? 'Shared with faculty' : 'Admin only';
+            badge.style.display = 'inline-block';
+        });
+    },
+
     async renderAnalytics(container) {
         // Every figure on this tab is scoped by the same filter/preview state as
         // the Overview (see _qs). The banner plus the per-card captions below
