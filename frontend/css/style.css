@@ -1748,6 +1748,46 @@ tbody tr:last-child td {
   padding: 1.35rem;
 }
 
+.faculty-access-controls,
+.faculty-access-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.faculty-access-controls {
+  justify-content: flex-start;
+}
+
+.faculty-access-options {
+  max-height: 45vh;
+  overflow-y: auto;
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--paper-line);
+  border-bottom: 1px solid var(--paper-line);
+}
+
+.faculty-access-option {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.75rem 0.25rem;
+  border-bottom: 1px solid var(--paper-line);
+  cursor: pointer;
+}
+
+.faculty-access-option:last-child {
+  border-bottom: 0;
+}
+
+.faculty-access-option input {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
 .modal-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

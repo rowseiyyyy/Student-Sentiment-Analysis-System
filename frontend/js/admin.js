@@ -1740,6 +1740,93 @@ predictionHtml +
         });
     },
 
+    openFacultyAccess: async function() {
+        showLoading('Loading faculty access...');
+        try {
+            var result = await API.getFacultyCharts();
+            var charts = result && Array.isArray(result.charts) ? result.charts : [];
+            if (!charts.length) throw new Error('No faculty chart settings were returned.');
+
+            this.closeFacultyAccess();
+            this._facultyAccessTrigger = document.activeElement;
+            var backdrop = document.createElement('div');
+            backdrop.id = 'faculty-access-modal';
+            backdrop.className = 'modal-backdrop show';
+            backdrop.innerHTML =
+                '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="faculty-access-title">' +
+                    '<div class="modal-header"><h3 id="faculty-access-title">Manage faculty access</h3>' +
+                        '<button class="modal-close" type="button" onclick="ADMIN.closeFacultyAccess()" aria-label="Close"><i class="fas fa-times"></i></button>' +
+                    '</div>' +
+                    '<div class="modal-body">' +
+                        '<p class="text-muted">Choose which analytics charts faculty accounts can view.</p>' +
+                        '<div class="faculty-access-controls">' +
+                            '<button class="btn btn-outline" type="button" onclick="ADMIN.setFacultyChartSelection(true)">Select all</button>' +
+                            '<button class="btn btn-outline" type="button" onclick="ADMIN.setFacultyChartSelection(false)">Clear all</button>' +
+                        '</div>' +
+                        '<div class="faculty-access-options">' + charts.map(function(chart) {
+                            return '<label class="faculty-access-option"><input type="checkbox" data-chart-key="' +
+                                escapeHtml(chart.key) + '"' + (chart.visible ? ' checked' : '') + '><span>' +
+                                escapeHtml(chart.label) + '</span></label>';
+                        }).join('') + '</div>' +
+                        '<div class="faculty-access-actions">' +
+                            '<button class="btn btn-outline" type="button" onclick="ADMIN.closeFacultyAccess()">Cancel</button>' +
+                            '<button class="btn btn-primary" type="button" onclick="ADMIN.saveFacultyAccess()">Save changes</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            backdrop.addEventListener('click', function(event) {
+                if (event.target === backdrop) ADMIN.closeFacultyAccess();
+            });
+            backdrop.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape') ADMIN.closeFacultyAccess();
+            });
+            document.body.appendChild(backdrop);
+            var firstCheckbox = backdrop.querySelector('input[type="checkbox"]');
+            if (firstCheckbox) firstCheckbox.focus();
+        } catch (error) {
+            showToast('Could not load faculty access: ' + error.message, 'error');
+        } finally {
+            hideLoading();
+        }
+    },
+
+    closeFacultyAccess: function() {
+        var backdrop = document.getElementById('faculty-access-modal');
+        if (backdrop) backdrop.remove();
+        var trigger = this._facultyAccessTrigger;
+        this._facultyAccessTrigger = null;
+        if (trigger && typeof trigger.focus === 'function') trigger.focus();
+    },
+
+    setFacultyChartSelection: function(visible) {
+        var backdrop = document.getElementById('faculty-access-modal');
+        if (!backdrop) return;
+        backdrop.querySelectorAll('input[data-chart-key]').forEach(function(input) {
+            input.checked = visible;
+        });
+    },
+
+    saveFacultyAccess: async function() {
+        var backdrop = document.getElementById('faculty-access-modal');
+        if (!backdrop) return;
+        var charts = {};
+        backdrop.querySelectorAll('input[data-chart-key]').forEach(function(input) {
+            charts[input.getAttribute('data-chart-key')] = input.checked;
+        });
+
+        showLoading('Saving faculty access...');
+        try {
+            var result = await API.saveFacultyCharts(charts);
+            this.paintFacultyBadges(result);
+            this.closeFacultyAccess();
+            showToast('Faculty access settings saved.', 'success');
+        } catch (error) {
+            showToast('Could not save faculty access: ' + error.message, 'error');
+        } finally {
+            hideLoading();
+        }
+    },
+
     async renderAnalytics(container) {
         // Every figure on this tab is scoped by the same filter/preview state as
         // the Overview (see _qs). The banner plus the per-card captions below
