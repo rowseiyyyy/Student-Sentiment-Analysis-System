@@ -22,7 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile
     command: >
-      sh -c "cd backend && alembic upgrade head && gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+      sh -c "cd backend && alembic upgrade head && gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 300 --bind 0.0.0.0:8000"
     ports:
       - "8000:8000"
     env_file:

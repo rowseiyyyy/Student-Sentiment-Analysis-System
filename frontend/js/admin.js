@@ -963,6 +963,7 @@ var ADMIN = {
                 '</label>' +
                 '<input type="text" class="form-control" id="filter-search" placeholder="Search by course, year level, sentiment..." style="flex:1;min-width:200px;" />' +
                 '<button class="btn btn-primary" onclick="ADMIN.loadResponses()"><i class="fas fa-search"></i> Search</button>' +
+                '<button class="btn btn-secondary" onclick="ADMIN.selectAllMatchingResponses()" title="Select matching responses across every page"><i class="fas fa-check-double"></i> Select all pages</button>' +
                 '<button class="btn btn-secondary" onclick="ADMIN.resetFilters()"><i class="fas fa-undo"></i> Reset</button>' +
             '</div>' +
             '<div id="bulk-actions-bar" class="hidden" style="display:none;align-items:center;gap:0.75rem;background:var(--paper-alt,#f1f1ec);border:1px solid var(--paper-line);padding:.5rem .75rem;margin-bottom:.75rem;">' +
@@ -1060,6 +1061,45 @@ var ADMIN = {
             }
         });
         this.updateBulkBar();
+    },
+
+    selectAllMatchingResponses: async function() {
+        var category = document.getElementById('filter-category');
+        var search = document.getElementById('filter-search');
+        var needsReview = document.getElementById('filter-needs-review');
+        var pageSize = 1000;
+        var params = {
+            category: this.getCategoryApiValue(category ? category.value : ''),
+            page_size: pageSize,
+            has_submission: true,
+            needs_review: needsReview ? needsReview.checked : false,
+            search: search && search.value ? search.value : undefined
+        };
+
+        showLoading('Selecting matching responses across all pages...');
+        try {
+            params.page = 1;
+            var firstPage = await API.getEvaluations(params);
+            var totalPages = Math.ceil((firstPage.total || 0) / pageSize);
+            var ids = new Set((firstPage.items || []).map(function(item) { return item.id; }));
+
+            for (var page = 2; page <= totalPages; page++) {
+                params.page = page;
+                var result = await API.getEvaluations(params);
+                (result.items || []).forEach(function(item) { ids.add(item.id); });
+            }
+
+            this.selectedIds = ids;
+            document.querySelectorAll('.row-select-checkbox').forEach(function(checkbox) {
+                checkbox.checked = ids.has(checkbox.dataset.id);
+            });
+            this.updateBulkBar();
+            showToast(ids.size + ' matching response(s) selected. Choose Delete Selected to continue.', 'success');
+        } catch (error) {
+            showToast('Could not select all matching responses: ' + error.message, 'error');
+        } finally {
+            hideLoading();
+        }
     },
 
     clearSelection: function() {

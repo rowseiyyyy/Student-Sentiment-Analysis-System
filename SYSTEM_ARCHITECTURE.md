@@ -611,7 +611,7 @@ command:
 ```bash
 # docker-compose.yml -> services.web.command
 sh -c "cd backend && alembic upgrade head && gunicorn main:app \
-  --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+  --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 300 --bind 0.0.0.0:8000"
 ```
 
 **Option B — bare-metal venv + Gunicorn + systemd (no Docker)**
@@ -636,7 +636,7 @@ WorkingDirectory=/opt/ssas/backend
 EnvironmentFile=/opt/ssas/backend/.env
 ExecStart=/opt/ssas/.venv/bin/gunicorn main:app \
   --workers 2 --worker-class uvicorn.workers.UvicornWorker \
-  --bind 127.0.0.1:8000 --timeout 120
+  --bind 127.0.0.1:8000 --timeout 300
 Restart=always
 RestartSec=5
 
@@ -674,7 +674,8 @@ server {
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;   # keeps HTTPS detection correct
-        proxy_read_timeout 120s;                      # mbert first-load can be slow
+        proxy_read_timeout 300s;                      # allow long CSV imports to finish
+        proxy_send_timeout 300s;
     }
 
     location /health { proxy_pass http://127.0.0.1:8000; proxy_set_header X-Forwarded-Proto $scheme; }
