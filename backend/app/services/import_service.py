@@ -275,8 +275,8 @@ COMBINED_QUESTION_KEYWORDS_BY_CATEGORY: dict[str, dict[str, list[str]]] = {
     },
     "Staff": {
         "safety": ["make me feel safe", "feelsafe", "guards"],
-        "registrar": ["registrar"],
-        "cashier": ["cashier"],
+        "registrar": ["registrar's office staff are patient", "registrar office staff", "registrar"],
+        "cashier": ["cashier or accounting window", "cashier"],
         "canteen": ["canteen"],
         "substitute": [
             "substitutes and temporary staff", "temporary staff", "substitute",
@@ -300,7 +300,7 @@ COMBINED_QUESTION_KEYWORDS_BY_CATEGORY: dict[str, dict[str, list[str]]] = {
         "processing": ["processed and posted"],
         "queues": ["payment queues", "queues"],
         "courteous": ["courteous"],
-        "accounting": ["accounting and registrar", "accounting"],
+        "accounting": ["accounting and registrar personnel", "accounting and registrar"],
         "security": ["information is secure"],
         "info_clarity": ["clear and accurate information"],
         "digital_trust": ["digital bank", "information is protected"],
@@ -345,6 +345,36 @@ def _resolve_combined_aspect(category: str, remainder: str) -> str | None:
         if any(keyword and keyword in compact for keyword in keywords):
             return aspect
     return None
+
+
+def _resolve_unprefixed_combined_aspect(question: str) -> tuple[str, str] | None:
+    """Resolve an unprefixed full question to its unique category/aspect.
+
+    Some combined exports prefix only the comment columns. When a question
+    matches broad keywords from multiple categories, prefer the most specific
+    phrase; unresolved ties are ignored rather than miscategorized.
+    """
+    compact = _compact(question)
+    candidates: list[tuple[int, str, str]] = []
+    for category, aspects in COMBINED_QUESTION_KEYWORDS_BY_CATEGORY.items():
+        for aspect, keywords in aspects.items():
+            matches = [
+                len(compact_keyword)
+                for keyword in keywords
+                if (compact_keyword := _compact(keyword)) and compact_keyword in compact
+            ]
+            if matches:
+                candidates.append((max(matches), category, aspect))
+
+    if not candidates:
+        return None
+    best_specificity = max(candidate[0] for candidate in candidates)
+    best_matches = {
+        (category, aspect)
+        for specificity, category, aspect in candidates
+        if specificity == best_specificity
+    }
+    return next(iter(best_matches)) if len(best_matches) == 1 else None
 
 
 # The professor-name column detection that used to live here
@@ -403,6 +433,18 @@ def _find_column(headers: list[str], keywords: list[str]) -> str | None:
     return None
 
 
+def _find_timestamp_column(headers: list[str]) -> str | None:
+    """Find date/time metadata without matching words like ``timely``."""
+    for keyword in TIMESTAMP_COL_KEYWORDS:
+        pattern = r"(?<![a-z0-9])" + r"\s+".join(
+            re.escape(part) for part in _normalise_header(keyword).split()
+        ) + r"(?![a-z0-9])"
+        for header in headers:
+            if re.search(pattern, _normalise_header(header)):
+                return header
+    return None
+
+
 def _find_rating_columns(headers: list[str], category: str) -> dict[str, str]:
     """Return {aspect_key: header_text} for every Likert aspect column
     detected for the given category."""
@@ -451,7 +493,7 @@ def resolve_column_map(headers: list[str], category: str) -> dict[str, Any]:
         "student_id": _find_column(headers, STUDENT_ID_COL_KEYWORDS),
         "course": course_col,
         "year_level": _find_column(headers, YEAR_LEVEL_COL_KEYWORDS),
-        "timestamp": _find_column(headers, TIMESTAMP_COL_KEYWORDS),
+        "timestamp": _find_timestamp_column(headers),
         "ratings": ratings,
     }
 
@@ -526,8 +568,16 @@ def _resolve_combined_columns(headers: list[str]) -> dict[str, Any]:
                 col_map["respondent_id"] = h
             elif _find_column([h], YEAR_LEVEL_COL_KEYWORDS) == h:
                 col_map["year_level"] = h
-            elif _find_column([h], TIMESTAMP_COL_KEYWORDS) == h:
+            elif _find_timestamp_column([h]) == h:
                 col_map["timestamp"] = h
+            else:
+                match = _resolve_unprefixed_combined_aspect(h)
+                if match:
+                    category, aspect = match
+                    cat_cols = col_map["categories"].setdefault(
+                        category, {"ratings": {}, "comment": None}
+                    )
+                    cat_cols["ratings"][aspect] = h
     return col_map
 
 

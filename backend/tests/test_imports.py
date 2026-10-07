@@ -323,16 +323,50 @@ def _capture_process(captured):
 
 
 def _post_google_form_csv(client, tmp_path, comment):
+    return _post_import_csv(
+        client, tmp_path, _google_form_combined_csv(comment), "google_form.csv"
+    )
+
+
+def _post_import_csv(client, tmp_path, csv_text, filename):
     token = _register_admin_and_login(client)
-    csv_path = tmp_path / "google_form.csv"
-    csv_path.write_text(_google_form_combined_csv(comment), encoding="utf-8")
+    csv_path = tmp_path / filename
+    csv_path.write_text(csv_text, encoding="utf-8")
 
     with open(csv_path, "rb") as f:
         return client.post(
             "/api/v1/imports/evaluations",
-            files={"file": ("google_form.csv", f, "text/csv")},
+            files={"file": (filename, f, "text/csv")},
             headers={"Authorization": f"Bearer {token}"},
         )
+
+
+def _google_form_mixed_prefix_csv():
+    """Questions are unprefixed; only the category comment columns are."""
+    headers = ["date", "Course\n"]
+    comments = {
+        "Professor_": "Professor_Comments",
+        "Staff_": "Staff_Comments",
+        "Facilities_": "Facilities_Comments",
+        "Payments_": "Payments_Comments",
+    }
+    for header in GOOGLE_FORM_HEADERS[2:]:
+        for prefix, comment_header in comments.items():
+            if header.startswith(prefix):
+                remainder = header[len(prefix):]
+                headers.append(comment_header if remainder == "Share your thoughts" else remainder)
+                break
+
+    values = ["8/25/2026 18:15:32", "BSCS"]
+    values.extend(
+        "A genuine open-ended comment." if header.endswith("_Comments") else "4"
+        for header in headers[2:]
+    )
+    buffer = _io.StringIO()
+    writer = _csv.writer(buffer)
+    writer.writerow(headers)
+    writer.writerow(values)
+    return buffer.getvalue()
 
 
 @patch("app.api.imports.process_imported_evaluations")
@@ -355,6 +389,29 @@ def test_import_google_forms_full_question_headers(mock_process, client, tmp_pat
         assert row["ratings"] == {aspect: 4 for aspect in aspects}, category
         assert row["share_your_thoughts"] == "A genuine open-ended comment."
         assert row["course"] == "BSCS"
+
+
+@patch("app.api.imports.process_imported_evaluations")
+def test_import_google_form_unprefixed_questions_with_prefixed_comments(
+    mock_process, client, tmp_path
+):
+    captured = {}
+    mock_process.side_effect = _capture_process(captured)
+
+    response = _post_import_csv(
+        client, tmp_path, _google_form_mixed_prefix_csv(), "mixed_prefix.csv"
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["failed"] == 0
+    assert data["imported"] == 4
+    rows = {row["category"]: row for row in captured["clean_rows"]}
+    assert set(rows) == set(EXPECTED_ASPECTS)
+    for category, aspects in EXPECTED_ASPECTS.items():
+        assert rows[category]["ratings"] == {aspect: 4 for aspect in aspects}, category
+        assert rows[category]["share_your_thoughts"] == "A genuine open-ended comment."
+        assert rows[category]["course"] == "BSCS"
 
 
 @patch("app.api.imports.process_imported_evaluations")
