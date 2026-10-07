@@ -111,6 +111,7 @@ const FACULTY = {
         // chart key -> the element that anchors its card.
         const HOSTS = {
             sentiment_split: 'faculty-chart-sentiment-split',
+            sentiment_terms: 'faculty-chart-terms',
             rating_distribution: 'faculty-chart-ratings',
             aspect_averages: 'faculty-chart-aspects',
             sentiment_courses: 'faculty-chart-courses',
@@ -151,7 +152,7 @@ const FACULTY = {
         const enabled = new Set((visibility.charts || []).filter(c => c.visible).map(c => c.key));
         const on = (key) => enabled.has(key);
 
-        // The markup below authors all five cards so the captions live in
+        // The markup below authors all six cards so the captions live in
         // exactly one place; cards for disabled charts are dropped right
         // after this template is assigned.
         container.innerHTML = `
@@ -167,8 +168,8 @@ const FACULTY = {
                      With NOTHING shared the button is omitted entirely —
                      the server answers 403 to the export when no chart is
                      enabled (and strips hidden charts' columns otherwise). -->
-                ${enabled.size ? `<button class="btn btn-success" onclick="FACULTY.exportCSV()">
-                    <i class="fas fa-download"></i> Download Report
+                ${enabled.size ? `<button class="btn btn-success" onclick="FACULTY.exportPDF()">
+                    <i class="fas fa-file-pdf"></i> Download PDF
                 </button>` : ''}
             </div>
             <!-- One grid for every panel below, not one per panel: separate
@@ -181,6 +182,11 @@ const FACULTY = {
                     <h3><i class="fas fa-chart-pie"></i> Sentiment Split</h3>
                     <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">How the Professors-category comments read, all-time: every submission that carries a sentiment, counted once.</p>
                     <div class="chart-container" id="faculty-chart-sentiment-split"></div>
+                </div>
+                <div class="chart-card">
+                    <h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term</h3>
+                    <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Submission volume and sentiment across the eight grading periods, based on Professors-category responses.</p>
+                    <div class="chart-container" id="faculty-chart-terms"></div>
                 </div>
                 <div class="chart-card">
                     <h3><i class="fas fa-chart-bar"></i> Rating Distribution</h3>
@@ -236,7 +242,7 @@ const FACULTY = {
             // all — a disabled chart's endpoint is never called here, and the
             // server would answer 403 anyway if it were called by hand.
             const scope = `category=${encodeURIComponent(this.SCOPED_CATEGORY)}`;
-            const [complaints, appreciations, courses, split, ratings, aspects] =
+            const [complaints, appreciations, courses, split, terms, ratings, aspects] =
                 await Promise.all([
                     on('top_comments') ? API.getTopComplaints(5, scope) : Promise.resolve(null),
                     on('top_comments') ? API.getTopAppreciations(5, scope) : Promise.resolve(null),
@@ -244,6 +250,7 @@ const FACULTY = {
                     // to that panel's own "no data" caption, not blank the tab.
                     on('sentiment_courses') ? API.getCourseAnalytics(scope).catch(() => null) : Promise.resolve(null),
                     on('sentiment_split') ? API.getOverallAnalytics(scope).catch(() => null) : Promise.resolve(null),
+                    on('sentiment_terms') ? API.getTermAnalytics(scope).catch(() => null) : Promise.resolve(null),
                     on('rating_distribution') ? API.getRatingDistribution(scope).catch(() => null) : Promise.resolve(null),
                     on('aspect_averages') ? API.getAspectAverages(scope).catch(() => null) : Promise.resolve(null)
                 ]);
@@ -257,6 +264,11 @@ const FACULTY = {
             CHARTS.sentimentSplit(
                 document.getElementById('faculty-chart-sentiment-split'),
                 split, this.charts, 'split'
+            );
+
+            CHARTS.sentimentByTerm(
+                document.getElementById('faculty-chart-terms'),
+                terms, this.charts, 'terms'
             );
 
             // ---- Rating distribution (stacked 1-5 histogram) ---------------
@@ -336,12 +348,46 @@ const FACULTY = {
         }
     },
 
-    async exportCSV() {
+    async exportPDF() {
         try {
-            await API.exportCsv();
-            showToast('Report downloaded successfully!', 'success');
+            const jsPDF = window.jspdf && window.jspdf.jsPDF;
+            if (!jsPDF) throw new Error('PDF export library is unavailable. Reload the page and try again.');
+
+            const cards = Array.from(document.querySelectorAll('#faculty-tab-content .chart-card'))
+                .filter(card => card.querySelector('.chart-container canvas'));
+            if (!cards.length) throw new Error('No charts are ready to include in the report.');
+
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const date = new Date().toISOString().slice(0, 10);
+            cards.forEach((card, index) => {
+                if (index) pdf.addPage();
+                const canvas = card.querySelector('.chart-container canvas');
+                const heading = card.querySelector('h3');
+                const title = heading ? heading.textContent.trim().replace(/\s+/g, ' ') : 'Analytics chart';
+                const scale = Math.min((pageWidth - 28) / canvas.width, (pageHeight - 52) / canvas.height);
+                const imageWidth = canvas.width * scale;
+                const imageHeight = canvas.height * scale;
+
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(17);
+                pdf.text('Faculty Analytics Report', 14, 14);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(9);
+                pdf.text('Professors-category responses · ' + date, 14, 21);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(13);
+                pdf.text(title, 14, 32);
+                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 14, 39, imageWidth, imageHeight);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                pdf.text('Page ' + (index + 1) + ' of ' + cards.length, pageWidth - 14, pageHeight - 8, { align: 'right' });
+            });
+            pdf.save('faculty-analytics-' + date + '.pdf');
+            showToast('PDF report downloaded successfully!', 'success');
         } catch (error) {
-            showToast('Export failed: ' + error.message, 'error');
+            showToast('PDF export failed: ' + error.message, 'error');
         }
     }
 };

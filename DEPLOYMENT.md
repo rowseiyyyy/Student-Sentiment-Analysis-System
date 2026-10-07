@@ -45,7 +45,16 @@ Recommended command:
 
 ```bash
 cd backend
-gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 300 --bind 0.0.0.0:8000
+```
+
+CSV imports score each submitted comment with the live model and can take
+longer than Gunicorn's 30-second default. Keep nginx's upstream timeout at
+least as long as the Gunicorn timeout in the API proxying location:
+
+```nginx
+proxy_read_timeout 300s;
+proxy_send_timeout 300s;
 ```
 
 > **Worker count vs. RAM.** The live sentiment model (mBERT Hybrid) loads a full

@@ -228,6 +228,41 @@ const CHARTS = {
         }, 100);
     },
 
+    // ---- Sentiment by Academic Term (stacked volume by grading period) --
+    // data: /analytics/terms payload. Break/enrollment months are omitted by
+    // the API; all eight configured grading periods keep a stable x-axis.
+    sentimentByTerm(host, data, store, key) {
+        if (!host) return;
+        const points = (data && data.points) || [];
+        if (!points.some(point => point.total > 0)) {
+            this.showEmpty(host, 'No academic term data available.');
+            return;
+        }
+        setTimeout(() => {
+            this._release(store, key);
+            store[key] = new Chart(this.mountCanvas(host), {
+                type: 'bar',
+                data: {
+                    labels: points.map(point => point.term),
+                    datasets: [
+                        { label: 'Positive', data: points.map(point => point.positive || 0), backgroundColor: '#2f6f4e' },
+                        { label: 'Neutral', data: points.map(point => point.neutral || 0), backgroundColor: '#b7791f' },
+                        { label: 'Negative', data: points.map(point => point.negative || 0), backgroundColor: '#b33a3a' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, ticks: { autoSkip: false, maxRotation: 35, minRotation: 0 } },
+                        y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+                    },
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }, 100);
+    },
+
 
     // ---- Sentiment by Courses (net sentiment, -100..+100) ---------------
     // data: /analytics/courses payload ({points: [...]} or null). One bar

@@ -30,7 +30,7 @@ router = APIRouter(prefix="/imports", tags=["Data Import"])
 
 
 @router.post("/evaluations", response_model=ImportResultResponse, status_code=status.HTTP_201_CREATED)
-async def import_evaluations(
+def import_evaluations(
     file: UploadFile = File(...),
     category: EvaluationCategory | None = Form(
         default=None,
@@ -80,7 +80,7 @@ async def import_evaluations(
 
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            content = await file.read()
+            content = file.file.read()
             tmp.write(content)
             tmp_path = Path(tmp.name)
     except OSError as exc:

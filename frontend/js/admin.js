@@ -1540,7 +1540,9 @@ var ADMIN = {
             var item = await API.getEvaluation(id);
             hideLoading();
 
-                        var studentInfo = this.getStudentInfo(item);
+            var studentInfo = this.getStudentInfo(item);
+            var course = item.course || studentInfo.course;
+            var yearLevel = item.year_level || studentInfo.year_level;
             var ratings = item.ratings || {};
             var thoughts = item.share_your_thoughts || '';
             var categoryDisplay = this.getCategoryDisplayName(item.category);
@@ -1574,52 +1576,30 @@ var ADMIN = {
 
             var predictionHtml = '';
             var pred = item.prediction || null;
-            var missingModelCount = pred ? [pred.official_prediction].filter(function(p) { return !p; }).length : 1;
+            var missingModelCount = pred && pred.official_prediction ? 0 : 1;
             if (pred) {
-                // Multilingual MiniLM is the ONLY live model, so the official
-                // result IS its result. The classical TF-IDF research models
-                // (SVM / Naive Bayes / Logistic Regression) never run in the
-                // request path, so their columns stay empty for live rows.
-                var modelRows = [
-                    { label: 'Multilingual MiniLM', pred: pred.official_prediction, conf: pred.confidence_score, isOfficial: true },
-                    { label: 'SVM', pred: pred.svm_prediction, conf: pred.svm_confidence },
-                    { label: 'Naive Bayes', pred: pred.naive_bayes_prediction, conf: pred.naive_bayes_confidence },
-                    { label: 'Logistic Regression', pred: pred.logistic_regression_prediction, conf: pred.logistic_regression_confidence }
-                ];
-                modelRows = modelRows.map(function(m) {
-                    var isOfficial = m.isOfficial || pred.algorithm_used === m.label;
-                    var predCell = m.pred
-                        ? sentimentBadge(m.pred)
-                        : '<span class="text-muted" title="No stored prediction - the classical research models never run in the live request path">Not run</span>';
-                    var confCell = m.conf != null
-                        ? (m.conf * 100).toFixed(1) + '%'
-                        : '<span class="text-muted" title="No stored confidence - the classical research models never run in the live request path">Not run</span>';
-                    return '<tr>' +
-                        '<td><strong>' + m.label + '</strong> ' + (isOfficial ? '<span class="badge badge-positive" title="Used for the official sentiment"><i class="fas fa-crown"></i> Official</span>' : '') + '</td>' +
-                        '<td>' + predCell + '</td>' +
-                        '<td style="white-space:nowrap;">' + sentimentBadge(item.sentiment) + 
-                        (item.is_mismatch ? ' <span class="badge badge-warning" title="Likert/Text sentiment disagree: ' + escapeHtml(item.mismatch_type || '') + '"><i class="fas fa-triangle-exclamation"></i></span>' : '') +
-'</td>' +
-                        '<td>' + confCell + '</td>' +
-                    '</tr>';
-                }).join('');
-
+                var predCell = pred.official_prediction
+                    ? sentimentBadge(pred.official_prediction)
+                    : '<span class="text-muted">Not available</span>';
+                var confCell = pred.confidence_score != null
+                    ? (pred.confidence_score * 100).toFixed(1) + '%'
+                    : '<span class="text-muted">Not available</span>';
                 predictionHtml = '<div class="form-section" style="margin-top:1rem;">' +
                     '<h4 style="margin-bottom:0.5rem;">Text Sentiment — Model Breakdown</h4>' +
-                    '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody>' + modelRows + '</tbody></table></div>' +
+                    '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody><tr>' +
+                        '<td><strong>Multilingual MiniLM</strong> <span class="badge badge-positive" title="Used for the official sentiment"><i class="fas fa-crown"></i> Official</span></td>' +
+                        '<td>' + predCell + '</td><td style="white-space:nowrap;">' + confCell + '</td>' +
+                    '</tr></tbody></table></div>' +
                     (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> The live model (Multilingual MiniLM) has not produced a result for this submission. Its weights are fetched from the private Hugging Face repo at startup.</p>' : '') +
-                    '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> The official result comes from the live production model, Multilingual MiniLM. The SVM, Naive Bayes and Logistic Regression research models are trained and evaluated offline for the model comparison and never run during live inference.</p>' +
+                    '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> The official result comes from the live production model, Multilingual MiniLM.</p>' +
                 '</div>';
             }
 
             var html = '' +
+                '<div class="modal-field" style="margin-bottom:0.75rem;"><label>Date Submitted</label><p>' + formatDate(item.created_at) + '</p></div>' +
                 '<div class="modal-row">' +
-                    '<div class="modal-field"><label>Student ID</label><p>' + escapeHtml(studentInfo.student_id || 'N/A') + '</p></div>' +
-                    '<div class="modal-field"><label>Date Submitted</label><p>' + formatDate(item.created_at) + '</p></div>' +
-                '</div>' +
-                '<div class="modal-row">' +
-                    '<div class="modal-field"><label>Course</label><p>' + escapeHtml(studentInfo.course || 'N/A') + '</p></div>' +
-                    '<div class="modal-field"><label>Year Level</label><p>' + escapeHtml(studentInfo.year_level || 'N/A') + '</p></div>' +
+                    '<div class="modal-field"><label>Course</label><p>' + escapeHtml(course || 'N/A') + '</p></div>' +
+                    '<div class="modal-field"><label>Year Level</label><p>' + escapeHtml(yearLevel || 'N/A') + '</p></div>' +
                 '</div>' +
                 '<div class="modal-field" style="margin-bottom:0.75rem;"><label>Category</label><p><span class="badge badge-' + badgeClass + '">' + escapeHtml(categoryDisplay) + '</span></p></div>' +
 mismatchHtml +
@@ -1852,7 +1832,7 @@ predictionHtml +
             '</div>' +
             '<div class="chart-grid">' +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Sentiment by Category</h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Evaluation-form submissions grouped by department category. This panel always compares all four departments, so the department filter does not apply to it.</p><div class="chart-container"><canvas id="chart-category-sentiment"></canvas></div></div>' +
-                '<div class="chart-card"><h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term</h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Volume and sentiment for each of the eight grading periods (Term 1 Prelim to Finals, then Term 2 Prelim to Finals), from each submission\'s month. Break / enrollment months (Nov, Dec, Jan, Jun) belong to no grading period and are intentionally not plotted.</p><div class="chart-container" id="chart-host-term-sentiment"></div></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-graduation-cap"></i> Sentiment by Academic Term <span class="badge" data-fac-chart="sentiment_terms" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Volume and sentiment for each of the eight grading periods (Term 1 Prelim to Finals, then Term 2 Prelim to Finals), from each submission\'s month. Break / enrollment months (Nov, Dec, Jan, Jun) belong to no grading period and are intentionally not plotted.</p><div class="chart-container" id="chart-host-term-sentiment"></div></div>' +
                 // ---- Faculty-facing charts (shared with the faculty view) ----
                 // Drawn by the SAME CHARTS renderers the faculty dashboard uses
                 // (frontend/js/charts.js) — one implementation, two views — and

@@ -22,6 +22,7 @@ from datetime import datetime
 VISIBILITY_URL = "/api/v1/analytics/faculty-charts"
 ALL_CHART_KEYS = [
     "sentiment_split",
+    "sentiment_terms",
     "rating_distribution",
     "aspect_averages",
     "sentiment_courses",
@@ -100,7 +101,8 @@ def test_defaults_are_all_visible_before_anything_is_saved(client):
     faculty_view = _visible_map(client, faculty)
 
     assert set(admin_view) == set(ALL_CHART_KEYS)
-    assert all(admin_view.values())
+    assert all(value for key, value in admin_view.items() if key != "sentiment_terms")
+    assert admin_view["sentiment_terms"] is False
     assert faculty_view == admin_view
 
 
@@ -176,6 +178,7 @@ def test_save_persists_across_sessions(client):
 # chart key -> (path, params) for every endpoint that feeds a faculty chart.
 GATED_ROUTES = [
     ("sentiment_split", "/api/v1/analytics/overall", {}),
+    ("sentiment_terms", "/api/v1/analytics/terms", {}),
     ("rating_distribution", "/api/v1/analytics/ratings/distribution", {}),
     ("aspect_averages", "/api/v1/analytics/ratings/aspects", {}),
     ("sentiment_courses", "/api/v1/analytics/courses", {}),

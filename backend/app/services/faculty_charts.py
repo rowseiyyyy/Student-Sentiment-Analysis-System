@@ -33,6 +33,7 @@ from app.utils.logger import logger
 # key -> (label shown in the admin panel, default visibility)
 FACULTY_CHARTS: dict[str, tuple[str, bool]] = {
     "sentiment_split": ("Sentiment Split", True),
+    "sentiment_terms": ("Sentiment by Academic Term", False),
     "rating_distribution": ("Rating Distribution", True),
     "aspect_averages": ("Average by Aspect", True),
     "sentiment_courses": ("Sentiment by Courses", True),

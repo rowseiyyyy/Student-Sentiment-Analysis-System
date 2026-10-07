@@ -1,6 +1,5 @@
 /*
  * Regression tests for the faculty Analytics visibility gate.
- *
  * The admin's "Manage faculty access" panel decides which charts a faculty
  * account may see. FACULTY.renderAnalytics must honour the map client-side:
  * disabled charts are never fetched, and when NOTHING is shared the
@@ -26,7 +25,7 @@ function loadFaculty({ visibleKeys }) {
     const calls = [];
     const API = {
         getFacultyCharts: () => Promise.resolve({
-            charts: ['sentiment_split', 'rating_distribution', 'aspect_averages',
+            charts: ['sentiment_split', 'sentiment_terms', 'rating_distribution', 'aspect_averages',
                 'sentiment_courses', 'top_comments'].map((key) => ({
                 key, visible: visibleKeys.includes(key),
             })),
@@ -35,6 +34,7 @@ function loadFaculty({ visibleKeys }) {
         getTopAppreciations: () => { calls.push('appreciations'); return Promise.resolve({ items: [] }); },
         getCourseAnalytics: () => { calls.push('courses'); return Promise.resolve(null); },
         getOverallAnalytics: () => { calls.push('overall'); return Promise.resolve(null); },
+        getTermAnalytics: () => { calls.push('terms'); return Promise.resolve(null); },
         getRatingDistribution: () => { calls.push('ratings'); return Promise.resolve(null); },
         getAspectAverages: () => { calls.push('aspects'); return Promise.resolve(null); },
     };
@@ -52,6 +52,7 @@ function loadFaculty({ visibleKeys }) {
     }
     const byId = {
         'faculty-chart-sentiment-split': element('faculty-chart-sentiment-split'),
+        'faculty-chart-terms': element('faculty-chart-terms'),
         'faculty-chart-ratings': element('faculty-chart-ratings'),
         'faculty-chart-aspects': element('faculty-chart-aspects'),
         'faculty-chart-courses': element('faculty-chart-courses'),
@@ -63,6 +64,7 @@ function loadFaculty({ visibleKeys }) {
     };
     const CHARTS = {
         sentimentSplit: () => { }, ratingDistribution: () => { },
+        sentimentByTerm: () => { },
         aspectAverages: () => { }, sentimentCourses: () => { },
         commentRowHtml: () => '',
     };
@@ -98,8 +100,8 @@ await test('all-disabled hides Download Report and shows the empty state', async
 await test('one enabled chart shows Download Report and fetches only that chart', async () => {
     const { FACULTY, container, calls } = loadFaculty({ visibleKeys: ['sentiment_split'] });
     await FACULTY.renderAnalytics(container);
-    assert.ok(container.innerHTML.includes('Download Report'),
-        'Download Report must be present while anything is shared');
+    assert.ok(container.innerHTML.includes('Download PDF'),
+        'Download PDF must be present while anything is shared');
     assert.deepEqual(calls, ['overall']);
 });
 
@@ -109,11 +111,18 @@ await test('top_comments alone fetches exactly its two comment endpoints', async
     assert.deepEqual(calls, ['complaints', 'appreciations']);
 });
 
+await test('sentiment_terms alone fetches only the term endpoint', async () => {
+    const { FACULTY, container, calls } = loadFaculty({ visibleKeys: ['sentiment_terms'] });
+    await FACULTY.renderAnalytics(container);
+    assert.deepEqual(calls, ['terms']);
+});
+
 await test('_applyChartVisibility removes only the disabled cards', async () => {
     const { FACULTY, removed } = loadFaculty({ visibleKeys: ['sentiment_split', 'top_comments'] });
     FACULTY._applyChartVisibility(new Set(['sentiment_split', 'top_comments']));
     assert.deepEqual(removed.sort(), [
         'faculty-chart-aspects', 'faculty-chart-courses', 'faculty-chart-ratings',
+        'faculty-chart-terms',
     ]);
 });
 

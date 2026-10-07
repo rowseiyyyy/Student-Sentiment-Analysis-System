@@ -74,6 +74,7 @@ def _scoped_category(
 #
 # Chart key -> endpoint mapping (one gate per faculty chart):
 #   sentiment_split    -> GET /analytics/overall
+#   sentiment_terms    -> GET /analytics/terms
 #   rating_distribution-> GET /analytics/ratings/distribution
 #   aspect_averages    -> GET /analytics/ratings/aspects
 #   sentiment_courses  -> GET /analytics/courses
@@ -166,6 +167,7 @@ def get_term_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
+    _require_faculty_chart(db, current_user, "sentiment_terms")
     return analytics_service.term_analytics(
         db, days=_days_param(days), category=_scoped_category(category, current_user)
     )
