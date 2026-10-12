@@ -109,12 +109,43 @@ class BulkDeleteRequest(BaseModel):
 class BulkDeleteResponse(BaseModel):
     deleted_count: int
     not_found: list[str]
+    deletion_batch_id: str | None = None
+    restore_expires_at: datetime | None = None
+
+
+class DeletedEvaluationBatchOut(BaseModel):
+    id: str
+    deleted_count: int
+    created_at: datetime
+    expires_at: datetime
+
+
+class EvaluationRestoreResponse(BaseModel):
+    restored_count: int
 
 
 class ImportRowError(BaseModel):
     row: int
     comment: str
     errors: list[str]
+
+
+class ImportCategoryColumns(BaseModel):
+    comment: str | None = None
+    ratings: dict[str, str]
+
+
+class ImportPreviewResponse(BaseModel):
+    mode: str
+    total_rows: int
+    valid_evaluations: int
+    detected_categories: list[str]
+    counts_by_category: dict[str, int]
+    common_columns: dict[str, str | None]
+    mapped_columns: dict[str, ImportCategoryColumns]
+    error_count: int
+    errors_truncated: bool
+    errors: list[ImportRowError]
 
 
 class ImportResultResponse(BaseModel):

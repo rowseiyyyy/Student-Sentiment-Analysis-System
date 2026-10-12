@@ -191,6 +191,14 @@ async getEvaluations(params = {}) {
         return this.post('/evaluation/bulk-delete', { ids });
     },
 
+    async getRecentEvaluationDeletion() {
+        return this.get('/evaluation/bulk-delete/recent/current');
+    },
+
+    async restoreEvaluationDeletion(batchId) {
+        return this.post(`/evaluation/bulk-delete/${encodeURIComponent(batchId)}/restore`, {});
+    },
+
     // ============================================================
     // PREDICTION ENDPOINTS
     // ============================================================
@@ -433,6 +441,13 @@ async getEvaluations(params = {}) {
             formData.append('category', category);
         }
         return this.request('POST', '/imports/evaluations', formData, true);
+    },
+
+    async previewEvaluationsImport(file, category) {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (category) formData.append('category', category);
+        return this.request('POST', '/imports/evaluations/preview', formData, true);
     },
 
     // Public config — no auth required. Exposes only the config

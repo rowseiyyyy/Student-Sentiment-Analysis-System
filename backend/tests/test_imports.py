@@ -415,6 +415,38 @@ def test_import_google_form_unprefixed_questions_with_prefixed_comments(
 
 
 @patch("app.api.imports.process_imported_evaluations")
+def test_preview_mixed_prefix_import_reports_mappings_without_scoring(
+    mock_process, client, tmp_path
+):
+    token = _register_admin_and_login(client, email="previewadmin@asiatech.edu.ph")
+    csv_path = tmp_path / "preview.csv"
+    csv_path.write_text(_google_form_mixed_prefix_csv(), encoding="utf-8")
+
+    with open(csv_path, "rb") as uploaded:
+        response = client.post(
+            "/api/v1/imports/evaluations/preview",
+            files={"file": ("preview.csv", uploaded, "text/csv")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    preview = response.json()
+    assert preview["mode"] == "combined"
+    assert preview["valid_evaluations"] == 4
+    assert preview["counts_by_category"] == {
+        "Faculty": 1, "Staff": 1, "Facilities": 1, "Payment": 1,
+    }
+    assert preview["common_columns"]["course"] == "Course"
+    assert preview["mapped_columns"]["Faculty"]["comment"] == "Professor_Comments"
+    assert preview["mapped_columns"]["Payment"]["comment"] == "Payments_Comments"
+    assert preview["mapped_columns"]["Payment"]["ratings"]["digital_trust"].startswith(
+        "I trust that my personal and financial information"
+    )
+    assert preview["error_count"] == 0
+    mock_process.assert_not_called()
+
+
+@patch("app.api.imports.process_imported_evaluations")
 def test_import_google_forms_placeholder_comment_kept_as_ratings(
     mock_process, client, tmp_path
 ):

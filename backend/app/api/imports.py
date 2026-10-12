@@ -16,17 +16,53 @@ from app.api.deps import require_admin
 from app.core.database import get_db
 from app.models.evaluation import EvaluationCategory
 from app.models.user import User
-from app.schemas.evaluation import ImportResultResponse, ImportRowError
+from app.schemas.evaluation import ImportPreviewResponse, ImportResultResponse, ImportRowError
 from app.services.import_service import (
     ImportValidationError,
     get_extension,
     parse_uploaded_file,
+    preview_imported_data,
     process_imported_evaluations,
     validate_imported_data,
 )
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/imports", tags=["Data Import"])
+
+
+@router.post("/evaluations/preview", response_model=ImportPreviewResponse)
+def preview_evaluations_import(
+    file: UploadFile = File(...),
+    category: EvaluationCategory | None = Form(default=None),
+    current_user: User = Depends(require_admin),
+):
+    if not file.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file was uploaded.")
+    try:
+        ext = get_extension(file.filename)
+    except ImportValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(file.file.read())
+            tmp_path = Path(tmp.name)
+    except OSError as exc:
+        logger.error("Failed to save preview upload: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save uploaded file. Please try again.",
+        )
+
+    try:
+        try:
+            rows = parse_uploaded_file(tmp_path)
+            preview = preview_imported_data(rows, category=category.value if category else None)
+        except ImportValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return ImportPreviewResponse(**preview)
 
 
 @router.post("/evaluations", response_model=ImportResultResponse, status_code=status.HTTP_201_CREATED)

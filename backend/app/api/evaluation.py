@@ -1,5 +1,7 @@
 import secrets
 import httpx
+from datetime import datetime, timedelta
+from enum import Enum as PythonEnum
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -11,11 +13,14 @@ from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.security import hash_password
 from app.models.evaluation import Evaluation, EvaluationCategory
-from app.models.prediction import Prediction
+from app.models.evaluation_deletion import EvaluationDeletionBatch
+from app.models.prediction import AlgorithmName, Prediction, SentimentLabel
 from app.models.user import User, UserRole
 from app.schemas.evaluation import (
     BulkDeleteRequest,
     BulkDeleteResponse,
+    DeletedEvaluationBatchOut,
+    EvaluationRestoreResponse,
     EvaluationCreate,
     EvaluationListResponse,
     EvaluationOut,
@@ -25,6 +30,7 @@ from app.services.likert import classify_likert
 from app.services.mismatch import MismatchType, detect_mismatch
 from app.services.preprocessing import clean_for_classical
 from app.services.prediction import run_prediction_pipeline
+from app.core.time import utcnow_naive
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/evaluation", tags=["Evaluations"])
@@ -427,6 +433,18 @@ def delete_evaluation(
     return None
 
 
+def _snapshot_model(record) -> dict:
+    snapshot = {}
+    for column in record.__table__.columns:
+        value = getattr(record, column.name)
+        if isinstance(value, datetime):
+            value = value.isoformat()
+        elif isinstance(value, PythonEnum):
+            value = value.value
+        snapshot[column.name] = value
+    return snapshot
+
+
 @router.post("/bulk-delete", response_model=BulkDeleteResponse)
 def bulk_delete_evaluations(
     payload: BulkDeleteRequest,
@@ -448,17 +466,141 @@ def bulk_delete_evaluations(
     requested_ids = list(dict.fromkeys(payload.ids))
 
     existing = (
-        db.query(Evaluation.id)
+        db.query(Evaluation)
+        .options(joinedload(Evaluation.prediction))
         .filter(Evaluation.id.in_(requested_ids))
         .all()
     )
-    existing_ids = {row.id for row in existing}
+    existing_ids = {item.id for item in existing}
     not_found = [eid for eid in requested_ids if eid not in existing_ids]
+    batch = None
 
     if existing_ids:
+        now = utcnow_naive()
+        batch = EvaluationDeletionBatch(
+            created_by=current_user.id,
+            created_at=now,
+            expires_at=now + timedelta(hours=24),
+            snapshots=[
+                {
+                    "evaluation": _snapshot_model(item),
+                    "prediction": _snapshot_model(item.prediction) if item.prediction else None,
+                }
+                for item in existing
+            ],
+        )
+        db.add(batch)
+        db.flush()
+        db.query(Prediction).filter(Prediction.evaluation_id.in_(existing_ids)).delete(
+            synchronize_session=False
+        )
         db.query(Evaluation).filter(Evaluation.id.in_(existing_ids)).delete(
             synchronize_session=False
         )
         db.commit()
 
-    return BulkDeleteResponse(deleted_count=len(existing_ids), not_found=list(not_found))
+    return BulkDeleteResponse(
+        deleted_count=len(existing_ids),
+        not_found=list(not_found),
+        deletion_batch_id=batch.id if batch else None,
+        restore_expires_at=batch.expires_at if batch else None,
+    )
+
+
+@router.get("/bulk-delete/recent/current", response_model=list[DeletedEvaluationBatchOut])
+def get_recent_deletion_batch(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    now = utcnow_naive()
+    db.query(EvaluationDeletionBatch).filter(
+        EvaluationDeletionBatch.expires_at <= now
+    ).delete(synchronize_session=False)
+    db.commit()
+    batches = (
+        db.query(EvaluationDeletionBatch)
+        .filter(
+            EvaluationDeletionBatch.created_by == current_user.id,
+            EvaluationDeletionBatch.restored_at.is_(None),
+            EvaluationDeletionBatch.expires_at > now,
+        )
+        .order_by(EvaluationDeletionBatch.created_at.desc())
+        .all()
+    )
+    return [
+        DeletedEvaluationBatchOut(
+            id=batch.id,
+            deleted_count=len(batch.snapshots),
+            created_at=batch.created_at,
+            expires_at=batch.expires_at,
+        )
+        for batch in batches
+    ]
+
+
+@router.post(
+    "/bulk-delete/{batch_id}/restore",
+    response_model=EvaluationRestoreResponse,
+)
+def restore_deleted_evaluations(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    batch = (
+        db.query(EvaluationDeletionBatch)
+        .filter(
+            EvaluationDeletionBatch.id == batch_id,
+            EvaluationDeletionBatch.created_by == current_user.id,
+        )
+        .first()
+    )
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Deletion batch not found.")
+    if batch.restored_at is not None or batch.expires_at <= utcnow_naive():
+        raise HTTPException(status_code=410, detail="This deletion can no longer be restored.")
+
+    snapshots = batch.snapshots
+    evaluation_ids = [item["evaluation"]["id"] for item in snapshots]
+    conflicts = db.query(Evaluation.id).filter(Evaluation.id.in_(evaluation_ids)).all()
+    if conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail="Some deleted responses have since been recreated; restore was cancelled.",
+        )
+
+    existing_user_ids = {
+        row.id
+        for row in db.query(User.id).filter(
+            User.id.in_(
+                [item["evaluation"].get("user_id") for item in snapshots
+                 if item["evaluation"].get("user_id")]
+            )
+        ).all()
+    }
+
+    for item in snapshots:
+        evaluation_data = dict(item["evaluation"])
+        evaluation_data["category"] = EvaluationCategory(evaluation_data["category"])
+        if evaluation_data.get("user_id") not in existing_user_ids:
+            evaluation_data["user_id"] = None
+        if evaluation_data.get("created_at"):
+            evaluation_data["created_at"] = datetime.fromisoformat(evaluation_data["created_at"])
+        db.add(Evaluation(**evaluation_data))
+
+        prediction_data = item.get("prediction")
+        if prediction_data:
+            prediction_data = dict(prediction_data)
+            prediction_data["official_prediction"] = SentimentLabel(prediction_data["official_prediction"])
+            prediction_data["algorithm_used"] = AlgorithmName(prediction_data["algorithm_used"])
+            for field in ("svm_prediction", "naive_bayes_prediction", "logistic_regression_prediction"):
+                if prediction_data[field] is not None:
+                    prediction_data[field] = SentimentLabel(prediction_data[field])
+            if prediction_data.get("created_at"):
+                prediction_data["created_at"] = datetime.fromisoformat(prediction_data["created_at"])
+            db.add(Prediction(**prediction_data))
+
+    batch.restored_at = utcnow_naive()
+    batch.snapshots = []
+    db.commit()
+    return EvaluationRestoreResponse(restored_count=len(snapshots))

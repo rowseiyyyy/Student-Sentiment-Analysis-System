@@ -1,6 +1,69 @@
 from unittest.mock import patch
 
 
+def test_bulk_delete_can_restore_evaluation_and_prediction(client, db_session):
+    from app.models.evaluation import Evaluation, EvaluationCategory
+    from app.models.prediction import AlgorithmName, Prediction, SentimentLabel
+
+    token = _register_and_login(
+        client, email="deleteadmin@asiatech.edu.ph", role="administrator"
+    )
+    evaluation_id = "restore-test-evaluation"
+    evaluation = Evaluation(
+        id=evaluation_id,
+        category=EvaluationCategory.PROFESSOR,
+        comment="A stored comment",
+        share_your_thoughts="A stored response",
+        course="BSCS",
+        year_level="2nd Year",
+        sentiment="Positive",
+    )
+    prediction = Prediction(
+        evaluation_id=evaluation.id,
+        official_prediction=SentimentLabel.POSITIVE,
+        algorithm_used=AlgorithmName.MBERT_HYBRID,
+        confidence_score=0.94,
+        processing_time_ms=15.0,
+    )
+    db_session.add_all([evaluation, prediction])
+    db_session.commit()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    deleted = client.post(
+        "/api/v1/evaluation/bulk-delete",
+        json={"ids": [evaluation_id]},
+        headers=headers,
+    )
+    assert deleted.status_code == 200
+    deleted_data = deleted.json()
+    assert deleted_data["deleted_count"] == 1
+    assert deleted_data["deletion_batch_id"]
+
+    recent = client.get(
+        "/api/v1/evaluation/bulk-delete/recent/current", headers=headers
+    )
+    assert recent.status_code == 200
+    assert recent.json()[0]["id"] == deleted_data["deletion_batch_id"]
+
+    restored = client.post(
+        f"/api/v1/evaluation/bulk-delete/{deleted_data['deletion_batch_id']}/restore",
+        headers=headers,
+    )
+    assert restored.status_code == 200
+    assert restored.json()["restored_count"] == 1
+
+    detail = client.get(f"/api/v1/evaluation/{evaluation_id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["course"] == "BSCS"
+    assert detail.json()["prediction"]["confidence_score"] == 0.94
+
+    repeated_restore = client.post(
+        f"/api/v1/evaluation/bulk-delete/{deleted_data['deletion_batch_id']}/restore",
+        headers=headers,
+    )
+    assert repeated_restore.status_code == 410
+
+
 def _register_and_login(client, email="student@asiatech.edu.ph", role="student"):
     # Public registration was removed; users are created directly in the DB.
     client.make_user(email, role=role, full_name="Test User")

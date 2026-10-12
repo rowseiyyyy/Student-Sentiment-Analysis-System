@@ -910,6 +910,72 @@ def validate_imported_data(
     return clean, errors
 
 
+def preview_imported_data(
+    rows: list[dict[str, Any]], category: str | None = None, error_limit: int = 100
+) -> dict[str, Any]:
+    """Validate an upload and describe its mappings without scoring or saving it."""
+    if not rows:
+        raise ImportValidationError("The uploaded file contains no response rows.")
+
+    headers = list(rows[0].keys())
+    mode = detect_import_mode(headers)
+    clean_rows, error_rows = validate_imported_data(rows, category=category)
+    common_columns: dict[str, str | None] = {}
+    mapped_columns: dict[str, dict[str, Any]] = {}
+
+    if mode == "combined":
+        column_map = _resolve_combined_columns(headers)
+        common_columns = {
+            key: column_map[key]
+            for key in ("respondent_id", "course", "year_level", "timestamp")
+        }
+        for name, values in column_map["categories"].items():
+            mapped_columns[name] = {
+                "comment": values["comment"],
+                "ratings": values["ratings"],
+            }
+    else:
+        canonical_category = normalise_category(category)
+        if canonical_category is None:
+            raise ImportValidationError("Choose a category for this single-category file.")
+        column_map = resolve_column_map(headers, canonical_category)
+        common_columns = {
+            "student_id": column_map["student_id"],
+            "course": column_map["course"],
+            "year_level": column_map["year_level"],
+            "timestamp": column_map["timestamp"],
+        }
+        mapped_columns[canonical_category] = {
+            "comment": column_map["comment"],
+            "ratings": column_map["ratings"],
+        }
+
+    counts_by_category = {name: 0 for name in mapped_columns}
+    for row in clean_rows:
+        counts_by_category[row["category"]] = counts_by_category.get(row["category"], 0) + 1
+
+    normalized_errors = []
+    for error in error_rows:
+        normalized_errors.append({
+            "row": error.get("_row", error.get("row", 0)),
+            "comment": error.get("_preview", error.get("comment", "")),
+            "errors": error.get("_errors", [error.get("error", "Invalid row.")]),
+        })
+
+    return {
+        "mode": mode,
+        "total_rows": len(rows),
+        "valid_evaluations": len(clean_rows),
+        "detected_categories": list(mapped_columns),
+        "counts_by_category": counts_by_category,
+        "common_columns": common_columns,
+        "mapped_columns": mapped_columns,
+        "error_count": len(normalized_errors),
+        "errors_truncated": len(normalized_errors) > error_limit,
+        "errors": normalized_errors[:error_limit],
+    }
+
+
 # ---------------------------------------------------------------------------
 # DB processing — mirrors app.api.evaluation.submit_evaluation
 # ---------------------------------------------------------------------------

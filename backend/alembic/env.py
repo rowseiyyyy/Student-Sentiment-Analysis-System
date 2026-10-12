@@ -9,7 +9,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import settings  # noqa: E402
 from app.core.database import Base  # noqa: E402
-from app.models import evaluation, prediction, training_history, user  # noqa: E402,F401
+from app.models import evaluation, evaluation_deletion, prediction, training_history, user  # noqa: E402,F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

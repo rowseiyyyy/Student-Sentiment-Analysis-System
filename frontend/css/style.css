@@ -1494,6 +1494,34 @@ tbody tr:last-child td {
   border-color: var(--brand-deep);
 }
 
+.pagination-ellipsis,
+.pagination-status {
+  align-self: center;
+  padding: 0 0.25rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.bulk-delete-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--paper-line);
+  background: var(--paper-alt, #f1f1ec);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 600px) {
+  .bulk-delete-recovery {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 /* ============================================================
    TABS
    ============================================================ */

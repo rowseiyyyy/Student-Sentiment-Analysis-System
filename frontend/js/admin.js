@@ -949,6 +949,7 @@ var ADMIN = {
                     '<button class="btn btn-primary" onclick="ADMIN.exportXLSX()"><i class="fas fa-file-excel"></i> XLSX</button>' +
                 '</div>' +
             '</div>' +
+            '<div id="bulk-delete-recovery"></div>' +
             '<div id="responses-summary"></div>' +
             '<div class="filter-bar">' +
                 '<select class="form-control" id="filter-category">' +
@@ -1259,8 +1260,8 @@ var ADMIN = {
         var ids = Array.from(this.selectedIds);
         if (ids.length === 0) return;
         var confirmMsg = ids.length === 1
-            ? 'Are you sure you want to permanently delete this evaluation? This action cannot be undone.'
-            : 'Are you sure you want to permanently delete these ' + ids.length + ' evaluations? This action cannot be undone.';
+            ? 'Delete this response? You can restore it for 24 hours after deletion.'
+            : 'Delete these ' + ids.length + ' responses? You can restore them for 24 hours after deletion.';
         if (!confirm(confirmMsg)) return;
 
         showLoading('Deleting ' + ids.length + ' evaluation(s)...');
@@ -1275,6 +1276,47 @@ var ADMIN = {
             this.loadResponses();
         } catch (error) {
             showToast('Bulk delete failed: ' + error.message, 'error');
+        } finally {
+            hideLoading();
+        }
+    },
+
+    renderDeletedResponseRecovery: function(batch) {
+        var container = document.getElementById('bulk-delete-recovery');
+        if (!container) return;
+        if (!Array.isArray(batch) || !batch.length) {
+            container.innerHTML = '';
+            return;
+        }
+        container.innerHTML = batch.map(function(item) {
+            return '<div class="bulk-delete-recovery" role="status">' +
+                '<span><strong>' + item.deleted_count + ' response(s) deleted.</strong> Restore until ' +
+                    escapeHtml(formatDate(item.expires_at)) + '.</span>' +
+                '<button type="button" class="btn btn-sm btn-secondary" data-restore-batch="' +
+                    escapeHtml(item.id) + '" data-restore-count="' + item.deleted_count + '">' +
+                    '<i class="fas fa-rotate-left"></i> Undo deletion</button>' +
+                '</div>';
+        }).join('');
+        container.querySelectorAll('[data-restore-batch]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                ADMIN.restoreDeletedResponses(
+                    button.getAttribute('data-restore-batch'),
+                    Number(button.getAttribute('data-restore-count'))
+                );
+            });
+        });
+    },
+
+    restoreDeletedResponses: async function(batchId, count) {
+        if (!confirm('Restore ' + count + ' deleted response(s)?')) return;
+        showLoading('Restoring deleted responses...');
+        try {
+            var result = await API.restoreEvaluationDeletion(batchId);
+            this.currentPage = 1;
+            await this.loadResponses();
+            showToast(result.restored_count + ' response(s) restored.', 'success');
+        } catch (error) {
+            showToast('Could not restore responses: ' + error.message, 'error');
         } finally {
             hideLoading();
         }
@@ -1306,6 +1348,69 @@ var ADMIN = {
         '</div>';
     },
 
+    renderResponsePagination: function(container, totalPages, totalEntries) {
+        if (!container) return;
+        container.innerHTML = '';
+        if (totalPages <= 1) return;
+
+        var self = this;
+        var addButton = function(label, page, title, icon, active) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.title = title;
+            button.setAttribute('aria-label', title);
+            if (active) {
+                button.className = 'active';
+                button.setAttribute('aria-current', 'page');
+            }
+            if (icon) {
+                button.innerHTML = '<i class="fas ' + icon + '" aria-hidden="true"></i>';
+            } else {
+                button.textContent = label;
+            }
+            button.disabled = page === self.currentPage;
+            button.addEventListener('click', function() {
+                if (page === self.currentPage) return;
+                self.currentPage = page;
+                self.loadResponses();
+            });
+            container.appendChild(button);
+        };
+        var addEllipsis = function() {
+            var ellipsis = document.createElement('span');
+            ellipsis.className = 'pagination-ellipsis';
+            ellipsis.textContent = '...';
+            ellipsis.setAttribute('aria-hidden', 'true');
+            container.appendChild(ellipsis);
+        };
+
+        addButton('', 1, 'First page', 'fa-angles-left');
+        addButton('', Math.max(1, this.currentPage - 1), 'Previous page', 'fa-angle-left');
+
+        var firstPage = Math.max(1, this.currentPage - 2);
+        var lastPage = Math.min(totalPages, this.currentPage + 2);
+        if (firstPage > 1) {
+            addButton('1', 1, 'Page 1');
+            if (firstPage > 2) addEllipsis();
+        }
+        for (var page = firstPage; page <= lastPage; page++) {
+            addButton(String(page), page, 'Page ' + page, null, page === this.currentPage);
+        }
+        if (lastPage < totalPages) {
+            if (lastPage < totalPages - 1) addEllipsis();
+            addButton(String(totalPages), totalPages, 'Page ' + totalPages);
+        }
+
+        addButton('', Math.min(totalPages, this.currentPage + 1), 'Next page', 'fa-angle-right');
+        addButton('', totalPages, 'Last page', 'fa-angles-right');
+
+        var status = document.createElement('span');
+        status.className = 'pagination-status';
+        status.textContent = 'Page ' + this.currentPage + ' of ' + totalPages +
+            ' · ' + totalEntries + ' responses';
+        container.appendChild(status);
+    },
+
     async loadResponses() {
         var needsReview = document.getElementById('filter-needs-review') ? document.getElementById('filter-needs-review').checked : false;
         var category = document.getElementById('filter-category') ? document.getElementById('filter-category').value : '';
@@ -1323,15 +1428,18 @@ var ADMIN = {
                 category
                     ? API.getCategoryAnalytics(category).catch(function() { return null; })
                     : API.getOverallAnalytics().catch(function() { return null; }),
-                API.getEvaluations({ needs_review: true, page: 1, page_size: 1, category: this.getCategoryApiValue(category) || undefined }).catch(function() { return null; })
+                API.getEvaluations({ needs_review: true, page: 1, page_size: 1, category: this.getCategoryApiValue(category) || undefined }).catch(function() { return null; }),
+                API.getRecentEvaluationDeletion().catch(function() { return null; })
             ];
             var results = await Promise.all(fetches);
             var data = results[0];
             var summary = results[1];
             var reviewData = results[2];
+            var deletionBatch = results[3];
             var items = Array.isArray(data.items) ? data.items : [];
 
             this.renderResponsesSummary(category, summary, data.total, reviewData && reviewData.total);
+            this.renderDeletedResponseRecovery(deletionBatch);
         
 
             if (items.length === 0) {
@@ -1373,18 +1481,7 @@ var ADMIN = {
             this.updateBulkBar();
 
             var totalPages = Math.ceil((data.total || 0) / 20);
-            if (pagination) pagination.innerHTML = '';
-            if (totalPages > 1) {
-                for (var i = 1; i <= totalPages; i++) {
-                    (function(pageNum) {
-                        var btn = document.createElement('button');
-                        btn.textContent = pageNum;
-                        btn.className = pageNum === ADMIN.currentPage ? 'active' : '';
-                        btn.addEventListener('click', function() { ADMIN.currentPage = pageNum; ADMIN.loadResponses(); });
-                        if (pagination) pagination.appendChild(btn);
-                    })(i);
-                }
-            }
+            this.renderResponsePagination(pagination, totalPages, data.total || 0);
         } catch (error) {
             if (tableContainer) tableContainer.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-exclamation-triangle" style="color:var(--neu);"></i></div><h3>Error Loading Responses</h3><p>' + escapeHtml(error.message) + '</p></div>';
         } finally {
@@ -1535,37 +1632,108 @@ var ADMIN = {
     async handleResponsesImport(file) {
         if (!file) return;
         var catSelect = document.getElementById('import-category-select');
-        var category = catSelect ? catSelect.value : '';
+        if (catSelect) catSelect.disabled = false;
+        this.pendingImportFile = file;
+        this.pendingImportCategory = catSelect ? catSelect.value : '';
         var resultDiv = document.getElementById('import-resp-result');
-        var categoryLabel = category ? category + ' ' : '';
-        showLoading('Importing ' + categoryLabel + 'responses — this can take a moment while each one is scored...');
+        showLoading('Previewing response file...');
+        try {
+            var preview = await API.previewEvaluationsImport(file, this.pendingImportCategory);
+            var errorsHtml = preview.errors.length
+                ? '<div class="mt-2"><h4>Validation issues (' + preview.error_count + ')</h4>' +
+                    '<div class="table-container" style="max-height:220px;overflow-y:auto;"><table><thead><tr><th>Row</th><th>Preview</th><th>Reason</th></tr></thead><tbody>' +
+                    preview.errors.map(function(error) {
+                        return '<tr><td>' + error.row + '</td><td>' + escapeHtml(error.comment || '') + '</td><td>' +
+                            escapeHtml((error.errors || []).join('; ')) + '</td></tr>';
+                    }).join('') + '</tbody></table></div>' +
+                    (preview.errors_truncated ? '<p class="text-muted">Showing the first 100 issues.</p>' : '') + '</div>'
+                : '<p class="text-muted">No row validation issues found.</p>';
+            var mappingHtml = Object.keys(preview.mapped_columns).map(function(category) {
+                var mapping = preview.mapped_columns[category];
+                return '<section class="import-preview-category"><h4>' + escapeHtml(category) +
+                    ' · ' + preview.counts_by_category[category] + ' response(s)</h4>' +
+                    '<p><strong>Comment:</strong> ' + escapeHtml(mapping.comment || 'Not mapped') + '</p>' +
+                    '<p><strong>Rating columns (' + Object.keys(mapping.ratings).length + '):</strong></p>' +
+                    (Object.keys(mapping.ratings).length
+                        ? '<ul>' + Object.keys(mapping.ratings).map(function(aspect) {
+                            return '<li><strong>' + escapeHtml(aspect.replace(/_/g, ' ')) + ':</strong> ' +
+                                escapeHtml(mapping.ratings[aspect]) + '</li>';
+                        }).join('') + '</ul>'
+                        : '<p>None</p>') + '</section>';
+            }).join('');
+            var commonHtml = Object.keys(preview.common_columns).map(function(key) {
+                var header = preview.common_columns[key];
+                return header ? '<span><strong>' + escapeHtml(key.replace(/_/g, ' ')) + ':</strong> ' +
+                    escapeHtml(header) + '</span>' : '';
+            }).filter(Boolean).join(' · ');
+            resultDiv.innerHTML = '' +
+                '<div class="card import-preview" style="border-left:4px solid var(--brand-deep);">' +
+                    '<h4><i class="fas fa-clipboard-check"></i> Import Preview</h4>' +
+                    '<div class="stats-grid mt-2" style="grid-template-columns:repeat(3,1fr);">' +
+                        '<div class="stat-card"><div class="stat-info"><h3>' + preview.total_rows + '</h3><p>Spreadsheet rows</p></div></div>' +
+                        '<div class="stat-card"><div class="stat-info"><h3>' + preview.valid_evaluations + '</h3><p>Valid evaluations</p></div></div>' +
+                        '<div class="stat-card"><div class="stat-info"><h3>' + preview.error_count + '</h3><p>Rows with issues</p></div></div>' +
+                    '</div>' +
+                    '<p><strong>Detected:</strong> ' + escapeHtml(preview.mode) + ' · ' +
+                        escapeHtml(preview.detected_categories.join(', ') || 'No categories') + '</p>' +
+                    '<p><strong>Common columns:</strong> ' + (commonHtml || 'None detected') + '</p>' +
+                    mappingHtml +
+                    errorsHtml +
+                    '<div style="display:flex;justify-content:flex-end;gap:.6rem;margin-top:1rem;">' +
+                        '<button class="btn btn-outline" onclick="ADMIN.cancelResponsesImport()">Cancel</button>' +
+                        '<button class="btn btn-primary" onclick="ADMIN.confirmResponsesImport()" ' +
+                            (preview.valid_evaluations ? '' : 'disabled') + '><i class="fas fa-file-import"></i> Import ' +
+                            preview.valid_evaluations + ' valid response(s)</button>' +
+                    '</div>' +
+                '</div>';
+            if (catSelect) catSelect.disabled = true;
+        } catch (error) {
+            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--neg);"><h4>Preview Failed</h4><p>' + escapeHtml(error.message) + '</p></div>';
+            this.pendingImportFile = null;
+            if (catSelect) catSelect.disabled = false;
+        } finally {
+            hideLoading();
+        }
+    },
+
+    cancelResponsesImport: function() {
+        this.pendingImportFile = null;
+        this.pendingImportCategory = null;
+        var input = document.getElementById('import-resp-file-inp');
+        if (input) input.value = '';
+        var category = document.getElementById('import-category-select');
+        if (category) category.disabled = false;
+        var result = document.getElementById('import-resp-result');
+        if (result) result.innerHTML = '';
+    },
+
+    confirmResponsesImport: async function() {
+        if (!this.pendingImportFile) return;
+        var file = this.pendingImportFile;
+        var category = this.pendingImportCategory;
+        var resultDiv = document.getElementById('import-resp-result');
+        showLoading('Importing responses — scoring can take a while...');
         try {
             var result = await API.importEvaluations(file, category);
-            var errorsHtml = '';
-            if (result.errors && result.errors.length > 0) {
-                errorsHtml = '<div class="mt-2">' +
-                    '<h4 style="font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--neg);">Rows skipped:</h4>' +
-                    '<div class="table-container" style="max-height:220px;overflow-y:auto;"><table><thead><tr><th>Row</th><th>Preview</th><th>Reason</th></tr></thead><tbody>' +
-                    result.errors.map(function(e) {
-                        return '<tr><td>' + e.row + '</td><td>' + escapeHtml(e.comment || '') + '</td><td>' + escapeHtml((e.errors || []).join('; ')) + '</td></tr>';
-                    }).join('') +
-                    '</tbody></table></div></div>';
-            }
-            resultDiv.innerHTML = '' +
-                '<div class="card" style="border-left:4px solid var(--pos);">' +
-                    '<h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4>' +
-                    '<div class="stats-grid mt-2" style="grid-template-columns:repeat(3,1fr);">' +
-                        '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-file-alt"></i></div><div class="stat-info"><h3>' + result.total_rows + '</h3><p>Total Rows</p></div></div>' +
-                        '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-check-circle"></i></div><div class="stat-info"><h3>' + result.imported + '</h3><p>Imported</p></div></div>' +
-                        '<div class="stat-card"><div class="stat-icon red"><i class="fas fa-times-circle"></i></div><div class="stat-info"><h3>' + result.failed + '</h3><p>Skipped</p></div></div>' +
-                    '</div>' +
-                    errorsHtml +
-                    '<button class="btn btn-primary mt-2" onclick="APP.closeModal();ADMIN.loadResponses();"><i class="fas fa-table"></i> View in Responses</button>' +
+            this.pendingImportFile = null;
+            var errorsHtml = result.errors.length
+                ? '<div class="mt-2"><h4>Rows skipped:</h4><div class="table-container" style="max-height:220px;overflow-y:auto;"><table><thead><tr><th>Row</th><th>Preview</th><th>Reason</th></tr></thead><tbody>' +
+                    result.errors.map(function(error) {
+                        return '<tr><td>' + error.row + '</td><td>' + escapeHtml(error.comment || '') + '</td><td>' +
+                            escapeHtml((error.errors || []).join('; ')) + '</td></tr>';
+                    }).join('') + '</tbody></table></div></div>' : '';
+            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--pos);">' +
+                '<h4 style="color:var(--pos);"><i class="fas fa-check-circle"></i> Import Complete</h4>' +
+                '<div class="stats-grid mt-2" style="grid-template-columns:repeat(3,1fr);">' +
+                    '<div class="stat-card"><div class="stat-info"><h3>' + result.total_rows + '</h3><p>Total Rows</p></div></div>' +
+                    '<div class="stat-card"><div class="stat-info"><h3>' + result.imported + '</h3><p>Imported</p></div></div>' +
+                    '<div class="stat-card"><div class="stat-info"><h3>' + result.failed + '</h3><p>Skipped</p></div></div>' +
+                '</div>' + errorsHtml +
+                '<button class="btn btn-primary mt-2" onclick="APP.closeModal();ADMIN.loadResponses();"><i class="fas fa-table"></i> View in Responses</button>' +
                 '</div>';
             showToast(result.imported + ' response(s) imported and scored.', 'success');
         } catch (error) {
-            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--neg);"><h4 style="color:var(--neg);"><i class="fas fa-times-circle"></i> Import Failed</h4><p>' + escapeHtml(error.message) + '</p></div>';
-            showToast('Import failed: ' + error.message, 'error');
+            resultDiv.innerHTML = '<div class="card" style="border-left:4px solid var(--neg);"><h4>Import Failed</h4><p>' + escapeHtml(error.message) + '</p></div>';
         } finally {
             hideLoading();
         }
