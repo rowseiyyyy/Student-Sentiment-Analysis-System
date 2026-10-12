@@ -274,6 +274,10 @@ class Settings(BaseSettings):
             "DB_USER",
             "DB_PASSWORD",
             "DB_NAME",
+            "SMTP_HOST",
+            "SMTP_USERNAME",
+            "SMTP_PASSWORD",
+            "SMTP_FROM_EMAIL",
         ]
         missing = [name for name in required if not getattr(self, name, None)]
         if missing:

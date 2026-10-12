@@ -133,7 +133,8 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Sessio
     a mail provider. In production, the server sends a reset email and never leaks
     the token back in the API response.
     """
-    user = db.query(User).filter(User.email == payload.email).first()
+    normalized_email = payload.email.strip().lower()
+    user = db.query(User).filter(User.email == normalized_email).first()
     if not user:
         return {"detail": "If that email exists, a reset link has been sent."}
 
@@ -143,10 +144,16 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Sessio
     if settings.ENVIRONMENT != "production":
         response["reset_token"] = token
     else:
-        from app.utils.email import send_password_reset_email
+        try:
+            from app.utils.email import send_password_reset_email
 
-        reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}"
-        send_password_reset_email(user.email, reset_url)
+            reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}"
+            send_password_reset_email(user.email, reset_url)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password reset email is currently unavailable. Please try again later.",
+            ) from exc
 
     return response
 
