@@ -116,6 +116,17 @@ def test_login_unknown_user_fails(client):
     assert "registered for this email" in response.json()["detail"]
 
 
+def test_login_allows_default_seed_password_for_valid_institution_email(client):
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "rose.maylorena@asiatech.edu.ph", "password": DEFAULT_FACULTY_PASSWORD},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user"]["email"] == "rose.maylorena@asiatech.edu.ph"
+    assert data["using_default_password"] is True
+
+
 def test_inactive_account_cannot_log_in(client, db_session):
     user = _make_user(
         db_session, "deactivated@asiatech.edu.ph", "SecurePass123", UserRole.ADMINISTRATOR
