@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(join(here, '..', 'js', 'layout.js'), 'utf8');
+const chartSource = readFileSync(join(here, '..', 'js', 'charts.js'), 'utf8');
 
 // layout.js is a browser global script, not a module. Evaluate it with just
 // enough of the DOM to exercise the geometry, rather than pulling in a headless
@@ -31,6 +32,16 @@ API.saveDashboardLayout = (name, widgets) => {
 const factory = new Function('window', 'document', 'console', 'API',
     source + '\nreturn LAYOUT;');
 const LAYOUT = factory(win, doc, console, API);
+const chartFactory = new Function('window', 'document', 'console', 'Chart',
+    chartSource + '\nreturn CHARTS;');
+const CHARTS = chartFactory({ devicePixelRatio: 2 }, {
+    createElement: () => ({
+        style: {},
+        width: 0,
+        height: 0,
+        appendChild: () => {},
+    }),
+}, console, null);
 
 // A minimal widget stand-in. `span` is the authored .span-N class, `h` the
 // height its target renders at, `onChart` whether it has a chart body.
@@ -200,6 +211,22 @@ await test('an untouched layout saves as an empty document', async () => {
 
     assert.equal(await LAYOUT.save(), true);
     assert.deepEqual(API.calls[0].widgets, {});
+});
+
+await test('chart canvases are sized for a high-DPI display', async () => {
+    const host = {
+        style: {},
+        clientHeight: 200,
+        getBoundingClientRect: () => ({ width: 300, height: 200 }),
+        appendChild: (node) => { host.canvas = node; },
+    };
+
+    const canvas = CHARTS.mountCanvas(host);
+
+    assert.equal(canvas.width, 600, 'canvas width should respect the display pixel ratio');
+    assert.equal(canvas.height, 400, 'canvas height should respect the display pixel ratio');
+    assert.equal(canvas.style.width, '300px', 'CSS width should match the host width');
+    assert.equal(canvas.style.height, '200px', 'CSS height should match the host height');
 });
 
 await test('dragging the move handle still starts when the pointer lands on the grip icon', async () => {

@@ -41,7 +41,15 @@ const CHARTS = {
         host.style.alignItems = '';
         host.style.justifyContent = '';
         host.innerHTML = '';
+        const rect = host.getBoundingClientRect && host.getBoundingClientRect();
+        const width = Math.max(1, Math.round((rect && rect.width) || host.clientWidth || 300));
+        const height = Math.max(1, Math.round((rect && rect.height) || host.clientHeight || 200));
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
         const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(width * ratio));
+        canvas.height = Math.max(1, Math.round(height * ratio));
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
         host.appendChild(canvas);
         return canvas;
     },
