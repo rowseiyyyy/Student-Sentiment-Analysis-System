@@ -158,8 +158,8 @@ const FACULTY = {
         container.innerHTML = `
             <div class="page-header">
                 <div>
-                    <span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span>
-                    <h1><i class="fas fa-chart-line"></i> Trends &amp; insights</h1>
+                    <span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Professor Feedback</span>
+                    <h1><i class="fas fa-chart-line"></i> Analytics</h1>
                     <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.3rem 0 0;">Faculty view — Professors-category responses only.</p>
                 </div>
                 <!-- Lived on the (removed) Overview tab; moved here so the

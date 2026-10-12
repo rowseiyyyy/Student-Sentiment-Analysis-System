@@ -669,8 +669,8 @@ var ADMIN = {
             container.innerHTML = '' +
                 '<div class="page-header">' +
                     '<div>' +
-                        '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Casefile Overview — All Departments</span>' +
-                        '<h1>Dashboard Overview</h1>' +
+                        '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Feedback Summary</span>' +
+                        '<h1>Overview</h1>' +
                     '</div>' +
                     '<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">' +
                         '<div class="date-note">Compiled ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '</div>' +
@@ -999,8 +999,8 @@ var ADMIN = {
         container.innerHTML = '' +
             '<div class="page-header">' +
                 '<div>' +
-                    '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Full Transcript</span>' +
-                    '<h1>Every entry, logged</h1>' +
+                    '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">All submitted evaluations</span>' +
+                    '<h1>Responses</h1>' +
                 '</div>' +
                 '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;">' +
                     '<button class="btn btn-secondary" onclick="ADMIN.openImportPanel()"><i class="fas fa-file-import"></i> Import Dataset</button>' +
@@ -2083,7 +2083,7 @@ predictionHtml +
         var scopeNote = escapeHtml(this.scopeLabel());
         var deptCompareHidden = this.departmentCompareSuppressed();
         container.innerHTML = '' +
-            '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span><h1>Trends &amp; top signals</h1></div>' +
+            '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Sentiment trends and ratings</span><h1>Analytics</h1></div>' +
                 '<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">' +
                     // Global (not per-user) chart sharing for the faculty role:
                     // opens the panel with the checkboxes, select-all / clear-all
@@ -2417,7 +2417,7 @@ predictionHtml +
     // ============================================================
     renderMLPanel: function(container) {
         container.innerHTML = '' +
-            '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Model Results</span><h1>Model on duty</h1></div></div>' +
+            '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Sentiment Model Performance</span><h1>Model Results</h1></div></div>' +
             '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
                 '<i class="fas fa-flask"></i>&nbsp; Latest Model Training Results <span style="opacity:.6;">— models are trained in Google Colab, then imported here. This panel never trains anything locally.</span>' +
             '</div>' +
@@ -2646,7 +2646,7 @@ predictionHtml +
             var posts = await API.getActionUpdates();
             container.innerHTML =
                 '<div class="page-header"><div>' +
-                    '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Feedback Loop \u2014 Action Taken</span>' +
+                    '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Public bulletin posts</span>' +
                     '<h1>Action Updates</h1>' +
                 '</div>' +
                 '<button class="btn btn-primary" onclick="ADMIN.showActionForm()"><i class="fas fa-plus"></i> New Update</button></div>' +
