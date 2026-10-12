@@ -182,17 +182,39 @@ function selectField(name, label, options, placeholder = '') {
 // The backend /api/v1/ml/performance may still return rows for models the
 // system no longer uses. The comparison UI displays ONLY the approved set:
 // the three classical TF-IDF research models plus the one live model.
-const MODEL_PERFORMANCE_ALLOWED = ['SVM', 'Naive Bayes', 'Logistic Regression', 'Multilingual MiniLM'];
+const MODEL_PERFORMANCE_ALLOWED = ['SVM', 'Naive Bayes', 'Logistic Regression', 'mBERT Hybrid'];
+const MODEL_PERFORMANCE_ALIASES = {
+    'multilingual minilm': 'mBERT Hybrid',
+    'minilm': 'mBERT Hybrid',
+    'mbert hybrid': 'mBERT Hybrid',
+    'bert hybrid': 'mBERT Hybrid'
+};
+
+function normalizeModelPerfAlgorithm(algorithm) {
+    if (algorithm === null || algorithm === undefined) return '';
+    const raw = String(algorithm).trim();
+    if (!raw) return '';
+
+    const exact = MODEL_PERFORMANCE_ALLOWED.find(function (name) {
+        return name.toLowerCase() === raw.toLowerCase();
+    });
+    if (exact) return exact;
+
+    const alias = MODEL_PERFORMANCE_ALIASES[raw.toLowerCase()];
+    if (alias) return alias;
+
+    return raw;
+}
 
 function filterModelPerfRows(rows) {
     if (!Array.isArray(rows)) return [];
     return rows.filter(function (r) {
-        return r && r.algorithm && MODEL_PERFORMANCE_ALLOWED.indexOf(r.algorithm) !== -1;
+        const algorithm = normalizeModelPerfAlgorithm(r && r.algorithm);
+        return algorithm && MODEL_PERFORMANCE_ALLOWED.indexOf(algorithm) !== -1;
     });
 }
 
 function modelPerfDisplayName(algorithm) {
-    // The backend returns the canonical names listed above, so the display
-    // name is the algorithm name itself.
-    return algorithm;
+    const normalized = normalizeModelPerfAlgorithm(algorithm);
+    return normalized || '';
 }

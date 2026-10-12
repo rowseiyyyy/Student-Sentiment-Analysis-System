@@ -68,8 +68,32 @@ const APP = {
         // Credential login (admin/faculty) — handled in HTML onclick
     },
 
+    clearCredentialError() {
+        const form = document.getElementById('login-form-credential');
+        if (!form) return;
+        const banner = form.querySelector('.login-form-error');
+        if (banner) {
+            banner.remove();
+            form._error = null;
+        }
+    },
+
+    showCredentialError(message) {
+        const form = document.getElementById('login-form-credential');
+        if (!form) return;
+        this.clearCredentialError();
+
+        const banner = document.createElement('div');
+        banner.className = 'login-form-error';
+        banner.setAttribute('role', 'alert');
+        banner.textContent = message || 'Invalid email or password.';
+        form._error = banner;
+        form.insertBefore(banner, form.firstChild);
+    },
+
     doCredentialLogin(e) {
         e.preventDefault();
+        this.clearCredentialError();
         const email = document.getElementById('inp-email').value.trim();
         const password = document.getElementById('inp-pass').value;
 

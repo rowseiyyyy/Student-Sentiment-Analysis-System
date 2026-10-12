@@ -43,7 +43,7 @@ const FACULTY = {
             }
             this.showDashboard();
         } catch (error) {
-            showToast('Login failed: ' + error.message, 'error');
+            APP.showCredentialError(error.message || 'Invalid email or password.');
         } finally {
             hideLoading();
         }

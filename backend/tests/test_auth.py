@@ -113,6 +113,7 @@ def test_login_unknown_user_fails(client):
         json={"email": "ghost@asiatech.edu.ph", "password": "SecurePass123"},
     )
     assert response.status_code == 401
+    assert "registered for this email" in response.json()["detail"]
 
 
 def test_inactive_account_cannot_log_in(client, db_session):

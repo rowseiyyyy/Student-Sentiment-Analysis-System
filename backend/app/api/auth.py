@@ -43,18 +43,26 @@ DEFAULT_PASSWORDS = {
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
 def login(request: Request, payload: UserLogin, db: Session = Depends(get_db)):
+    normalized_email = payload.email.strip().lower()
+
     # Institution-only sign-in: reject any non-@asiatech.edu.ph address
     # before doing anything else (no public registration exists).
-    if not payload.email.lower().endswith(ALLOWED_EMAIL_DOMAIN):
+    if not normalized_email.endswith(ALLOWED_EMAIL_DOMAIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only @asiatech.edu.ph accounts can sign in.",
         )
 
-    user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.hashed_password):
+    user = db.query(User).filter(User.email == normalized_email).first()
+    if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No admin/faculty account is registered for this email. Use a seeded @asiatech.edu.ph account or contact the system admin.",
+        )
+    if not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password for this account.",
         )
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated.")

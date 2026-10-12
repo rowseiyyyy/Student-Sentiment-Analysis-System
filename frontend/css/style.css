@@ -1668,6 +1668,19 @@ tbody tr:last-child td {
   pointer-events: all;
 }
 
+.login-form-error {
+  margin: 0 0 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(171, 58, 58, 0.45);
+  border-radius: 0.75rem;
+  background: rgba(171, 58, 58, 0.08);
+  color: var(--neg, #b33a3a);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .toast.success {
   background: var(--pos-bg);
   color: var(--pos);

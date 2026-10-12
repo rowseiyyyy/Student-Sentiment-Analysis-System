@@ -117,7 +117,7 @@ var ADMIN = {
             }
             this.showDashboard();
         } catch (error) {
-            showToast('Login failed: ' + error.message, 'error');
+            APP.showCredentialError(error.message || 'Invalid email or password.');
         } finally {
             hideLoading();
         }
@@ -672,7 +672,10 @@ var ADMIN = {
                         '<span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Casefile Overview — All Departments</span>' +
                         '<h1>Dashboard Overview</h1>' +
                     '</div>' +
-                    '<div class="date-note">Compiled ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '</div>' +
+                    '<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">' +
+                        '<div class="date-note">Compiled ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '</div>' +
+                        '<button class="btn btn-success" onclick="ADMIN.exportSummaryPDF()"><i class="fas fa-file-pdf"></i> Download Summary PDF</button>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
                     '<i class="fas fa-database"></i>&nbsp; Live Submission Data <span style="opacity:.6;">— every card and chart below, up to and including the "Model Performance" table row for status, reflects ALL evaluation-form submissions ever received (not filtered by dataset or date), except where noted.</span>' +
@@ -757,6 +760,62 @@ var ADMIN = {
         this.overviewFilters = { days: '', category: '' };
         var content = document.getElementById('admin-tab-content');
         if (content) this.renderOverview(content); else this.renderTab('overview');
+    },
+
+    exportSummaryPDF: function() {
+        try {
+            var jsPDF = window.jspdf && window.jspdf.jsPDF;
+            if (!jsPDF) throw new Error('PDF export library is unavailable. Reload the page and try again.');
+
+            var root = document.getElementById('admin-tab-content');
+            if (!root) throw new Error('No dashboard report is available to export.');
+
+            var cards = Array.prototype.slice.call(root.querySelectorAll('.chart-card')).filter(function(card) {
+                var canvas = card.querySelector('canvas');
+                return !!canvas && canvas.width > 0 && canvas.height > 0;
+            });
+            if (!cards.length) throw new Error('No charts are ready to include in the summary PDF.');
+
+            var pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            var pageWidth = pdf.internal.pageSize.getWidth();
+            var pageHeight = pdf.internal.pageSize.getHeight();
+            var today = new Date().toISOString().slice(0, 10);
+            var title = this.currentTab === 'analytics' ? 'Admin Analytics Summary' : 'Admin Dashboard Summary';
+            var scope = this.scopeLabel ? this.scopeLabel() : 'all departments · all-time';
+
+            cards.forEach(function(card, index) {
+                if (index > 0) pdf.addPage();
+
+                var canvas = card.querySelector('canvas');
+                var heading = card.querySelector('h3');
+                var pageTitle = heading ? heading.textContent.trim().replace(/\s+/g, ' ') : 'Dashboard chart';
+                var scale = Math.min((pageWidth - 26) / canvas.width, (pageHeight - 50) / canvas.height);
+                var imageWidth = canvas.width * scale;
+                var imageHeight = canvas.height * scale;
+
+                if (index === 0) {
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(18);
+                    pdf.text(title, 14, 14);
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.setFontSize(9);
+                    pdf.text('Scope: ' + scope + ' · Compiled ' + today, 14, 22);
+                }
+
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(12);
+                pdf.text(pageTitle, 14, index === 0 ? 32 : 16);
+                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 14, index === 0 ? 38 : 24, imageWidth, imageHeight);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                pdf.text('Page ' + (index + 1) + ' of ' + cards.length, pageWidth - 18, pageHeight - 8, { align: 'right' });
+            });
+
+            pdf.save('admin-summary-' + today + '.pdf');
+            showToast('Summary PDF downloaded successfully.', 'success');
+        } catch (error) {
+            showToast('Summary PDF export failed: ' + error.message, 'error');
+        }
     },
 
     // Replace long grey monospace explanation paragraphs (class
@@ -1795,11 +1854,11 @@ var ADMIN = {
                 predictionHtml = '<div class="form-section" style="margin-top:1rem;">' +
                     '<h4 style="margin-bottom:0.5rem;">Text Sentiment — Model Breakdown</h4>' +
                     '<div class="table-container"><table><thead><tr><th>Model</th><th>Prediction</th><th>Confidence</th></tr></thead><tbody><tr>' +
-                        '<td><strong>Multilingual MiniLM</strong> <span class="badge badge-positive" title="Used for the official sentiment"><i class="fas fa-crown"></i> Official</span></td>' +
+                        '<td><strong>mBERT Hybrid</strong> <span class="badge badge-positive" title="Used for the official sentiment"><i class="fas fa-crown"></i> Official</span></td>' +
                         '<td>' + predCell + '</td><td style="white-space:nowrap;">' + confCell + '</td>' +
                     '</tr></tbody></table></div>' +
-                    (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> The live model (Multilingual MiniLM) has not produced a result for this submission. Its weights are fetched from the private Hugging Face repo at startup.</p>' : '') +
-                    '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> The official result comes from the live production model, Multilingual MiniLM.</p>' +
+                    (missingModelCount > 0 ? '<p style="font-size:.8rem;color:var(--neg,#b33a3a);margin-top:.5rem;"><i class="fas fa-exclamation-triangle"></i> The live model (mBERT Hybrid) has not produced a result for this submission. Its weights are fetched from the private Hugging Face repo at startup.</p>' : '') +
+                    '<p style="font-size:.8rem;color:var(--ink-faint);margin-top:.5rem;"><i class="fas fa-info-circle"></i> The official result comes from the live production model, mBERT Hybrid.</p>' +
                 '</div>';
             }
 
@@ -2025,10 +2084,13 @@ predictionHtml +
         var deptCompareHidden = this.departmentCompareSuppressed();
         container.innerHTML = '' +
             '<div class="page-header"><div><span style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:.35rem;">Detailed Analytics</span><h1>Trends &amp; top signals</h1></div>' +
-                // Global (not per-user) chart sharing for the faculty role:
-                // opens the panel with the checkboxes, select-all / clear-all
-                // and Save. The badges on the cards below show the result.
-                '<button class="btn btn-outline" onclick="ADMIN.openFacultyAccess()"><i class="fas fa-user-shield"></i> Manage faculty access</button>' +
+                '<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">' +
+                    // Global (not per-user) chart sharing for the faculty role:
+                    // opens the panel with the checkboxes, select-all / clear-all
+                    // and Save. The badges on the cards below show the result.
+                    '<button class="btn btn-outline" onclick="ADMIN.openFacultyAccess()"><i class="fas fa-user-shield"></i> Manage faculty access</button>' +
+                    '<button class="btn btn-success" onclick="ADMIN.exportSummaryPDF()"><i class="fas fa-file-pdf"></i> Download Summary PDF</button>' +
+                '</div>' +
             '</div>' +
             this.scopeBanner() +
             '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
@@ -2392,7 +2454,7 @@ predictionHtml +
         container.innerHTML = '' +
             '<div class="eval-form-card">' +
                 '<h2><i class="fas fa-file-import"></i> Import Colab Training Results</h2>' +
-                '<p class="form-desc">After training in Colab, upload the <strong>metrics JSON</strong> here to record the results. Multilingual MiniLM is the ONLY live inference model — SVM, Naive Bayes and Logistic Regression are the offline research baselines and appear in the comparison table only. Weights are fetched from the private Hugging Face Hub repo at startup, so you do not upload model files here.</p>' +
+                '<p class="form-desc">After training in Colab, upload the <strong>metrics JSON</strong> here to record the results. mBERT Hybrid is the live production inference model — SVM, Naive Bayes and Logistic Regression are the offline research baselines and appear in the comparison table only. Weights are fetched from the private Hugging Face Hub repo at startup, so you do not upload model files here.</p>' +
                 '<div class="form-group">' +
                     '<label>Metrics JSON <span style="color:var(--neg);">(required)</span></label>' +
                     '<input type="file" class="form-control" id="import-metrics-file" accept=".json" required />' +
@@ -2400,7 +2462,7 @@ predictionHtml +
                 '<div class="form-group"><label>Set as production model (optional)</label>' +
                     '<select class="form-control" id="import-set-production">' +
                         '<option value="">Auto (best weighted F1 among imported)</option>' +
-                        '<option value="Multilingual MiniLM">Multilingual MiniLM</option>' +
+                        '<option value="mBERT Hybrid">mBERT Hybrid</option>' +
                     '</select>' +
                 '</div>' +
                 '<button class="btn btn-primary btn-lg" onclick="ADMIN.submitImportResults()"><i class="fas fa-upload"></i> Import Results</button>' +
