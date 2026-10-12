@@ -202,6 +202,45 @@ await test('an untouched layout saves as an empty document', async () => {
     assert.deepEqual(API.calls[0].widgets, {});
 });
 
+await test('dragging the move handle still starts when the pointer lands on the grip icon', async () => {
+    const events = [];
+    let dragStart = null;
+    const handle = {
+        classList: { contains: (value) => value === 'widget-grip-move' },
+    };
+    const icon = {
+        classList: { contains: () => false },
+        closest: (selector) => selector === '.widget-grip-move' ? handle : null,
+    };
+    const el = {
+        classList: { add: () => {}, remove: () => {} },
+        addEventListener(name, fn) {
+            if (name === 'dragstart') dragStart = fn;
+        },
+    };
+    const section = [];
+    const context = {
+        _sectionWidgets: () => [],
+        _clearDropMarkers: () => {},
+    };
+    const transfer = {
+        effectAllowed: '',
+        setData: () => events.push('data'),
+    };
+    const event = {
+        target: icon,
+        dataTransfer: transfer,
+        preventDefault: () => events.push('prevent'),
+    };
+
+    LAYOUT._makeDraggable.call(context, handle, el, section, () => {});
+    dragStart(event);
+
+    assert.equal(events.includes('prevent'), false);
+    assert.equal(transfer.effectAllowed, 'move');
+    assert.equal(events.includes('data'), true);
+});
+
 let failed = 0;
 for (const r of results) {
     if (r.ok) {

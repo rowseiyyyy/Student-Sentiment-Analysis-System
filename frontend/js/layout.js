@@ -1096,8 +1096,14 @@ const LAYOUT = {
 
         el.addEventListener('dragstart', function (e) {
             // Only a drag that began on the move handle is a reorder, so
-            // text selection inside a card still behaves normally.
-            if (!e.target.classList.contains('widget-grip-move')) {
+            // text selection inside a card still behaves normally. Browsers can
+            // dispatch the event from a nested child (for example the grip icon)
+            // even though the visible handle is the button itself, so resolve the
+            // actual control before deciding whether to allow the drag.
+            const handleEl = e.target && typeof e.target.closest === 'function'
+                ? e.target.closest('.widget-grip-move')
+                : e.target;
+            if (!handleEl) {
                 e.preventDefault();
                 return;
             }
