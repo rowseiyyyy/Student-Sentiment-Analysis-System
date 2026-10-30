@@ -379,7 +379,10 @@ const FACULTY = {
                 pdf.setFont('helvetica', 'bold');
                 pdf.setFontSize(13);
                 pdf.text(title, 14, 32);
-                pdf.addImage(this._chartImageWithDataLabels(canvas), 'PNG', 14, 39, imageWidth, imageHeight);
+                pdf.addImage(
+                    this._chartImageWithDataLabels(canvas, imageWidth, imageHeight),
+                    'PNG', 14, 39, imageWidth, imageHeight
+                );
                 pdf.setFont('helvetica', 'normal');
                 pdf.setFontSize(8);
                 pdf.text('Page ' + (index + 1) + ' of ' + cards.length, pageWidth - 14, pageHeight - 8, { align: 'right' });
@@ -391,64 +394,105 @@ const FACULTY = {
         }
     },
 
-    _chartImageWithDataLabels(canvas) {
+    _chartImageWithDataLabels(canvas, imageWidthMm, imageHeightMm) {
         const chart = Chart.getChart(canvas);
         if (!chart) throw new Error('A chart is no longer available for PDF export. Please reload the analytics and try again.');
 
+        const exportScale = 300 / 25.4;
         const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = canvas.width;
-        exportCanvas.height = canvas.height;
-        const context = exportCanvas.getContext('2d');
-        if (!context) throw new Error('Could not prepare chart labels for PDF export.');
-        context.drawImage(canvas, 0, 0);
+        const logicalWidth = chart.width;
+        const logicalHeight = chart.height;
+        const pixelRatio = Math.min(
+            imageWidthMm * exportScale / logicalWidth,
+            imageHeightMm * exportScale / logicalHeight
+        );
+        exportCanvas.width = logicalWidth;
+        exportCanvas.height = logicalHeight;
+        exportCanvas.style.width = `${logicalWidth}px`;
+        exportCanvas.style.height = `${logicalHeight}px`;
 
-        const pixelRatio = canvas.width / chart.width;
-        context.save();
-        context.scale(pixelRatio, pixelRatio);
-        context.font = `600 ${Math.max(10, Math.min(14, chart.width / 45))}px Arial, sans-serif`;
-        context.textAlign = 'center';
-        context.textBaseline = 'middle';
-        context.lineJoin = 'round';
-        context.lineWidth = 3;
-        context.strokeStyle = '#172033';
-        context.fillStyle = '#ffffff';
-
-        chart.data.datasets.forEach((dataset, datasetIndex) => {
-            const meta = chart.getDatasetMeta(datasetIndex);
-            meta.data.forEach((element, dataIndex) => {
-                const value = dataset.data[dataIndex];
-                if (typeof value !== 'number' || value === 0 || !Number.isFinite(value)) return;
-
-                if (chart.config.type === 'doughnut') {
-                    const { x, y, startAngle, endAngle, innerRadius, outerRadius } =
-                        element.getProps(['x', 'y', 'startAngle', 'endAngle', 'innerRadius', 'outerRadius'], true);
-                    const angle = (startAngle + endAngle) / 2;
-                    const radius = (innerRadius + outerRadius) / 2;
-                    context.strokeText(String(value), x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
-                    context.fillText(String(value), x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
-                    return;
-                }
-
-                const { x, y, base, width, height } =
-                    element.getProps(['x', 'y', 'base', 'width', 'height'], true);
-                const label = dataset.label === 'Average score'
-                    ? value.toFixed(2)
-                    : dataset.label === 'Sentiment score'
-                        ? value.toFixed(1)
-                        : String(value);
-                const horizontal = chart.options.indexAxis === 'y';
-                const barLength = horizontal ? width : height;
-                const textWidth = context.measureText(label).width;
-                const position = horizontal && barLength < textWidth + 8
-                    ? { x: x + (x >= base ? textWidth / 2 + 5 : -(textWidth / 2 + 5)), y }
-                    : { x, y };
-
-                context.strokeText(label, position.x, position.y);
-                context.fillText(label, position.x, position.y);
-            });
+        const whiteBackground = {
+            id: 'facultyPdfWhiteBackground',
+            beforeDraw: (exportChart) => {
+                const context = exportChart.ctx;
+                context.save();
+                context.globalCompositeOperation = 'destination-over';
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, exportChart.width, exportChart.height);
+                context.restore();
+            }
+        };
+        const exportChart = new Chart(exportCanvas, {
+            type: chart.config.type,
+            data: {
+                labels: (chart.data.labels || []).map(label => Array.isArray(label) ? [...label] : label),
+                datasets: chart.data.datasets.map(dataset => ({
+                    ...dataset,
+                    data: Array.isArray(dataset.data) ? [...dataset.data] : dataset.data
+                }))
+            },
+            options: {
+                ...chart.config.options,
+                responsive: false,
+                maintainAspectRatio: false,
+                animation: false,
+                devicePixelRatio: pixelRatio
+            },
+            plugins: [...(chart.config.plugins || []), whiteBackground]
         });
 
-        context.restore();
-        return exportCanvas.toDataURL('image/png');
+        try {
+            const context = exportCanvas.getContext('2d');
+            if (!context) throw new Error('Could not prepare chart labels for PDF export.');
+            context.setTransform(1, 0, 0, 1, 0, 0);
+            const actualPixelRatio = exportCanvas.width / exportChart.width;
+            context.scale(actualPixelRatio, actualPixelRatio);
+            context.font = `600 ${Math.max(10, Math.min(14, exportChart.width / 45))}px Arial, sans-serif`;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.lineJoin = 'round';
+            context.lineWidth = 3;
+            context.strokeStyle = '#172033';
+            context.fillStyle = '#ffffff';
+
+            exportChart.data.datasets.forEach((dataset, datasetIndex) => {
+                const meta = exportChart.getDatasetMeta(datasetIndex);
+                meta.data.forEach((element, dataIndex) => {
+                    const value = dataset.data[dataIndex];
+                    if (typeof value !== 'number' || value === 0 || !Number.isFinite(value)) return;
+
+                    if (exportChart.config.type === 'doughnut') {
+                        const { x, y, startAngle, endAngle, innerRadius, outerRadius } =
+                            element.getProps(['x', 'y', 'startAngle', 'endAngle', 'innerRadius', 'outerRadius'], true);
+                        const angle = (startAngle + endAngle) / 2;
+                        const radius = (innerRadius + outerRadius) / 2;
+                        context.strokeText(String(value), x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+                        context.fillText(String(value), x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+                        return;
+                    }
+
+                    const { x, y, base, width, height } =
+                        element.getProps(['x', 'y', 'base', 'width', 'height'], true);
+                    const label = dataset.label === 'Average score'
+                        ? value.toFixed(2)
+                        : dataset.label === 'Sentiment score'
+                            ? value.toFixed(1)
+                            : String(value);
+                    const horizontal = exportChart.options.indexAxis === 'y';
+                    const barLength = horizontal ? width : height;
+                    const textWidth = context.measureText(label).width;
+                    const position = horizontal && barLength < textWidth + 8
+                        ? { x: x + (x >= base ? textWidth / 2 + 5 : -(textWidth / 2 + 5)), y }
+                        : { x, y };
+
+                    context.strokeText(label, position.x, position.y);
+                    context.fillText(label, position.x, position.y);
+                });
+            });
+
+            return exportCanvas.toDataURL('image/png');
+        } finally {
+            exportChart.destroy();
+        }
     }
 };
