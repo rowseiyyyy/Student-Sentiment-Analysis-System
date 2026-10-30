@@ -379,7 +379,7 @@ const FACULTY = {
                 pdf.setFont('helvetica', 'bold');
                 pdf.setFontSize(13);
                 pdf.text(title, 14, 32);
-                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 14, 39, imageWidth, imageHeight);
+                pdf.addImage(this._chartImageWithDataLabels(canvas), 'PNG', 14, 39, imageWidth, imageHeight);
                 pdf.setFont('helvetica', 'normal');
                 pdf.setFontSize(8);
                 pdf.text('Page ' + (index + 1) + ' of ' + cards.length, pageWidth - 14, pageHeight - 8, { align: 'right' });
@@ -389,5 +389,66 @@ const FACULTY = {
         } catch (error) {
             showToast('PDF export failed: ' + error.message, 'error');
         }
+    },
+
+    _chartImageWithDataLabels(canvas) {
+        const chart = Chart.getChart(canvas);
+        if (!chart) throw new Error('A chart is no longer available for PDF export. Please reload the analytics and try again.');
+
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = canvas.width;
+        exportCanvas.height = canvas.height;
+        const context = exportCanvas.getContext('2d');
+        if (!context) throw new Error('Could not prepare chart labels for PDF export.');
+        context.drawImage(canvas, 0, 0);
+
+        const pixelRatio = canvas.width / chart.width;
+        context.save();
+        context.scale(pixelRatio, pixelRatio);
+        context.font = `600 ${Math.max(10, Math.min(14, chart.width / 45))}px Arial, sans-serif`;
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.lineJoin = 'round';
+        context.lineWidth = 3;
+        context.strokeStyle = '#172033';
+        context.fillStyle = '#ffffff';
+
+        chart.data.datasets.forEach((dataset, datasetIndex) => {
+            const meta = chart.getDatasetMeta(datasetIndex);
+            meta.data.forEach((element, dataIndex) => {
+                const value = dataset.data[dataIndex];
+                if (typeof value !== 'number' || value === 0 || !Number.isFinite(value)) return;
+
+                if (chart.config.type === 'doughnut') {
+                    const { x, y, startAngle, endAngle, innerRadius, outerRadius } =
+                        element.getProps(['x', 'y', 'startAngle', 'endAngle', 'innerRadius', 'outerRadius'], true);
+                    const angle = (startAngle + endAngle) / 2;
+                    const radius = (innerRadius + outerRadius) / 2;
+                    context.strokeText(String(value), x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+                    context.fillText(String(value), x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+                    return;
+                }
+
+                const { x, y, base, width, height } =
+                    element.getProps(['x', 'y', 'base', 'width', 'height'], true);
+                const label = dataset.label === 'Average score'
+                    ? value.toFixed(2)
+                    : dataset.label === 'Sentiment score'
+                        ? value.toFixed(1)
+                        : String(value);
+                const horizontal = chart.options.indexAxis === 'y';
+                const barLength = horizontal ? width : height;
+                const textWidth = context.measureText(label).width;
+                const position = horizontal && barLength < textWidth + 8
+                    ? { x: x + (x >= base ? textWidth / 2 + 5 : -(textWidth / 2 + 5)), y }
+                    : { x, y };
+
+                context.strokeText(label, position.x, position.y);
+                context.fillText(label, position.x, position.y);
+            });
+        });
+
+        context.restore();
+        return exportCanvas.toDataURL('image/png');
     }
 };
