@@ -118,6 +118,12 @@ a:hover {
   display: none;
 }
 
+.nav-brand .nav-logo {
+  display: block;
+  width: 110px;
+  height: auto;
+}
+
 .nav-brand small {
   font-family: var(--font-mono);
   font-style: normal;
@@ -3612,4 +3618,3 @@ body.widget-resizing {
 .voice-feed-delete:hover {
   color: var(--neg);
 }
-
