@@ -1010,12 +1010,12 @@ tbody tr:last-child td {
 /* ============================================================
    CHARTS
 
-   The number of columns adapts to the available space while keeping each
-   chart wide enough to read. Panels that benefit from extra room span the row.
+   Keep charts readable: two columns on desktop, one on narrow screens.
+   Wider panels span the row only when their content benefits from the space.
    ============================================================ */
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.1rem;
   margin-bottom: 0.85rem;
   align-items: start;
@@ -1041,6 +1041,12 @@ tbody tr:last-child td {
    row for better readability. */
 .chart-card.span-full {
   grid-column: 1 / -1;
+}
+
+@media (max-width: 780px) {
+  .chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Faculty "Top Comments": complaints and appreciations side by side, so both
