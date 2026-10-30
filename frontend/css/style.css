@@ -1010,12 +1010,12 @@ tbody tr:last-child td {
 /* ============================================================
    CHARTS
 
-   Two charts per row by default; wide cards explicitly span both columns.
-   Fixed tracks keep separate chart groups aligned consistently.
+   The number of columns adapts to the available space while keeping each
+   chart wide enough to read. Panels that benefit from extra room span the row.
    ============================================================ */
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
   gap: 1.1rem;
   margin-bottom: 0.85rem;
   align-items: start;
@@ -1040,17 +1040,7 @@ tbody tr:last-child td {
 /* Keep wider chart types, such as tables and course comparisons, on their own
    row for better readability. */
 .chart-card.span-full {
-  grid-column: span 2;
-}
-
-/* One column on a phone. Wide cards collapse with the grid. */
-@media (max-width: 780px) {
-  .chart-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .chart-card.span-full {
-    grid-column: span 1;
-  }
+  grid-column: 1 / -1;
 }
 
 /* Faculty "Top Comments": complaints and appreciations side by side, so both

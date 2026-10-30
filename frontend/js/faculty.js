@@ -158,7 +158,8 @@ const FACULTY = {
                     <i class="fas fa-file-pdf"></i> Download PDF
                 </button>` : ''}
             </div>
-            <!-- A shared two-column grid keeps chart cards aligned. -->
+            <!-- The responsive grid fits as many readable chart cards per row
+                 as the available width allows. -->
             <div class="chart-grid">
                 <div class="chart-card">
                     <h3><i class="fas fa-chart-pie"></i> Sentiment Split</h3>

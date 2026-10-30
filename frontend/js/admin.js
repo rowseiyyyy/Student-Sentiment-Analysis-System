@@ -2191,7 +2191,7 @@ predictionHtml +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Rating Distribution <span class="badge" data-fac-chart="rating_distribution" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Each submission&rsquo;s 1-5 average, stacked by that same submission&rsquo;s sentiment — so a tall 4-5 block that is mostly red is the case worth looking at. Comment-only submissions have no rating and are not counted. This is the same panel faculty see as their Rating Distribution chart.</p><div class="chart-container" id="chart-host-faculty-ratings"></div><p class="source-note" id="chart-faculty-ratings-summary" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.5rem 0 0;text-align:center;"></p></div>' +
             '</div>' +
             // ---- Per-department rating panels -----------------------------
-            // Related panels share the same two-column grid as the charts above.
+            // Related panels share the same responsive grid as the charts above.
             (deptCompareHidden
                 ? '<div class="chart-grid"><div class="chart-card span-full">' +
                     '<h3><i class="fas fa-table"></i> Rating Breakdown by Department</h3>' +
@@ -2203,7 +2203,7 @@ predictionHtml +
                         '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Where each department\'s submissions land on the 1-5 scale, all four side by side. Mass at the right-hand end means satisfied students; mass at the left means the opposite. Only submissions that answered the scale are counted.</p>' +
                         '<div class="chart-container" id="chart-host-rating-by-dept"></div>' +
                     '</div>' +
-                  '<div class="chart-card span-full">' +
+                  '<div class="chart-card">' +
                     '<h3><i class="fas fa-table"></i> Average Rating by Aspect</h3>' +
                     '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per question, listed strongest first, split into one table per department — &ldquo;Staff are weakest on safety, Facilities on cleanliness&rdquo;. Every department asks a different set of questions, so each table shows only what that department actually asked. n is how many students answered; a high score resting on very few answers is thin evidence.</p>' +
                     '<div id="aspect-tables"></div>' +
