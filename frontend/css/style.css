@@ -1010,42 +1010,33 @@ tbody tr:last-child td {
 /* ============================================================
    CHARTS
 
-   Keep charts readable: two columns on desktop, one on narrow screens.
-   Wider panels span the row only when their content benefits from the space.
+   Masonry-style columns keep charts readable while allowing shorter cards to
+   flow below their neighbors instead of leaving holes in a grid row.
    ============================================================ */
 .chart-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.1rem;
+  column-count: 2;
+  column-gap: 1.1rem;
   margin-bottom: 0.85rem;
-  align-items: start;
 }
 
-/* A grid child defaults to min-width:auto, which refuses to shrink below its
-   content: a chart legend, a long legend label or a wide table would push its
-   column wider than 1fr and shove the rest of the row out of alignment. Cards
-   in this grid are chart/table holders, so their content is allowed to be
-   narrower than the track -- the .table-container inside scrolls instead. */
+/* Keep each card intact within its column. Inline-block also gives the column
+   layout a definite card width for responsive Chart.js canvases. */
 .chart-grid > * {
-  min-width: 0;
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 1.1rem;
+  break-inside: avoid;
+  vertical-align: top;
 }
 
-/* .card carries a bottom margin for the stacked-page rhythm; inside the grid
-   the gap already spaces the cards, and the leftover margin would make the two
-   kinds of card sit at visibly different heights in the same row. */
-.chart-grid > .card {
-  margin-bottom: 0;
-}
-
-/* Keep wider chart types, such as tables and course comparisons, on their own
-   row for better readability. */
+/* Keep wide panels, such as course comparisons, readable across the dashboard. */
 .chart-card.span-full {
-  grid-column: 1 / -1;
+  column-span: all;
 }
 
 @media (max-width: 780px) {
   .chart-grid {
-    grid-template-columns: minmax(0, 1fr);
+    column-count: 1;
   }
 }
 
@@ -1822,9 +1813,6 @@ tbody tr:last-child td {
   }
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-  .chart-grid {
-    grid-template-columns: 1fr;
   }
   .rating-group {
     grid-template-columns: 1fr;
@@ -3014,8 +3002,7 @@ tbody tr:last-child td {
     height: 210px !important;
   }
 
-  /* The KPI row and the chart grids carry a 1.1rem gap; on a phone that is a
-     lot of dead space repeated down a single column. */
+  /* Tighten the gaps between cards and masonry columns on a phone. */
   .stats-grid,
   .chart-grid,
   .two-col {
