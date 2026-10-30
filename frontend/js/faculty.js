@@ -76,19 +76,6 @@ const FACULTY = {
         content.id = 'faculty-tab-content';
         container.appendChild(content);
 
-        // Apply the shared layout. Faculty get the geometry an administrator
-        // finalized and no controls: LAYOUT.mount() checks the role and
-        // returns before inserting any markup. Loading is what makes the
-        // finalized layout visible here at all.
-        if (typeof LAYOUT !== 'undefined') {
-            LAYOUT.load('page-faculty-dashboard').then(() => {
-                LAYOUT.mountWhenReady(
-                    document.getElementById('faculty-tab-content'),
-                    'page-faculty-dashboard'
-                );
-            });
-        }
-
         // Analytics is the only faculty view (the Overview tab was removed).
         // Anything else falls back to it rather than rendering a blank page —
         // e.g. a stale data-ftab value in a cached index.html.
@@ -104,9 +91,8 @@ const FACULTY = {
     // ---- Chart visibility (admin-managed, global for all faculty) --------
     // Removes the card of every chart the administrator has NOT shared with
     // faculty from the freshly rendered Analytics tab. Called synchronously
-    // right after the markup is inserted — before any await — so the layout
-    // mount never sees a card that is about to disappear, and a disabled
-    // chart renders nothing, fetches nothing and leaves no placeholder.
+    // right after the markup is inserted — before any await — so disabled
+    // charts are removed before any chart data is fetched.
     _applyChartVisibility(enabled) {
         // chart key -> the element that anchors its card.
         const HOSTS = {
@@ -172,11 +158,7 @@ const FACULTY = {
                     <i class="fas fa-file-pdf"></i> Download PDF
                 </button>` : ''}
             </div>
-            <!-- One grid for every panel below, not one per panel: separate
-                 grids each resolved their own auto-fit, so a lone card
-                 stretched to the full page width and left dead space beside
-                 it. Wide cards opt into span-2 / span-3 and the dense flow
-                 backfills the columns they leave free. -->
+            <!-- A shared two-column grid keeps chart cards aligned. -->
             <div class="chart-grid">
                 <div class="chart-card">
                     <h3><i class="fas fa-chart-pie"></i> Sentiment Split</h3>
@@ -199,12 +181,12 @@ const FACULTY = {
                     <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per rating aspect, strongest at the top — the &ldquo;strong on clarity, weak on punctuality&rdquo; view. Hover a bar for how many students answered that aspect.</p>
                     <div class="chart-container" id="faculty-chart-aspects"></div>
                 </div>
-                <div class="chart-card span-3">
+                <div class="chart-card span-full">
                     <h3><i class="fas fa-book"></i> Sentiment by Courses</h3>
                     <p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so bars to the right of zero are net-positive courses. Bars are sorted best to worst, and only submissions that named a course are counted.</p>
                     <div class="chart-container" id="faculty-chart-courses"></div>
                 </div>
-                <div class="chart-card span-3">
+                <div class="chart-card span-full">
                     <h3><i class="fas fa-comment-dots"></i> Top Comments</h3>
                     <!-- Complaints on the left, appreciations on the right
                          (.faculty-comments-grid); each column scrolls on its
@@ -229,9 +211,7 @@ const FACULTY = {
                 </div>`;
             return;
         }
-        // Disable-by-removal happens here, synchronously — no await between
-        // the innerHTML above and this call, so the layout mount (which runs
-        // once LAYOUT.load resolves) only ever sees the cards that stay.
+        // Disabled charts are removed before any chart data is fetched.
         this._applyChartVisibility(enabled);
 
         showLoading('Loading analytics...');

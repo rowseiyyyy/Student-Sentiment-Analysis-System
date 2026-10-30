@@ -239,8 +239,8 @@
                     <div class="alert-panel hidden" id="alert-panel"></div>
                 </div>
 
-                <!-- Account menu: identity plus the three per-session controls
-                     (faculty lens, layout editor, close file). They were inline
+                <!-- Account menu: identity plus the two per-session controls
+                     (faculty lens and close file). They were inline
                      in the nav row and consumed ~300px, which left the five
                      tabs scrolling sideways with the active tab off screen.
                      A single menu button gives the tabs their width back. -->
@@ -264,9 +264,6 @@
                             <span>Faculty view</span>
                             <span class="account-menu-state" id="faculty-preview-state">Off</span>
                         </button>
-                        <!-- Layout editor: rendered by LAYOUT.mountToolbar() for
-                             administrators only, so faculty never see it. -->
-                        <span id="layout-toolbar-slot"></span>
                         <div class="account-menu-sep"></div>
                         <button class="account-menu-item account-menu-danger"
                             onclick="ADMIN.logout()">
@@ -375,7 +372,6 @@
          instead of silently calling the wrong backend. -->
     <script src="js/utils.js"></script>
     <script src="js/api.js"></script>
-    <script src="js/layout.js"></script>
 <script src="js/charts.js"></script>
     <script src="js/bulletin.js"></script>
     <script src="js/student.js"></script>

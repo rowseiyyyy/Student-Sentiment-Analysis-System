@@ -291,7 +291,7 @@ var ADMIN = {
     },
 
     // ---- account menu ---------------------------------------------------
-    // Holds identity plus the faculty lens, the layout editor and Close file.
+    // Holds identity plus the faculty lens and Close file.
     // These were inline in the nav row and consumed ~300px, which left the tab
     // strip scrolling sideways with the active tab off screen.
     //
@@ -346,22 +346,6 @@ var ADMIN = {
         tabContent.id = 'admin-tab-content';
         content.appendChild(tabContent);
 
-        // Apply the shared, admin-editable layout. LAYOUT.mount() reads the
-        // saved geometry and, for an administrator only, attaches the resize
-        // handles. Faculty and students get the same geometry with no
-        // controls in the DOM at all. mount() is async because the geometry
-        // comes from the API, but the tab renders immediately and the layout
-        // settles in behind it -- a slow or failed layout fetch must never
-        // delay or blank the dashboard.
-        if (typeof LAYOUT !== 'undefined') {
-            LAYOUT.mountToolbar();
-            LAYOUT.load('page-admin-dashboard').then(function () {
-                LAYOUT.mountWhenReady(
-                    document.getElementById('admin-tab-content'),
-                    'page-admin-dashboard'
-                );
-            });
-        }
         switch(tab) {
             case 'overview': this.renderOverview(tabContent); break;
             case 'responses': this.renderResponses(tabContent); break;
@@ -705,14 +689,10 @@ var ADMIN = {
                     kpiCard({ tone: 'red', icon: 'fa-frown', value: overall.breakdown.negative || 0, label: 'Negative Feedbacks', spark: sparkNeg, badge: trendNeg, pct: pct(overall.breakdown.negative_pct), caption: scopeNote + ' · badge compares ' + trendPeriod + ' vs prior month' }) +
                     kpiCard({ tone: 'blue', icon: 'fa-file-alt', value: overall.evaluation_volume || 0, label: 'Total Evaluations', spark: sparkTot, badge: trendTot, caption: 'Counted in ' + scopeNote }) +
                 '</div>' +
-                /* One 3-column grid for the whole tab. The cards are sized so
-                   every row is completely full: 2 + 1, then 2 + 1. Previously
-                   a lone .chart-grid held Term-over-Term by itself (a
-                   one-third card beside two thirds of nothing) and a .two-col
-                   put the comparison chart and the two department/model cards
-                   in mismatched columns, which is what read as "messy". */
-                '<div class="chart-grid overview-grid">' +
-                    '<div class="chart-card span-2">' +
+                /* Keep related overview charts in one consistent two-column
+                   grid so cards align instead of changing widths by section. */
+                '<div class="chart-grid">' +
+                    '<div class="chart-card">' +
                         '<h3><i class="fas fa-graduation-cap"></i> Term-over-Term</h3>' +
                         '<p class="source-note">The grading period in progress versus the one immediately before it, resolved from today\'s date through the same academic calendar that drives the Analytics term chart. During a break or enrollment month there is no active period, so the two most recently completed periods are compared instead and the caption below says so.</p>' +
                         termCmpBodyHtml +
@@ -722,7 +702,7 @@ var ADMIN = {
                         '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;">Evaluation forms per department, in ' + scopeNote + ', as one line per sentiment (<span style="color:var(--pos);font-weight:600;">green</span> = Positive, <span style="color:var(--neu);font-weight:600;">yellow</span> = Neutral, <span style="color:var(--neg);font-weight:600;">red</span> = Negative). Departments are a fixed four-point axis, so read the heights at each category rather than the slope between them; hover any point for that department&rsquo;s exact split.' +
                         '<div class="chart-container" style="height:300px;" id="chart-host-by-department"></div>' +
                     '</div>' +
-                    '<div class="chart-card span-2">' +
+                    '<div class="chart-card">' +
                         '<h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3>' +
                         '<p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .6rem;"><strong>Not submission data.</strong> Accuracy &amp; F1 score measured on the held-out test split from each algorithm\'s most recent training run — one bar pair per algorithm\'s latest run, independent of how many students have submitted evaluations since.' +
                         '<div class="chart-container"><canvas id="chart-model-perf"></canvas></div>' +
@@ -2211,36 +2191,28 @@ predictionHtml +
                 '<div class="chart-card"><h3><i class="fas fa-chart-bar"></i> Rating Distribution <span class="badge" data-fac-chart="rating_distribution" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Each submission&rsquo;s 1-5 average, stacked by that same submission&rsquo;s sentiment — so a tall 4-5 block that is mostly red is the case worth looking at. Comment-only submissions have no rating and are not counted. This is the same panel faculty see as their Rating Distribution chart.</p><div class="chart-container" id="chart-host-faculty-ratings"></div><p class="source-note" id="chart-faculty-ratings-summary" style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);margin:.5rem 0 0;text-align:center;"></p></div>' +
             '</div>' +
             // ---- Per-department rating panels -----------------------------
-            // Rating distribution and per-aspect means side by side across all
-            // four departments: the leadership-level "where are we weak" view.
-            // Suppressed — with the reason shown — whenever the scope is pinned
-            // to a single department, because then there is nothing to compare.
+            // Related panels share the same two-column grid as the charts above.
             (deptCompareHidden
-                ? '<div class="chart-card">' +
+                ? '<div class="chart-grid"><div class="chart-card span-full">' +
                     '<h3><i class="fas fa-table"></i> Rating Breakdown by Department</h3>' +
                     '<p class="text-muted" style="font-size:.85rem;">Department comparison is hidden while the scope is narrowed to one department (' + scopeNote + '). Clear the department filter — or switch off the faculty preview — to compare all four.</p>' +
-                  '</div>'
-                : '<div class="chart-card">' +
+                  '</div></div>'
+                : '<div class="chart-grid">' +
+                  '<div class="chart-card">' +
                         '<h3><i class="fas fa-chart-bar"></i> Rating Distribution by Department</h3>' +
                         '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Where each department\'s submissions land on the 1-5 scale, all four side by side. Mass at the right-hand end means satisfied students; mass at the left means the opposite. Only submissions that answered the scale are counted.</p>' +
                         '<div class="chart-container" id="chart-host-rating-by-dept"></div>' +
                     '</div>' +
-                  // Four per-department tables, one department each. Two columns
-                  // wide: one column would crush them, and the dense flow
-                  // backfills the remaining column with the next card.
-                  '<div class="chart-card span-2">' +
+                  '<div class="chart-card span-full">' +
                     '<h3><i class="fas fa-table"></i> Average Rating by Aspect</h3>' +
                     '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per question, listed strongest first, split into one table per department — &ldquo;Staff are weakest on safety, Facilities on cleanliness&rdquo;. Every department asks a different set of questions, so each table shows only what that department actually asked. n is how many students answered; a high score resting on very few answers is thin evidence.</p>' +
                     '<div id="aspect-tables"></div>' +
                   '</div>' +
-                  // A bar per course reads better wide, and it is the last
-                  // chart before the comment lists, so nothing follows to
-                  // backfill beside it: it takes the full row.
-                  '<div class="chart-card span-3"><h3><i class="fas fa-book"></i> Sentiment by Courses <span class="badge" data-fac-chart="sentiment_courses" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>') +
-            '</div>' +
-            '<div class="two-col">' +
-                '<div class="card"><div class="card-header"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints <span class="badge" data-fac-chart="top_comments" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Negative comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-complaints-list"></div></div>' +
-                '<div class="card"><div class="card-header"><h3><i class="fas fa-star"></i> Top Appreciations <span class="badge" data-fac-chart="top_comments" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3></div><p class="source-note" style="color:var(--ink-faint);margin:.15rem .75rem .5rem;">Highest-confidence Positive comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-appreciations-list"></div></div>' +
+                  '<div class="chart-card span-full"><h3><i class="fas fa-book"></i> Sentiment by Courses <span class="badge" data-fac-chart="sentiment_courses" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>' +
+                '</div>') +
+            '<div class="chart-grid">' +
+                '<div class="chart-card"><h3><i class="fas fa-exclamation-circle"></i> Top Complaints <span class="badge" data-fac-chart="top_comments" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Highest-confidence Negative comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-complaints-list"></div></div>' +
+                '<div class="chart-card"><h3><i class="fas fa-star"></i> Top Appreciations <span class="badge" data-fac-chart="top_comments" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="color:var(--ink-faint);margin:.15rem 0 .5rem;">Highest-confidence Positive comments, drawn verbatim from submitted evaluations in ' + scopeNote + '.</p><div id="top-appreciations-list"></div></div>' +
             '</div>';
 
         showLoading('Loading analytics...');
