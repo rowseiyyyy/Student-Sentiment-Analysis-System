@@ -2203,11 +2203,7 @@ predictionHtml +
                         '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Where each department\'s submissions land on the 1-5 scale, all four side by side. Mass at the right-hand end means satisfied students; mass at the left means the opposite. Only submissions that answered the scale are counted.</p>' +
                         '<div class="chart-container" id="chart-host-rating-by-dept"></div>' +
                     '</div>' +
-                  '<div class="chart-card">' +
-                    '<h3><i class="fas fa-table"></i> Average Rating by Aspect</h3>' +
-                    '<p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Mean 1-5 score per question, listed strongest first, split into one table per department — &ldquo;Staff are weakest on safety, Facilities on cleanliness&rdquo;. Every department asks a different set of questions, so each table shows only what that department actually asked. n is how many students answered; a high score resting on very few answers is thin evidence.</p>' +
-                    '<div id="aspect-tables"></div>' +
-                  '</div>' +
+                  '<div id="aspect-tables" class="aspect-tables"></div>' +
                   '<div class="chart-card span-full"><h3><i class="fas fa-book"></i> Sentiment by Courses <span class="badge" data-fac-chart="sentiment_courses" style="display:none;margin-left:.5rem;font-size:.6rem;vertical-align:middle;"></span></h3><p class="source-note" style="font-family:var(--font-mono);font-style:italic;color:var(--ink-faint);margin:.15rem 0 .5rem;">Net sentiment score per course: (Positive minus Negative) divided by that course total submissions, times 100. Spans -100 (all negative) through +100 (all positive), so 0 means positives and negatives cancel out. Bars are sorted best to worst. Only submissions that named a course are counted, and a course resting on a handful of submissions can swing to the extremes.</p><div class="chart-container" id="chart-host-course-sentiment"></div></div>' +
                 '</div>') +
             '<div class="chart-grid">' +
@@ -2344,10 +2340,9 @@ predictionHtml +
                         return (d.aspects && d.aspects.points || []).length;
                     });
                     if (!withAspects.length) {
-                        tablesHost.innerHTML = '<p class="text-muted text-center">No aspect data available.</p>';
+                        tablesHost.innerHTML = '<div class="chart-card"><p class="text-muted text-center">No aspect data available.</p></div>';
                     } else {
-                        tablesHost.innerHTML = '<div class="aspect-tables">' +
-                            withAspects.map(function(d) {
+                        tablesHost.innerHTML = withAspects.map(function(d) {
                                 var points = d.aspects.points;
                                 // Mean of the per-aspect means, weighted by how
                                 // many students answered each one, so the
@@ -2360,10 +2355,12 @@ predictionHtml +
                                     n += p.responses;
                                 });
                                 var overall = n ? (sum / n) : null;
-                                return '<table class="aspect-table">' +
-                                    '<caption>' + escapeHtml(d.label) +
+                                return '<div class="chart-card aspect-department-card">' +
+                                    '<h3><i class="fas fa-table"></i> ' + escapeHtml(d.label) + '</h3>' +
+                                    '<p class="source-note">Average rating by aspect' +
                                         (overall === null ? '' : ' · ' + overall.toFixed(2) + ' overall') +
-                                    '</caption>' +
+                                    '</p>' +
+                                    '<table class="aspect-table">' +
                                     '<thead><tr><th>Question</th><th>Avg</th><th class="col-n">n</th></tr></thead>' +
                                     '<tbody>' +
                                     points.map(function(p) {
@@ -2376,9 +2373,8 @@ predictionHtml +
                                                 p.average.toFixed(2) + '</td>' +
                                             '<td class="col-n">' + p.responses + '</td></tr>';
                                     }).join('') +
-                                    '</tbody></table>';
-                            }).join('') +
-                            '</div>';
+                                    '</tbody></table></div>';
+                        }).join('');
                     }
                 }
             }

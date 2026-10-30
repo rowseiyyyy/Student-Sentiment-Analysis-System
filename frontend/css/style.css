@@ -1010,33 +1010,41 @@ tbody tr:last-child td {
 /* ============================================================
    CHARTS
 
-   Masonry-style columns keep charts readable while allowing shorter cards to
-   flow below their neighbors instead of leaving holes in a grid row.
+   A consistent two-column grid keeps charts readable and aligns related
+   panels. Detailed department tables render as separate cards so they can
+   share rows with charts instead of creating one oversized panel.
    ============================================================ */
 .chart-grid {
-  column-count: 2;
-  column-gap: 1.1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.1rem;
   margin-bottom: 0.85rem;
+  align-items: start;
 }
 
-/* Keep each card intact within its column. Inline-block also gives the column
-   layout a definite card width for responsive Chart.js canvases. */
 .chart-grid > * {
-  display: inline-block;
-  width: 100%;
-  margin: 0 0 1.1rem;
-  break-inside: avoid;
-  vertical-align: top;
+  min-width: 0;
 }
 
-/* Keep wide panels, such as course comparisons, readable across the dashboard. */
+.chart-grid > .chart-card {
+  margin-bottom: 0;
+}
+
 .chart-card.span-full {
-  column-span: all;
+  grid-column: 1 / -1;
+}
+
+.aspect-tables {
+  display: contents;
+}
+
+.chart-grid > .aspect-tables > * {
+  min-width: 0;
 }
 
 @media (max-width: 780px) {
   .chart-grid {
-    column-count: 1;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1904,37 +1912,10 @@ tbody tr:last-child td {
 /* The "Faculty view" lens toggle now lives in the account menu as an
    .account-menu-item, so the old navbar-pill styling is gone. */
 
-/* ============================================================
-   AVERAGE RATING BY ASPECT — one table per department
-   Each department asks a different set of questions (Faculty
-   rates clarity, Staff rates safety, Facilities rates
-   cleanliness), so a single combined table is mostly em-dashes:
-   every row has one filled cell and three empty ones. One
-   table per department drops the dead columns entirely and
-   keeps every rating on screen.
-   ============================================================ */
-.aspect-tables {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.1rem;
-}
-
 .aspect-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.78rem;
-}
-
-.aspect-table caption {
-  caption-side: top;
-  text-align: left;
-  padding-bottom: 0.4rem;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
 }
 
 .aspect-table th,
