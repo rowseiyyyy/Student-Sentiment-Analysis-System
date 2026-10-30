@@ -10,14 +10,15 @@ function showToast(message, type = 'info', duration = 4000) {
     toast.className = `toast ${type}`;
     
     const icons = {
-        success: '✓',
-        error: '✕',
-        warning: '⚠',
-        info: 'ℹ'
+        success: 'fa-check',
+        error: 'fa-xmark',
+        warning: 'fa-triangle-exclamation',
+        info: 'fa-circle-info'
     };
     
-    const icon = document.createElement('span');
-    icon.textContent = icons[type] || icons.info;
+    const icon = document.createElement('i');
+    icon.className = `fas ${icons[type] || icons.info}`;
+    icon.setAttribute('aria-hidden', 'true');
     const content = document.createElement('span');
     content.textContent = message;
     toast.append(icon, content);

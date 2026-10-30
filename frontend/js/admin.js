@@ -684,9 +684,9 @@ var ADMIN = {
                 '</div>' +
                 this.scopeBanner() +
                 '<div class="stats-grid">' +
-                    kpiCard({ tone: 'green', icon: 'fa-smile', value: overall.breakdown.positive || 0, label: 'Positive Feedbacks', spark: sparkPos, badge: trendPos, pct: pct(overall.breakdown.positive_pct), caption: scopeNote }) +
-                    kpiCard({ tone: 'yellow', icon: 'fa-meh', value: overall.breakdown.neutral || 0, label: 'Neutral Feedbacks', spark: sparkNeu, badge: trendNeu, pct: pct(overall.breakdown.neutral_pct), caption: scopeNote }) +
-                    kpiCard({ tone: 'red', icon: 'fa-frown', value: overall.breakdown.negative || 0, label: 'Negative Feedbacks', spark: sparkNeg, badge: trendNeg, pct: pct(overall.breakdown.negative_pct), caption: scopeNote + ' · badge compares ' + trendPeriod + ' vs prior month' }) +
+                    kpiCard({ tone: 'green', icon: 'fa-plus', value: overall.breakdown.positive || 0, label: 'Positive Feedbacks', spark: sparkPos, badge: trendPos, pct: pct(overall.breakdown.positive_pct), caption: scopeNote }) +
+                    kpiCard({ tone: 'yellow', icon: 'fa-equals', value: overall.breakdown.neutral || 0, label: 'Neutral Feedbacks', spark: sparkNeu, badge: trendNeu, pct: pct(overall.breakdown.neutral_pct), caption: scopeNote }) +
+                    kpiCard({ tone: 'red', icon: 'fa-minus', value: overall.breakdown.negative || 0, label: 'Negative Feedbacks', spark: sparkNeg, badge: trendNeg, pct: pct(overall.breakdown.negative_pct), caption: scopeNote + ' · badge compares ' + trendPeriod + ' vs prior month' }) +
                     kpiCard({ tone: 'blue', icon: 'fa-file-alt', value: overall.evaluation_volume || 0, label: 'Total Evaluations', spark: sparkTot, badge: trendTot, caption: 'Counted in ' + scopeNote }) +
                 '</div>' +
                 /* Keep related overview charts in one consistent two-column
@@ -1476,9 +1476,9 @@ var ADMIN = {
         var pct = function(n) { return b.total ? ((n / b.total) * 100).toFixed(1) + '%' : '0%'; };
         el.innerHTML = '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:1.1rem;">' +
             card('fa-inbox', 'blue', (b.total || 0), 'Total Responses', scopeLabel) +
-            card('fa-smile', 'green', pos, 'Positive', pct(pos) + ' of all responses') +
-            card('fa-meh', 'yellow', neu, 'Neutral', pct(neu) + ' of all responses') +
-            card('fa-frown', 'red', neg, 'Negative', pct(neg) + ' of all responses') +
+            card('fa-plus', 'green', pos, 'Positive', pct(pos) + ' of all responses') +
+            card('fa-equals', 'yellow', neu, 'Neutral', pct(neu) + ' of all responses') +
+            card('fa-minus', 'red', neg, 'Negative', pct(neg) + ' of all responses') +
             card('fa-triangle-exclamation', 'yellow', (reviewCount || 0), 'Needs Review', 'Likert / sentiment mismatches') +
         '</div>';
     },

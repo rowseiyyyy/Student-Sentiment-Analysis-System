@@ -40,7 +40,7 @@ const STUDENT = {
         this._justSubmitted = false;
         APP.goToPage("page-student-eval");
         document.getElementById("nav-student").style.display = "flex";
-        document.getElementById("badge-student").textContent = "\u{1F393} Anonymous";
+        document.getElementById("badge-student").textContent = "Anonymous";
         document.getElementById("student-id-disp").textContent = "";
 
         const formArea = document.getElementById("student-form-area");

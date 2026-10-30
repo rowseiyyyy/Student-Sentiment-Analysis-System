@@ -65,7 +65,7 @@ const FACULTY = {
     showDashboard() {
         APP.goToPage('page-faculty-dashboard');
         document.getElementById('nav-faculty').style.display = 'flex';
-        document.getElementById('badge-faculty').textContent = '\u{1F3EB} ' + (this.currentUser ? this.currentUser.full_name : 'Faculty');
+        document.getElementById('badge-faculty').textContent = this.currentUser ? this.currentUser.full_name : 'Faculty';
         this.renderFacultyTab('analytics');
     },
 
