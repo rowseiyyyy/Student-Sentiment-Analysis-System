@@ -175,6 +175,34 @@ def test_forgot_password_returns_token(client, db_session):
     assert response.json().get("reset_token")
 
 
+def test_forgot_password_smtp_connection_error_returns_service_unavailable(
+    client, db_session, monkeypatch
+):
+    from app.core.config import settings
+    from app.utils import email
+
+    _make_user(db_session, "reset-smtp@asiatech.edu.ph", "SecurePass123", UserRole.ADMINISTRATOR)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.com")
+    monkeypatch.setattr(settings, "SMTP_USERNAME", "mailer@example.com")
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", "test-password")
+    monkeypatch.setattr(settings, "SMTP_FROM_EMAIL", "no-reply@example.com")
+
+    def fail_to_connect(*args, **kwargs):
+        raise ConnectionRefusedError("SMTP connection refused")
+
+    monkeypatch.setattr(email.smtplib, "SMTP", fail_to_connect)
+    response = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "reset-smtp@asiatech.edu.ph"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Password reset email is currently unavailable. Please try again later."
+    )
+
+
 def test_reset_password_flow(client, db_session):
     _make_user(db_session, "flow@asiatech.edu.ph", "OldPass123", UserRole.FACULTY)
     forgot = client.post("/api/v1/auth/forgot-password", json={"email": "flow@asiatech.edu.ph"})

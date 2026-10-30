@@ -42,7 +42,7 @@ def send_password_reset_email(to_email: str, reset_url: str) -> None:
                 smtp.starttls()
             smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             smtp.send_message(message)
-    except smtplib.SMTPException as exc:
+    except (smtplib.SMTPException, OSError) as exc:
         logger.exception("Failed to send password reset email to %s", to_email)
         raise RuntimeError("Password reset email could not be sent. Please try again later.") from exc
 

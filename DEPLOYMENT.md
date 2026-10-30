@@ -78,7 +78,11 @@ proxy_send_timeout 300s;
 
 - Keep JWT secret in environment variables or a secrets manager.
 - Do not expose password-reset tokens in API responses in production.
-- Use a real mail provider for password reset emails.
+- Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+  `SMTP_FROM_EMAIL`, and `SMTP_USE_TLS` from a real mail provider. The default
+  is port 587 with STARTTLS; ensure the provider and deployment host permit
+  outbound SMTP connections. Reset requests return a temporary-unavailable
+  response if the mail provider cannot be reached.
 
 ## 6. Model and inference setup
 
