@@ -674,7 +674,7 @@ var ADMIN = {
                     '</div>' +
                     '<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">' +
                         '<div class="date-note">Compiled ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '</div>' +
-                        '<button class="btn btn-success" onclick="ADMIN.exportSummaryPDF()"><i class="fas fa-file-pdf"></i> Download Summary PDF</button>' +
+                        '<button class="btn btn-success" onclick="ADMIN.exportSummaryPDF()"><i class="fas fa-file-pdf"></i> Download Charts &amp; Analysis PDF</button>' +
                     '</div>' +
                 '</div>' +
                 '<div class="data-lineage-banner" style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:var(--paper-alt,#f1f1ec);border:1px solid #E5E7EB;padding:.4rem .6rem;margin-bottom:.75rem;">' +
@@ -770,51 +770,147 @@ var ADMIN = {
             var root = document.getElementById('admin-tab-content');
             if (!root) throw new Error('No dashboard report is available to export.');
 
-            var cards = Array.prototype.slice.call(root.querySelectorAll('.chart-card')).filter(function(card) {
-                var canvas = card.querySelector('canvas');
-                return !!canvas && canvas.width > 0 && canvas.height > 0;
+            var sections = Array.prototype.slice.call(root.querySelectorAll('.chart-card')).map(function(card) {
+                var heading = card.querySelector('h3');
+                var canvases = Array.prototype.slice.call(card.querySelectorAll('canvas')).filter(function(canvas) {
+                    return canvas.width > 0 && canvas.height > 0;
+                });
+                var notes = Array.prototype.slice.call(card.querySelectorAll('.source-note, .text-muted'))
+                    .map(function(note) { return note.textContent.trim().replace(/\s+/g, ' '); })
+                    .filter(Boolean);
+                var tables = Array.prototype.slice.call(card.querySelectorAll('table')).map(function(table) {
+                    return Array.prototype.slice.call(table.querySelectorAll('tr')).map(function(row) {
+                        return Array.prototype.slice.call(row.querySelectorAll('th, td'))
+                            .map(function(cell) { return cell.textContent.trim().replace(/\s+/g, ' '); })
+                            .filter(Boolean).join(' | ');
+                    }).filter(Boolean).join('\n');
+                }).filter(Boolean);
+                return {
+                    title: heading ? heading.textContent.trim().replace(/\s+/g, ' ') : 'Dashboard analysis',
+                    canvases: canvases,
+                    analysis: notes.concat(tables).join('\n\n')
+                };
+            }).filter(function(section) {
+                return section.canvases.length || section.analysis;
             });
-            if (!cards.length) throw new Error('No charts are ready to include in the summary PDF.');
+            if (!sections.length) throw new Error('No charts or analysis are ready to include in the PDF.');
 
             var pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
             var pageWidth = pdf.internal.pageSize.getWidth();
             var pageHeight = pdf.internal.pageSize.getHeight();
             var today = new Date().toISOString().slice(0, 10);
-            var title = this.currentTab === 'analytics' ? 'Admin Analytics Summary' : 'Admin Dashboard Summary';
+            var title = this.currentTab === 'analytics' ? 'Admin Analytics Report' : 'Admin Overview Report';
             var scope = this.scopeLabel ? this.scopeLabel() : 'all departments · all-time';
+            pdf.setProperties({ title: title, subject: 'Admin charts and analysis', creator: 'EchoSent' });
 
-            cards.forEach(function(card, index) {
-                if (index > 0) pdf.addPage();
-
-                var canvas = card.querySelector('canvas');
-                var heading = card.querySelector('h3');
-                var pageTitle = heading ? heading.textContent.trim().replace(/\s+/g, ' ') : 'Dashboard chart';
-                var scale = Math.min((pageWidth - 26) / canvas.width, (pageHeight - 50) / canvas.height);
-                var imageWidth = canvas.width * scale;
-                var imageHeight = canvas.height * scale;
-
-                if (index === 0) {
-                    pdf.setFont('helvetica', 'bold');
-                    pdf.setFontSize(18);
-                    pdf.text(title, 14, 14);
-                    pdf.setFont('helvetica', 'normal');
-                    pdf.setFontSize(9);
-                    pdf.text('Scope: ' + scope + ' · Compiled ' + today, 14, 22);
-                }
-
+            function reportHeader(pageTitle) {
                 pdf.setFont('helvetica', 'bold');
-                pdf.setFontSize(12);
-                pdf.text(pageTitle, 14, index === 0 ? 32 : 16);
-                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 14, index === 0 ? 38 : 24, imageWidth, imageHeight);
+                pdf.setFontSize(10);
+                pdf.text(title, 14, 12);
                 pdf.setFont('helvetica', 'normal');
                 pdf.setFontSize(8);
-                pdf.text('Page ' + (index + 1) + ' of ' + cards.length, pageWidth - 18, pageHeight - 8, { align: 'right' });
+                pdf.text('Scope: ' + scope + ' · Compiled ' + today, 14, 18);
+                if (pageTitle) {
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(13);
+                    pdf.text(pageTitle, 14, 29);
+                }
+            }
+
+            function addAnalysis(text, y, sectionTitle) {
+                if (!text) return y;
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(9);
+                pdf.text('Analysis', 14, y);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                var paragraphs = text.split(/\n+/).map(function(paragraph) {
+                    return pdf.splitTextToSize(paragraph, pageWidth - 28);
+                });
+                y += 5;
+                paragraphs.forEach(function(lines) {
+                    lines.forEach(function(line) {
+                        if (y > pageHeight - 16) {
+                            pdf.addPage();
+                            reportHeader(sectionTitle + ' (continued)');
+                            y = 38;
+                        }
+                        pdf.text(line, 14, y);
+                        y += 4;
+                    });
+                    y += 2;
+                });
+                return y;
+            }
+
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(19);
+            pdf.text(title, 14, 22);
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(10);
+            pdf.text('Charts and analysis for ' + scope, 14, 31);
+            pdf.text('Compiled ' + today, 14, 38);
+
+            var metrics = Array.prototype.slice.call(root.querySelectorAll('.stats-grid .stat-card'));
+            if (metrics.length) {
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(12);
+                pdf.text('Summary', 14, 54);
+                metrics.forEach(function(metric, index) {
+                    var value = metric.querySelector('.stat-info h3, h3');
+                    var label = metric.querySelector('.stat-info p, p');
+                    var caption = metric.querySelector('.source-note, small');
+                    var column = index % 2;
+                    var row = Math.floor(index / 2);
+                    var x = 14 + column * 136;
+                    var y = 64 + row * 22;
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(11);
+                    pdf.text((value ? value.textContent.trim() : '—') + '  ' +
+                        (label ? label.textContent.trim().replace(/\s+/g, ' ') : 'Metric'), x, y);
+                    if (caption && caption.textContent.trim()) {
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.setFontSize(8);
+                        pdf.text(pdf.splitTextToSize(caption.textContent.trim().replace(/\s+/g, ' '), 128), x, y + 5);
+                    }
+                });
+            }
+
+            sections.forEach(function(section) {
+                if (section.canvases.length) {
+                    section.canvases.forEach(function(canvas) {
+                        pdf.addPage();
+                        reportHeader(section.title);
+                        var maxWidth = pageWidth - 28;
+                        var maxHeight = 126;
+                        var ratio = canvas.width / canvas.height;
+                        var imageWidth = Math.min(maxWidth, maxHeight * ratio);
+                        var imageHeight = imageWidth / ratio;
+                        var imageX = (pageWidth - imageWidth) / 2;
+                        var imageY = 36;
+                        var image = FACULTY._chartImageWithDataLabels(canvas, imageWidth, imageHeight);
+                        pdf.addImage(image, 'PNG', imageX, imageY, imageWidth, imageHeight);
+                        addAnalysis(section.analysis, imageY + imageHeight + 8, section.title);
+                    });
+                } else {
+                    pdf.addPage();
+                    reportHeader(section.title);
+                    addAnalysis(section.analysis, 40, section.title);
+                }
             });
 
-            pdf.save('admin-summary-' + today + '.pdf');
-            showToast('Summary PDF downloaded successfully.', 'success');
+            var pageCount = pdf.internal.getNumberOfPages();
+            for (var page = 1; page <= pageCount; page++) {
+                pdf.setPage(page);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                pdf.text('Page ' + page + ' of ' + pageCount, pageWidth - 14, pageHeight - 8, { align: 'right' });
+            }
+
+            pdf.save('admin-charts-analysis-' + today + '.pdf');
+            showToast('Charts and analysis PDF downloaded successfully.', 'success');
         } catch (error) {
-            showToast('Summary PDF export failed: ' + error.message, 'error');
+            showToast('Charts and analysis PDF export failed: ' + error.message, 'error');
         }
     },
 
@@ -2089,7 +2185,7 @@ predictionHtml +
                     // opens the panel with the checkboxes, select-all / clear-all
                     // and Save. The badges on the cards below show the result.
                     '<button class="btn btn-outline" onclick="ADMIN.openFacultyAccess()"><i class="fas fa-user-shield"></i> Manage faculty access</button>' +
-                    '<button class="btn btn-success" onclick="ADMIN.exportSummaryPDF()"><i class="fas fa-file-pdf"></i> Download Summary PDF</button>' +
+                    '<button class="btn btn-success" onclick="ADMIN.exportSummaryPDF()"><i class="fas fa-file-pdf"></i> Download Charts &amp; Analysis PDF</button>' +
                 '</div>' +
             '</div>' +
             this.scopeBanner() +
