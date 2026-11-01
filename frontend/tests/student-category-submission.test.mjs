@@ -96,6 +96,14 @@ await test('choosing a category renders only that category form', () => {
     assert.match(markup, /submitEvaluation\('facilities'\)/);
 });
 
+await test('legacy tab listener can still open the selected category', () => {
+    const { student, elements } = createStudent();
+    student.staffFormContent = () => '<p>Staff-only questions</p>';
+    student.renderFormTab('staff');
+    assert.match(elements['eval-form-content'].innerHTML, /Staff-only questions/);
+    assert.doesNotMatch(elements['eval-form-content'].innerHTML, /Facilities-only questions/);
+});
+
 await test('submitting one category sends one request and clears only its draft', async () => {
     const { student, requests, storage, APP } = createStudent();
     student.currentCategoryIndex = student.categories.indexOf('facilities');

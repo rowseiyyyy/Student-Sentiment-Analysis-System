@@ -88,6 +88,10 @@ const STUDENT = {
         this.renderCategoryForm();
     },
 
+    renderFormTab(category) {
+        this.openCategory(category);
+    },
+
     renderCategoryForm() {
         const container = document.getElementById("eval-form-content");
         const selection = document.getElementById("eval-selection");
