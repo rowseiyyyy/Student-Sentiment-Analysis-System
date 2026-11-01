@@ -1,14 +1,16 @@
 /**
  * Asiatech Sentiment Analysis - Student Module
- * Multi-step evaluation with Next/Back navigation
+ * Individual category evaluations
  */
 
 const STUDENT = {
     currentCourse: null,
     currentYearLevel: null,
-    currentStep: 0,
-    categories: ["professor", "staff", "facilities", "payments"],
+    currentCategoryIndex: 0,
+    categories: ["professor", "facilities", "staff", "payments"],
     categoryNames: {"professor": "Professors", "staff": "Staff", "facilities": "Facilities", "payments": "Payments"},
+    categoryLabels: {"professor": "Professor", "staff": "Staff", "facilities": "Facilities", "payments": "Payments"},
+    categoryIcons: {"professor": "fa-chalkboard-teacher", "staff": "fa-users", "facilities": "fa-building", "payments": "fa-credit-card"},
     evaluations: {},
     _justSubmitted: false,
 
@@ -21,21 +23,21 @@ const STUDENT = {
     },
 
     logout() {
-        // Persist the visible step before leaving, unless the form was just
+        // Persist the visible category before leaving, unless the form was just
         // submitted successfully (so submitted answers aren't restored next time).
-        if (!this._justSubmitted) this.persistCurrentStep();
+        if (!this._justSubmitted) this.persistCurrentCategory();
         sessionStorage.removeItem("asiatech_student_course");
         sessionStorage.removeItem("asiatech_student_year_level");
         this.currentCourse = null;
         this.currentYearLevel = null;
-        this.currentStep = 0;
+        this.currentCategoryIndex = 0;
         this.evaluations = {};
         APP.goToPage("page-login");
         document.getElementById("nav-student").style.display = "none";
     },
 
     startEvaluation() {
-        this.currentStep = 0;
+        this.currentCategoryIndex = 0;
         this.evaluations = {};
         this._justSubmitted = false;
         APP.goToPage("page-student-eval");
@@ -53,19 +55,44 @@ const STUDENT = {
             document.getElementById("sel-year").value = this.currentYearLevel;
         }
 
-        this.hideTabs();
-        this.renderCurrentStep();
+        this.renderCategorySelection();
     },
 
-    hideTabs() {
-        const tabs = document.getElementById("eval-tabs");
-        if (tabs) tabs.classList.add("hidden");
+    renderCategorySelection() {
+        const selection = document.getElementById("eval-selection");
+        const formContent = document.getElementById("eval-form-content");
+        if (!selection || !formContent) return;
+
+        selection.classList.remove("hidden");
+        formContent.innerHTML = "";
+        formContent.classList.add("hidden");
+        selection.innerHTML =
+            "<section class=\"eval-selection-card\" aria-labelledby=\"eval-selection-title\">" +
+            "<h2 id=\"eval-selection-title\">Choose an evaluation</h2>" +
+            "<p>Select one category to complete. You can submit each evaluation separately.</p>" +
+            "<div class=\"eval-category-grid\">" +
+            this.categories.map(cat =>
+                "<button type=\"button\" class=\"eval-category-button\" onclick=\"STUDENT.openCategory('" + cat + "')\">" +
+                "<i class=\"fas " + this.categoryIcons[cat] + "\" aria-hidden=\"true\"></i>" +
+                "<span>Evaluate " + this.categoryLabels[cat] + "</span>" +
+                "<i class=\"fas fa-arrow-right eval-category-arrow\" aria-hidden=\"true\"></i>" +
+                "</button>"
+            ).join("") +
+            "</div></section>";
     },
-    renderCurrentStep() {
+
+    openCategory(category) {
+        const idx = this.categories.indexOf(category);
+        if (idx === -1) return;
+        this.currentCategoryIndex = idx;
+        this.renderCategoryForm();
+    },
+
+    renderCategoryForm() {
         const container = document.getElementById("eval-form-content");
-        const category = this.categories[this.currentStep];
-        const isLastStep = this.currentStep === this.categories.length - 1;
-        const isFirstStep = this.currentStep === 0;
+        const selection = document.getElementById("eval-selection");
+        const category = this.categories[this.currentCategoryIndex];
+        if (!container || !category) return;
 
         let formContent = "";
         switch (category) {
@@ -75,43 +102,39 @@ const STUDENT = {
             case "payments": formContent = this.paymentsFormContent(); break;
         }
 
-        const nextBtnText = isLastStep ? "Submit All" : "Next";
-        const nextBtnClass = isLastStep ? "btn btn-success" : "btn btn-primary";
-        const nextHandler = isLastStep ? "STUDENT.submitAllEvaluations()" : "STUDENT.nextStep()";
-
-        const stepperHtml = this.categories.map((cat, i) => {
-            const active = i === this.currentStep;
-            const done = i < this.currentStep;
-            const cls = active ? "step-item active" : (done ? "step-item completed" : "step-item");
-            const ico = done ? "<i class=\"fas fa-check\"></i>" : "<span>" + (i + 1) + "</span>";
-            return "<div class=\"" + cls + "\"><div class=\"step-circle\">" + ico + "</div><div class=\"step-label\">" + this.categoryNames[cat] + "</div></div>";
-        }).join("");
-
+        if (selection) selection.classList.add("hidden");
+        container.classList.remove("hidden");
         container.innerHTML =
-            "<div class=\"stepper-container\"><div class=\"stepper\">" + stepperHtml + "</div></div>" +
             "<div class=\"eval-form-card\">" +
-            "<h2><i class=\"fas fa-clipboard-list\"></i> " + this.categoryNames[category] + "</h2>" +
-            "<form id=\"step-form\">" +
+            "<button type=\"button\" class=\"btn btn-secondary eval-back-button\" onclick=\"STUDENT.backToCategories()\"><i class=\"fas fa-arrow-left\"></i> All evaluations</button>" +
+            "<h2><i class=\"fas " + this.categoryIcons[category] + "\"></i> Evaluate " + this.categoryLabels[category] + "</h2>" +
+            "<form id=\"category-form\">" +
             formContent +
-            "<div class=\"step-navigation\">" +
-            "<div class=\"nav-left\">" + (!isFirstStep ? "<button type=\"button\" class=\"btn btn-secondary\" onclick=\"STUDENT.previousStep()\">Back</button>" : "") + "</div>" +
-            "<div class=\"nav-right\"><button type=\"button\" class=\"" + nextBtnClass + "\" onclick=\"" + nextHandler + "\">" + nextBtnText + "</button></div>" +
+            "<div class=\"category-form-actions\">" +
+            "<div class=\"nav-left\"></div>" +
+            "<div class=\"nav-right\"><button type=\"button\" class=\"btn btn-success\" onclick=\"STUDENT.submitEvaluation('" + category + "')\">Submit " + this.categoryLabels[category] + " Evaluation</button></div>" +
             "</div></form></div>";
 
-        this.restoreStepData();
+        this.restoreCategoryData();
     },
 
-    saveStepData() {
-        const cat = this.categories[this.currentStep];
-        const form = document.getElementById("step-form");
+    backToCategories() {
+        this.saveCategoryData();
+        this._justSubmitted = false;
+        this.renderCategorySelection();
+    },
+
+    saveCategoryData() {
+        const cat = this.categories[this.currentCategoryIndex];
+        const form = document.getElementById("category-form");
         if (!form) return;
 
         const ratings = {};
         // Read each question's key directly from the radio input's own `name`
         // attribute (the canonical source) rather than a parallel attribute on
         // the wrapper. This guarantees every answered rating is stored under the
-        // correct question key so restoreStepData() can bring it back when the
-        // student navigates Back to re-edit before submitting.
+        // correct question key so restoreCategoryData() can bring it back when
+        // the student returns to this category to edit before submitting.
         form.querySelectorAll("input[type=radio]:checked").forEach(c => {
             ratings[c.name] = parseInt(c.value);
         });
@@ -124,15 +147,15 @@ const STUDENT = {
         this.saveDraft(cat);
     },
 
-    restoreStepData() {
-        const cat = this.categories[this.currentStep];
+    restoreCategoryData() {
+        const cat = this.categories[this.currentCategoryIndex];
         // Load this category's anonymous draft from localStorage if we have no
         // in-memory copy yet (e.g. page refresh, returning to the form).
         if (!this.evaluations[cat]) this.loadDraft(cat);
         const data = this.evaluations[cat];
         if (!data) return;
 
-        const form = document.getElementById("step-form");
+        const form = document.getElementById("category-form");
         if (!form) return;
 
         if (data.ratings) {
@@ -199,40 +222,26 @@ const STUDENT = {
         if (this.evaluations) delete this.evaluations[cat];
     },
 
-    // Save the currently-visible step's answers right before the page/browser
-    // leaves (refresh, browser-Back, closing tab, navigating away).
-    persistCurrentStep() {
+    // Save the visible category's answers before the page/browser leaves.
+    persistCurrentCategory() {
         const page = document.getElementById("page-student-eval");
         const active = page ? page.classList.contains("active") : false;
         if (!active) return;
         if (this._justSubmitted) return;
-        const form = document.getElementById("step-form");
+        const form = document.getElementById("category-form");
         if (!form) return;
-        this.saveStepData();
+        this.saveCategoryData();
     },
 
     beginDraftAutosave() {
-        window.addEventListener("beforeunload", () => this.persistCurrentStep());
-        window.addEventListener("pagehide", () => this.persistCurrentStep());
+        window.addEventListener("beforeunload", () => this.persistCurrentCategory());
+        window.addEventListener("pagehide", () => this.persistCurrentCategory());
         window.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "hidden") this.persistCurrentStep();
+            if (document.visibilityState === "hidden") this.persistCurrentCategory();
         });
     },
-    nextStep() {
-        if (!this.validateCurrentStep()) return;
-        this.saveStepData();
-        this.currentStep++;
-        this.renderCurrentStep();
-    },
-
-    previousStep() {
-        this.saveStepData();
-        this.currentStep--;
-        this.renderCurrentStep();
-    },
-
-    validateCurrentStep() {
-        const form = document.getElementById("step-form");
+    validateCurrentCategory() {
+        const form = document.getElementById("category-form");
         if (!form) return true;
         const ratingGroups = form.querySelectorAll(".rating-group");
         let unanswered = null;
@@ -243,7 +252,7 @@ const STUDENT = {
             }
         }
         if (ratingGroups.length > 0 && unanswered) {
-            showToast("Please answer every rating question before proceeding.", "warning");
+            showToast("Please answer every rating question before submitting.", "warning");
             unanswered.scrollIntoView({ behavior: "smooth", block: "center" });
             var firstRadio = unanswered.querySelector("input[type=radio]");
             if (firstRadio) firstRadio.focus();
@@ -251,42 +260,20 @@ const STUDENT = {
         }
         const thoughtsArea = form.querySelector("textarea[name=share_your_thoughts]");
         if (thoughtsArea && !thoughtsArea.value.trim()) {
-            showToast("Please share your thoughts before proceeding.", "warning");
+            showToast("Please share your thoughts before submitting.", "warning");
             thoughtsArea.scrollIntoView({ behavior: "smooth", block: "center" });
             thoughtsArea.focus();
             return false;
         }
         return true;
     },
-    async submitAllEvaluations() {
-        if (!this.validateCurrentStep()) return;
+    async submitEvaluation(category) {
+        const categoryIndex = this.categories.indexOf(category);
+        if (categoryIndex === -1 || categoryIndex !== this.currentCategoryIndex) return;
+        if (!this.validateCurrentCategory()) return;
 
-        // Capture the currently visible step's answers FIRST. saveStepData()
-        // used to run only after validateAllCategories(), which meant the step
-        // the student was looking at (e.g. Payments on the last step) was not
-        // yet in this.evaluations → "Payments: No evaluation data" even though
-        // every question had been answered.
-        this.saveStepData();
-
-        // Validate ALL categories before submitting
-        const validation = this.validateAllCategories();
-        if (!validation.isComplete) {
-            const btn = document.querySelector("#step-form button.btn-success");
-            if (btn) btn.disabled = false;
-            showToast("Please complete all questions in: " + validation.incompleteCategories.join(", "), "error");
-
-            // Show detailed message
-            const detailedMsg = validation.unansweredDetails.slice(0, 3).join("; ");
-            if (validation.unansweredDetails.length > 3) {
-                showToast("Details: " + detailedMsg + "...", "warning");
-            } else {
-                showToast("Details: " + detailedMsg, "warning");
-            }
-
-            // Navigate to first incomplete category
-            this.navigateToFirstIncomplete();
-            return;
-        }
+        this.saveCategoryData();
+        const data = this.evaluations[category];
 
         const course = document.getElementById("sel-course")?.value;
         const yearLevel = document.getElementById("sel-year")?.value;
@@ -299,67 +286,52 @@ const STUDENT = {
             return;
         }
 
-        this.saveStepData();
-
-        const btn = document.querySelector("#step-form button.btn-success");
+        const btn = document.querySelector("#category-form button.btn-success");
         if (btn) btn.disabled = true;
 
-        showLoading("Submitting all evaluations...");
+        showLoading("Submitting " + this.categoryLabels[category] + " evaluation...");
 
         try {
-            for (const [cat, data] of Object.entries(this.evaluations)) {
-                const payload = {
-                    category: this.categoryNames[cat] || cat,
-                    comment: null,
-                    // No professor name is collected: the Professors section
-                    // asks about the faculty collectively.
-                    share_your_thoughts: data.share_your_thoughts || null,
-                    ratings: data.ratings || null,
-                    student_id: null,
-                    course: course,
-                    year_level: yearLevel,
-                };
+            const payload = {
+                category: this.categoryNames[category] || category,
+                comment: null,
+                share_your_thoughts: data.share_your_thoughts || null,
+                ratings: data.ratings || null,
+                student_id: null,
+                course: course,
+                year_level: yearLevel,
+            };
 
-                const response = await fetch(getApiBase() + "/evaluation", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
+            const response = await fetch(getApiBase() + "/evaluation", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
 
-                if (!response.ok) {
-                    const err = await response.json();
-                    // FastAPI 422s return `detail` as an array of validation
-                    // errors; join them so the toast isn't "[object Object]".
-                    const detail = err.detail;
-                    const message = typeof detail === "string"
-                        ? detail
-                        : Array.isArray(detail)
-                            ? detail.map(d => d.msg || JSON.stringify(d)).join("; ")
-                            : (detail ? JSON.stringify(detail) : "Submission failed");
-                    throw new Error(message);
-                }
-                // This category was submitted successfully → clear ONLY its draft.
-                // Other categories' drafts stay intact until they are each submitted.
-
-                // On failure the throw above leaves every draft untouched so the
-                // student can retry without losing their answers。
-                this.clearDraft(cat);
+            if (!response.ok) {
+                const err = await response.json();
+                const detail = err.detail;
+                const message = typeof detail === "string"
+                    ? detail
+                    : Array.isArray(detail)
+                        ? detail.map(d => d.msg || JSON.stringify(d)).join("; ")
+                        : (detail ? JSON.stringify(detail) : "Submission failed");
+                throw new Error(message);
             }
 
+            this.clearDraft(category);
             this._justSubmitted = true;
             this.currentCourse = course;
             sessionStorage.setItem("asiatech_student_course", course);
-            if (yearLevel) {
-                this.currentYearLevel = yearLevel;
-                sessionStorage.setItem("asiatech_student_year_level", yearLevel);
-            }
+            this.currentYearLevel = yearLevel;
+            sessionStorage.setItem("asiatech_student_year_level", yearLevel);
 
             APP.openModal(
                 "<div style=\"text-align:center;padding:1rem;\">" +
                 "<i class=\"fas fa-check-circle\" style=\"font-size:3rem;color:var(--pos);\"></i>" +
-                "<h3 style=\"margin-top:.75rem;\">All Evaluations Submitted Successfully!</h3>" +
-                "<p>Thank you for your feedback! Your evaluations have been recorded.</p>" +
-                "<button class=\"btn btn-primary mt-2\" onclick=\"STUDENT.finishEvaluation()\"><i class=\"fas fa-home\"></i> Return to Home</button>" +
+                "<h3 style=\"margin-top:.75rem;\">" + this.categoryLabels[category] + " Evaluation Submitted!</h3>" +
+                "<p>Thank you for your feedback! This evaluation has been recorded.</p>" +
+                "<button class=\"btn btn-primary mt-2\" onclick=\"STUDENT.finishEvaluation()\"><i class=\"fas fa-list\"></i> Choose Another Evaluation</button>" +
                 "</div>"
             );
         } catch (error) {
@@ -372,7 +344,8 @@ const STUDENT = {
 
     finishEvaluation() {
         APP.closeModal();
-        this.logout();
+        this._justSubmitted = false;
+        this.renderCategorySelection();
     },
     professorFormContent() {
         return `<div class="form-section" style="margin-top:1.5rem;">
@@ -437,17 +410,6 @@ const STUDENT = {
         this.startEvaluation();
     },
 
-    renderFormTab(tab) {
-        // Persist the current step's answers (and any others just entered) so the
-        // per-category drafts stay separated and up-to-date before switching categories.
-        this.saveStepData();
-        const idx = this.categories.indexOf(tab);
-        if (idx !== -1) {
-            this.currentStep = idx;
-            this.renderCurrentStep();
-        }
-    },
-
     professorForm() {
         return this.professorFormContent();
     },
@@ -463,166 +425,6 @@ const STUDENT = {
     paymentsForm() {
         return this.paymentsFormContent();
     },
-
-    handleFormSubmit(e, category) {
-        e.preventDefault();
-        const idx = this.categories.indexOf(category);
-        if (idx !== -1) {
-            this.currentStep = idx;
-        }
-        this.startEvaluation();
-    },
-
-    // ========================================
-    // Required Field Validation Helpers
-    // ========================================
-    
-    // Define all required questions for each category
-    requiredQuestions: {
-        professor: ["teaching_quality", "mastery", "clarity", "fairness", "punctuality", "approachability", "feedback", "classroom_mgmt", "teaching_style"],
-        staff: ["safety", "registrar", "cashier", "canteen", "substitute", "office_staff", "admin_comm", "maintenance"],
-        facilities: ["spaces", "furniture", "cleanliness", "bathrooms", "cafeteria", "monitors", "computers", "classrooms"],
-        payments: ["accessibility", "processing", "queues", "courteous", "accounting", "security", "info_clarity", "digital_trust"]
-    },
-
-    // Get required questions for a category
-    getRequiredQuestionsForCategory(category) {
-        return this.requiredQuestions[category] || [];
-    },
-
-    // Get form content for a category (used for validation)
-    getCategoryFormContent(category) {
-        switch (category) {
-            case "professor": return this.professorFormContent();
-            case "staff": return this.staffFormContent();
-            case "facilities": return this.facilitiesFormContent();
-            case "payments": return this.paymentsFormContent();
-            default: return "";
-        }
-    },
-
-    // Highlight unanswered questions in the current step
-    highlightUnansweredQuestions() {
-        const form = document.getElementById("step-form");
-        if (!form) return;
-        
-        // Remove any existing error highlights
-        form.querySelectorAll(".rating-group.error, .form-group.error").forEach(el => {
-            el.classList.remove("error");
-        });
-        
-        const category = this.categories[this.currentStep];
-        const data = this.evaluations[category];
-        const requiredQuestions = this.getRequiredQuestionsForCategory(category);
-        
-        // Check each Likert question
-        const ratingGroups = form.querySelectorAll(".rating-group");
-        for (const group of ratingGroups) {
-            const radio = group.querySelector("input[type=radio]");
-            if (radio) {
-                const name = radio.name;
-                if (requiredQuestions.includes(name)) {
-                    if (!data?.ratings?.[name]) {
-                        group.classList.add("error");
-                    }
-                }
-            }
-        }
-        
-        // Check textarea
-        const thoughtsArea = form.querySelector("textarea[name=share_your_thoughts]");
-        if (thoughtsArea && requiredQuestions.length > 0) {
-            if (!data?.share_your_thoughts?.trim()) {
-                const parent = thoughtsArea.closest(".form-group");
-                if (parent) parent.classList.add("error");
-            }
-        }
-    },
-
-    // Validate all categories before final submission
-    validateAllCategories() {
-        const incompleteCategories = [];
-        const unansweredDetails = [];
-        
-        for (const cat of this.categories) {
-            const data = this.evaluations[cat];
-            const requiredQuestions = this.getRequiredQuestionsForCategory(cat);
-            const categoryName = this.categoryNames[cat] || cat;
-            
-            if (!data) {
-                incompleteCategories.push(categoryName);
-                unansweredDetails.push(categoryName + ": No evaluation data");
-                continue;
-            }
-            
-            if (!data.ratings) {
-                if (!incompleteCategories.includes(categoryName)) {
-                    incompleteCategories.push(categoryName);
-                }
-                unansweredDetails.push(categoryName + ": Missing ratings");
-                continue;
-            }
-            
-            const unansweredQuestions = [];
-            for (const question of requiredQuestions) {
-                if (!data.ratings[question]) {
-                    unansweredQuestions.push(question);
-                }
-            }
-            
-            if (unansweredQuestions.length > 0) {
-                if (!incompleteCategories.includes(categoryName)) {
-                    incompleteCategories.push(categoryName);
-                }
-                unansweredDetails.push(categoryName + ": " + unansweredQuestions.length + " unanswered rating(s)");
-            }
-            
-            if (!data.share_your_thoughts || !data.share_your_thoughts.trim()) {
-                if (!incompleteCategories.includes(categoryName)) {
-                    incompleteCategories.push(categoryName);
-                }
-                unansweredDetails.push(categoryName + ': Missing "Share Your Thoughts"');
-            }
-        }
-        
-        return {
-            isComplete: incompleteCategories.length === 0,
-            incompleteCategories,
-            unansweredDetails
-        };
-    },
-
-    // Navigate to first incomplete category
-    navigateToFirstIncomplete() {
-        for (const cat of this.categories) {
-            const data = this.evaluations[cat];
-            const requiredQuestions = this.getRequiredQuestionsForCategory(cat);
-            let hasUnanswered = false;
-            
-            if (!data?.ratings) {
-                hasUnanswered = true;
-            } else {
-                for (const question of requiredQuestions) {
-                    if (!data.ratings[question]) {
-                        hasUnanswered = true;
-                        break;
-                    }
-                }
-            }
-            
-            if (!data?.share_your_thoughts?.trim()) {
-                hasUnanswered = true;
-            }
-            
-            if (hasUnanswered) {
-                this.currentStep = this.categories.indexOf(cat);
-                this.renderCurrentStep();
-                this.highlightUnansweredQuestions();
-                return true;
-            }
-        }
-        return false;
-    }
 };
 
 if (typeof window !== "undefined") {

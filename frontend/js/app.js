@@ -303,14 +303,6 @@ setupNavListeners() {
             });
         });
 
-        // Student eval tabs
-        document.querySelectorAll('#eval-tabs .tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('#eval-tabs .tab-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                STUDENT.renderFormTab(btn.dataset.tab);
-            });
-        });
     },
 
     setupLogout() {
@@ -406,4 +398,3 @@ document.addEventListener('click', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     APP.init();
 });
-
