@@ -183,8 +183,8 @@ echosent/
 - [x] Faculty dashboard
 - [x] Admin dashboard with result charts for faculty, staff, facilities, and payments
 - [ ] Admin account management (create, edit, and deactivate faculty and admin accounts)
-- [ ] Evaluation period management
-- [ ] Exportable reports (PDF / CSV)
+- [x] Evaluation period management
+- [x] Exportable reports (PDF / CSV)
 
 ## 🎓 Research Team
 
