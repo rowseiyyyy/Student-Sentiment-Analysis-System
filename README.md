@@ -44,7 +44,7 @@ Students can give honest feedback without fear of being identified, and the scho
 | Role | Access |
 | :--- | :--- |
 | **Admin** | Overview, Responses, Analytics, Model Results, and Action Updates. Views evaluation result charts across all categories (faculty, staff, facilities, and payments). Account management is not yet available (see [Roadmap](#-roadmap)). |
-| **Faculty** | Views the evaluation analytics and sentiment results for their own classes only. |
+| **Faculty** | Views the evaluation analytics and sentiment results for faculty members only. |
 | **Student** | Submits the evaluation form anonymously. No identifying information is attached to the feedback. |
 
 ## ⚙️ How It Works
