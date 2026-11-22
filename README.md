@@ -1,218 +1,170 @@
-# Asiatech Student Sentiment Analysis System
+Echosent
 
-A **web-based student feedback evaluation and sentiment analysis system** developed for **Asia Technological School of Science and Arts (Asiatech), Sta. Rosa, Laguna, Philippines**.
+A web-based evaluation system that uses multilingual BERT (mBERT) to analyze the sentiment of anonymous student feedback on faculty, staff, facilities, and payments.
 
-The system collects student evaluations and analyzes open-ended feedback using **SVM, Naive Bayes and Logistic Regression (TF-IDF) alongside mBERT Hybrid**, then serves the live classification as **Positive, Neutral, or Negative**.
+Echosent was developed as a research project. Students submit anonymous evaluations across several categories (faculty, staff, facilities, and payments), and the system automatically classifies the written comments by sentiment so that administrators and faculty can understand feedback at a glance.
 
----
+🌐 Live site: https://your-domain.com
 
-## Features
+Table of Contents
+About
+Key Features
+User Roles
+How It Works
+Sentiment Analysis Model
+Tech Stack
+Getting Started
+Project Structure
+Configuration
+Privacy and Anonymity
+Roadmap
+Research Team
+License
+About
 
-### Student
+Traditional evaluations produce large amounts of written feedback that is time-consuming to read and summarize. Echosent addresses this by combining an anonymous evaluation form with an automated sentiment analysis pipeline powered by mBERT (Multilingual BERT).
 
-* **Student login** using student number
-* **Likert-scale evaluations**
-* **Open-ended feedback**
-* Evaluation of:
+The system lets students give honest feedback without fear of being identified, and gives faculty and administrators clear, summarized insights into how teaching, services, and facilities are being received.
 
-  * Faculty
-  * Staff
-  * Payment Services
-  * School Facilities
-* **Automatic sentiment analysis**
+Key Features
+📝 Anonymous student evaluation form: students can submit feedback without revealing their identity
+🤖 Automated sentiment analysis: comments are classified using a fine-tuned mBERT model
+🌐 Multilingual support: mBERT handles text in multiple languages, including mixed-language comments
+🗂️ Multiple evaluation categories: faculty, staff, facilities, and payments
+👩‍🏫 Faculty dashboard: faculty view feedback and sentiment results for their own evaluations
+🛠️ Admin dashboard: administrators view evaluation result charts across all categories
+📊 Visual reports: sentiment distribution and summaries presented in charts for each category
+User Roles
+Role	Access
+Admin	Views evaluation result charts across all categories (faculty, staff, facilities, and payments). Account management is not yet available (see Roadmap)
+Faculty	Logs in to view the evaluations and sentiment results for their own classes only
+Student	Submits the evaluation form anonymously; no identifying information is attached to the submitted feedback
+How It Works
+Student submits an evaluation form (ratings and written comments for faculty, staff, facilities, and payments) anonymously.
+The comment text is preprocessed (cleaned and tokenized).
+The mBERT model predicts the sentiment of each comment (e.g., positive, neutral, negative).
+Results are stored alongside the evaluation, without any link to the student's identity.
+Faculty and admins view the aggregated results on their dashboards. Faculty see results for their own classes, while admins see charts for every category.
+Student Form  ->  Preprocessing  ->  mBERT Model  ->  Sentiment Label  ->  Dashboards
+ (anonymous)                                                          (Faculty / Admin)
+Sentiment Analysis Model
+Item	Details
+Base model	bert-base-multilingual-cased (mBERT)
+Task	Sentiment classification of student feedback comments
+Labels	Positive / Neutral / Negative (edit to match your labels)
+Training data	(Describe your dataset: source, size, language(s))
+Fine-tuning	(Epochs, batch size, learning rate, framework)
+Performance	Accuracy: __% · Precision: __% · Recall: __% · F1: __%
 
-### Faculty
+Fill in the table above with the results from your study.
 
-* **Faculty account access**
-* View **sentiment analysis results**
-
-### Administrator
-
-* **Administrator authentication**
-* **Dataset management**
-* Dataset import
-* **Training results import and model comparison**
-* **Model performance comparison**
-* Classification reports
-* Confusion matrices
-* Prediction results
-* Training history
-
----
-
-## Sentiment Analysis
-
-The system compares **four machine learning approaches** on identical train/test splits.
-
-| Model                        | Role                                                                        |
-| ---------------------------- | --------------------------------------------------------------------------- |
-| **SVM (TF-IDF)**             | Linear support-vector classifier over TF-IDF features (research/comparison)  |
-| **Naive Bayes (TF-IDF)**     | Multinomial Naive Bayes over TF-IDF features (research/comparison)           |
-| **Logistic Regression (TF-IDF)** | Linear logistic classifier over TF-IDF features (research/comparison)    |
-| **mBERT Hybrid**      | Frozen `bert-base-multilingual-cased` encoder + scikit-learn hybrid head (word/char TF-IDF + scaled embedding → LinearSVC) — the **only live production model** |
-
-### Production inference
-
-The classical TF-IDF models (SVM, Naive Bayes, Logistic Regression) are
-**offline research baselines** — they are trained/evaluated outside the API
-(Colab or `scripts/train_models.py`) and shown in the admin comparison view
-only. Live predictions are always produced by **mBERT Hybrid**; there
-is no fallback model (a failed mbert load returns HTTP 503).
-
----
-
-## Technology Stack
-
-### Backend
-
-* **Python**
-* **FastAPI**
-* **SQLAlchemy**
-* **MySQL**
-* **Alembic**
-* **JWT**
-
-### Machine Learning / NLP
-
-* **Scikit-learn** (SVM, Naive Bayes, Logistic Regression)
-* **mBERT Hybrid** (`sentence-transformers/paraphrase-multilingual-mbert-L12-v2`)
-* **PyTorch + HuggingFace Transformers** (frozen mBERT encoder) with a scikit-learn hybrid head
-* **Hugging Face Transformers**
-* **PyTorch**
-* **TF-IDF**
-* **NLTK**
-* **spaCy**
-* **Joblib**
-
-### Frontend
-
-* **HTML5**
-* **CSS3**
-* **JavaScript**
-* **Chart.js**
-
----
-
-## Project Structure
-
-![Project Structure](https://github.com/user-attachments/assets/52678679-eea2-4945-b4b1-d8986c8e58f1)
-
----
-
-## System Architecture
-
-![SSAS System Architecture](https://github.com/user-attachments/assets/895a4fb8-eff1-4277-9ff8-1e7b603a275c)
-
-Full written architecture — layers, deployment topology, data model, request flows,
-security controls, environment-variable reference, and a PuTTY-based server
-access/deployment runbook — is in **[SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md)**.
-
----
-
-## Installation
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/rowseiyyyy/Student-Sentiment-Analysis-System.git
-cd Student-Sentiment-Analysis-System
-```
-
-### 2. Create a Virtual Environment
-
-```bash
-python -m venv .venv
-```
-
-Activate the virtual environment:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-### 3. Install Dependencies
-
-```bash
-cd backend
+Tech Stack
+Area	Technology
+Frontend	(e.g., HTML/CSS/JS, React)
+Backend	(e.g., Python Flask / Django / FastAPI, PHP, Node.js)
+Machine Learning	mBERT, Hugging Face Transformers, PyTorch/TensorFlow
+Database	(e.g., MySQL, PostgreSQL, Firebase)
+Hosting	(e.g., Render, Vercel, cPanel, PythonAnywhere)
+Getting Started
+Prerequisites
+Python 3.9 or later
+pip
+Git
+A database server (e.g., MySQL)
+Installation
+Clone the repository
+bash
+git clone https://github.com/your-username/echosent.git
+cd echosent
+Create and activate a virtual environment
+bash
+python -m venv venv
+source venv/bin/activate      # On Windows: venv\Scripts\activate
+Install dependencies
+bash
 pip install -r requirements.txt
-```
+Set up environment variables
+bash
+cp .env.example .env
 
-### 4. Configure Environment Variables
+Then edit .env with your own values (see Configuration).
 
-Copy:
+Download or place the trained model Place the fine-tuned mBERT model files in the model/ folder, or download them from (link to your model).
+Set up the database
+bash
+# Example; adjust to your framework
+python manage.py migrate
+Run the application
+bash
+python app.py
+Open http://localhost:5000 in your browser.
+Default Accounts
 
-```text
-backend/.env.example
-```
+Create the first admin account with:
 
-to:
+bash
+# Replace with the command or script your system uses
+python create_admin.py
 
-```text
-backend/.env
-```
+⚠️ Change any default passwords immediately after first login.
 
-Configure the **database and application settings** inside `.env`.
+Project Structure
+echosent/
+├── app/
+│   ├── routes/          # Admin, faculty, and student routes
+│   ├── templates/       # HTML pages (dashboards, evaluation form)
+│   └── static/          # CSS, JavaScript, images
+├── model/               # Fine-tuned mBERT model files
+├── notebooks/           # Training and evaluation notebooks
+├── data/                # Dataset (if shareable)
+├── .env.example         # Example environment variables
+├── requirements.txt
+└── README.md
 
-### 5. Run Database Migrations
+Update this tree to match your actual folders.
 
-```bash
-alembic upgrade head
-```
+Configuration
 
-### 6. Run the System
+Create a .env file in the project root:
 
-From the project root:
+env
+SECRET_KEY=your_secret_key_here
+DATABASE_URL=your_database_url_here
+MODEL_PATH=./model
+DEBUG=False
 
-```bash
-python run.py
-```
+⚠️ Never commit your .env file or share secret keys publicly.
 
----
+Privacy and Anonymity
 
-## Testing
+Protecting student identity is central to the system's design:
 
-Run the backend tests:
+Evaluation submissions are not linked to student accounts or personal identifiers.
+Faculty can only see feedback for their own classes.
+Only administrators can view system-wide results across all categories.
+Data is used for research and evaluation purposes only.
+Roadmap
+[x] Anonymous student evaluation form
+[x] mBERT sentiment analysis of comments
+[x] Faculty dashboard
+[x] Admin dashboard with result charts for faculty, staff, facilities, and payments
+[ ] Admin account management (create, edit, and deactivate faculty and admin accounts)
+[ ] Evaluation period management
+[ ] Exportable reports (PDF / CSV)
+Research Team
+Name	Role
+Member name	Lead Developer
+Member name	Machine Learning
+Member name	Documentation
+Adviser name	Research Adviser
 
-```bash
-cd backend
-pytest
-```
+Institution: (Your school / university / department)
 
----
+License
 
-## Model Evaluation
+This project was developed for academic research purposes. (Specify your license, e.g., MIT, or "All rights reserved" if preferred.)
 
-The system supports model evaluation using:
-
-* **Accuracy**
-* **Precision**
-* **Recall**
-* **F1-score**
-* **Confusion Matrix**
-* **Classification Report**
-
-These metrics are used to compare model performance and evaluate the effectiveness of the sentiment analysis system.
-
----
-
-## Research Project
-
-* **Project:** Student Sentiment Analysis System
-* **Institution:** Asia Technological School of Science and Arts (Asiatech)
-* **Location:** Sta. Rosa, Laguna, Philippines
-
-### Researchers
-
-* **Rosemay N. Lorena**
-* **Queenie Mae C. Libres**
-* **Justin Rey Q. Agapito**
-
----
-
-## Project Overview
-
-The **Asiatech Student Sentiment Analysis System (SSAS)** provides an automated platform for collecting and analyzing student feedback.
-
-By combining **traditional machine learning** with **transformer-based NLP models**, the system aims to provide a more comprehensive analysis of student sentiment and support the evaluation of **Faculty, Staff, Payment Services, and School Facilities**.
-
-
+Contact
+Email: your-email@example.com
+GitHub: @your-username
+<p align="center">Echosent · Student feedback, made clearer with sentiment analysis</p>
