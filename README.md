@@ -203,7 +203,7 @@ This project was developed for academic research purposes. All rights reserved.
 
 ## 📬 Contact
 
-- **Email:** your-email@example.com
+- **Email:** roseyylrn09@gmail.com
 - **GitHub:** [@rowseiyyyy](https://github.com/rowseiyyyy)
 - **Website:** [echosent.duckdns.org](https://echosent.duckdns.org)
 
