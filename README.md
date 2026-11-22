@@ -1,114 +1,156 @@
-Echosent
+<div align="center">
 
-A web-based evaluation system that uses multilingual BERT (mBERT) to analyze the sentiment of anonymous student feedback on faculty, staff, facilities, and payments.
+<img src="https://echosent.duckdns.org/assets/EchoSentLogo.png" alt="EchoSent logo" width="140" />
 
-Echosent was developed as a research project. Students submit anonymous evaluations across several categories (faculty, staff, facilities, and payments), and the system automatically classifies the written comments by sentiment so that administrators and faculty can understand feedback at a glance.
+# EchoSent
 
-🌐 Live site: https://your-domain.com
+**Student Feedback & Sentiment Analysis for Asiatech**
 
-Table of Contents
-About
-Key Features
-User Roles
-How It Works
-Sentiment Analysis Model
-Tech Stack
-Getting Started
-Project Structure
-Configuration
-Privacy and Anonymity
-Roadmap
-Research Team
-License
-About
+Anonymous student evaluations, analyzed with multilingual BERT (mBERT).
 
-Traditional evaluations produce large amounts of written feedback that is time-consuming to read and summarize. Echosent addresses this by combining an anonymous evaluation form with an automated sentiment analysis pipeline powered by mBERT (Multilingual BERT).
+[![Live Site](https://img.shields.io/badge/live-echosent.duckdns.org-brightgreen?style=for-the-badge)](https://echosent.duckdns.org)
 
-The system lets students give honest feedback without fear of being identified, and gives faculty and administrators clear, summarized insights into how teaching, services, and facilities are being received.
+![Model](https://img.shields.io/badge/model-mBERT-orange)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Status](https://img.shields.io/badge/status-in%20development-yellow)
+![License](https://img.shields.io/badge/license-academic-lightgrey)
 
-Key Features
-📝 Anonymous student evaluation form: students can submit feedback without revealing their identity
-🤖 Automated sentiment analysis: comments are classified using a fine-tuned mBERT model
-🌐 Multilingual support: mBERT handles text in multiple languages, including mixed-language comments
-🗂️ Multiple evaluation categories: faculty, staff, facilities, and payments
-👩‍🏫 Faculty dashboard: faculty view feedback and sentiment results for their own evaluations
-🛠️ Admin dashboard: administrators view evaluation result charts across all categories
-📊 Visual reports: sentiment distribution and summaries presented in charts for each category
-User Roles
-Role	Access
-Admin	Views evaluation result charts across all categories (faculty, staff, facilities, and payments). Account management is not yet available (see Roadmap)
-Faculty	Logs in to view the evaluations and sentiment results for their own classes only
-Student	Submits the evaluation form anonymously; no identifying information is attached to the submitted feedback
-How It Works
-Student submits an evaluation form (ratings and written comments for faculty, staff, facilities, and payments) anonymously.
-The comment text is preprocessed (cleaned and tokenized).
-The mBERT model predicts the sentiment of each comment (e.g., positive, neutral, negative).
-Results are stored alongside the evaluation, without any link to the student's identity.
-Faculty and admins view the aggregated results on their dashboards. Faculty see results for their own classes, while admins see charts for every category.
-Student Form  ->  Preprocessing  ->  mBERT Model  ->  Sentiment Label  ->  Dashboards
- (anonymous)                                                          (Faculty / Admin)
-Sentiment Analysis Model
-Item	Details
-Base model	bert-base-multilingual-cased (mBERT)
-Task	Sentiment classification of student feedback comments
-Labels	Positive / Neutral / Negative (edit to match your labels)
-Training data	(Describe your dataset: source, size, language(s))
-Fine-tuning	(Epochs, batch size, learning rate, framework)
-Performance	Accuracy: __% · Precision: __% · Recall: __% · F1: __%
+[Live Site](https://echosent.duckdns.org) · [Features](#-features) · [Getting Started](#-getting-started) · [Roadmap](#-roadmap)
 
-Fill in the table above with the results from your study.
+</div>
 
-Tech Stack
-Area	Technology
-Frontend	(e.g., HTML/CSS/JS, React)
-Backend	(e.g., Python Flask / Django / FastAPI, PHP, Node.js)
-Machine Learning	mBERT, Hugging Face Transformers, PyTorch/TensorFlow
-Database	(e.g., MySQL, PostgreSQL, Firebase)
-Hosting	(e.g., Render, Vercel, cPanel, PythonAnywhere)
-Getting Started
-Prerequisites
-Python 3.9 or later
-pip
-Git
-A database server (e.g., MySQL)
-Installation
-Clone the repository
-bash
+---
+
+## 📖 About
+
+EchoSent is a web-based evaluation system developed as a research project. Students submit **anonymous** evaluations across four categories: **faculty, staff, facilities, and payments**. The written comments are classified by sentiment using a fine-tuned **mBERT** model, so administrators and faculty can understand feedback at a glance instead of reading every response.
+
+Students can give honest feedback without fear of being identified, and the school gets clear, summarized insight into how teaching, services, and facilities are being received.
+
+## ✨ Features
+
+- 📝 **Anonymous evaluation form**: submissions are not tied to a student's identity
+- 🤖 **Automated sentiment analysis**: comments are classified by a fine-tuned mBERT model
+- 🌐 **Multilingual support**: mBERT handles multiple languages, including mixed-language comments
+- 🗂️ **Four evaluation categories**: faculty, staff, facilities, and payments
+- 🎓 **Course and year-level tagging**: results can be broken down by program (BSA, BSBA, BSHM/AHM, BSTM, BSIT/AIT, BSCS, BSCPE, BSCRIM, BSED) and year level
+- 📮 **Voice in a Box**: a separate anonymous drop box for general feedback about the overall school experience, with no student ID, login, or name captured
+- 📢 **Action Bulletin**: a public page showing the actions taken in response to student feedback
+- 📊 **Dashboards**: sentiment charts and summaries for admins and faculty
+- 🔑 **Password reset**: email-based reset flow for accounts
+
+## 👥 User Roles
+
+| Role | Access |
+| :--- | :--- |
+| **Admin** | Overview, Responses, Analytics, Model Results, and Action Updates. Views evaluation result charts across all categories (faculty, staff, facilities, and payments). Account management is not yet available (see [Roadmap](#-roadmap)). |
+| **Faculty** | Views the evaluation analytics and sentiment results for their own classes only. |
+| **Student** | Submits the evaluation form anonymously. No identifying information is attached to the feedback. |
+
+## ⚙️ How It Works
+
+```mermaid
+flowchart LR
+    A[Student submits<br/>anonymous form] --> B[Text<br/>preprocessing]
+    B --> C[mBERT<br/>sentiment model]
+    C --> D[(Stored result<br/>no student identity)]
+    D --> E[Faculty dashboard]
+    D --> F[Admin dashboard]
+```
+
+1. A student submits an evaluation (ratings and written comments) anonymously.
+2. The comment text is cleaned and tokenized.
+3. The mBERT model predicts the sentiment of each comment.
+4. The result is stored without any link to the student's identity.
+5. Faculty see results for their own classes, and admins see charts for every category.
+
+## 🧠 Sentiment Analysis Model
+
+| Item | Details |
+| :--- | :--- |
+| **Base model** | `bert-base-multilingual-cased` (mBERT) |
+| **Task** | Sentiment classification of student feedback comments |
+| **Labels** | Positive / Neutral / Negative *(edit to match your labels)* |
+| **Training data** | *(Describe your dataset: source, size, language(s))* |
+| **Fine-tuning** | *(Epochs, batch size, learning rate, framework)* |
+| **Accuracy** | `__%` |
+| **Precision / Recall / F1** | `__%` / `__%` / `__%` |
+
+
+## 🛠️ Tech Stack
+
+| Area | Technology |
+| :--- | :--- |
+| Frontend | HTML/CSS/JS, React* |
+| Backend | Flask, Django,FastAPI, PHP, Node.js |
+| Machine Learning | mBERT, Hugging Face Transformers, PyTorch / TensorFlow |
+| Database | PostgreSQL |
+| Hosting | Duck DNS |
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Python 3.9 or later
+- pip
+- Git
+- A database server *(e.g., MySQL)*
+
+### Installation
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/your-username/echosent.git
 cd echosent
-Create and activate a virtual environment
-bash
+
+# 2. Create and activate a virtual environment
 python -m venv venv
 source venv/bin/activate      # On Windows: venv\Scripts\activate
-Install dependencies
-bash
+
+# 3. Install dependencies
 pip install -r requirements.txt
-Set up environment variables
-bash
+
+# 4. Set up environment variables
 cp .env.example .env
 
-Then edit .env with your own values (see Configuration).
-
-Download or place the trained model Place the fine-tuned mBERT model files in the model/ folder, or download them from (link to your model).
-Set up the database
-bash
-# Example; adjust to your framework
+# 5. Set up the database (adjust to your framework)
 python manage.py migrate
-Run the application
-bash
+
+# 6. Run the application
 python app.py
-Open http://localhost:5000 in your browser.
-Default Accounts
+```
 
-Create the first admin account with:
+Then open <http://localhost:5000> in your browser.
 
-bash
+> [!IMPORTANT]
+> Place the fine-tuned mBERT model files in the `model/` folder before running the app, or download them from *(link to your model)*.
+
+### Configuration
+
+Create a `.env` file in the project root:
+
+```env
+SECRET_KEY=your_secret_key_here
+DATABASE_URL=your_database_url_here
+MODEL_PATH=./model
+DEBUG=False
+```
+
+> [!WARNING]
+> Never commit your `.env` file or share secret keys publicly.
+
+### Creating the first admin account
+
+```bash
 # Replace with the command or script your system uses
 python create_admin.py
+```
 
-⚠️ Change any default passwords immediately after first login.
+Change any default password immediately after the first login.
 
-Project Structure
+## 📁 Project Structure
+
+```text
 echosent/
 ├── app/
 │   ├── routes/          # Admin, faculty, and student routes
@@ -120,51 +162,53 @@ echosent/
 ├── .env.example         # Example environment variables
 ├── requirements.txt
 └── README.md
+```
 
-Update this tree to match your actual folders.
+*Update this tree to match your actual folders.*
 
-Configuration
+## 🔒 Privacy and Anonymity
 
-Create a .env file in the project root:
+- Evaluation submissions are **not linked to student accounts or personal identifiers**.
+- **Voice in a Box** messages capture no student ID, login, or name.
+- Faculty can only see feedback for **their own** classes.
+- Only administrators can view system-wide results across all categories.
+- Data is used **for research and evaluation purposes only**.
 
-env
-SECRET_KEY=your_secret_key_here
-DATABASE_URL=your_database_url_here
-MODEL_PATH=./model
-DEBUG=False
+## 🗺️ Roadmap
 
-⚠️ Never commit your .env file or share secret keys publicly.
+- [x] Anonymous student evaluation form
+- [x] mBERT sentiment analysis of comments
+- [x] Voice in a Box anonymous drop box
+- [x] Public Action Bulletin
+- [x] Faculty dashboard
+- [x] Admin dashboard with result charts for faculty, staff, facilities, and payments
+- [ ] Admin account management (create, edit, and deactivate faculty and admin accounts)
+- [ ] Evaluation period management
+- [ ] Exportable reports (PDF / CSV)
 
-Privacy and Anonymity
+## 🎓 Research Team
 
-Protecting student identity is central to the system's design:
+**Institution:** Asia Techcnological School of Science and Arts
 
-Evaluation submissions are not linked to student accounts or personal identifiers.
-Faculty can only see feedback for their own classes.
-Only administrators can view system-wide results across all categories.
-Data is used for research and evaluation purposes only.
-Roadmap
-[x] Anonymous student evaluation form
-[x] mBERT sentiment analysis of comments
-[x] Faculty dashboard
-[x] Admin dashboard with result charts for faculty, staff, facilities, and payments
-[ ] Admin account management (create, edit, and deactivate faculty and admin accounts)
-[ ] Evaluation period management
-[ ] Exportable reports (PDF / CSV)
-Research Team
-Name	Role
-Member name	Lead Developer
-Member name	Machine Learning
-Member name	Documentation
-Adviser name	Research Adviser
+| Name | Role |
+| :--- | :--- |
+| Justin Rey Q. Agapito | Lead Developer |
+| Rosemay N. Lorena | Machine Learning |
+| Queenie Mae C. Libres | Documentation |
+| Camille S. Camaclang | Research Adviser |
 
-Institution: (Your school / university / department)
+## 📄 License
 
-License
+This project was developed for academic research purposes. All rights reserved.
 
-This project was developed for academic research purposes. (Specify your license, e.g., MIT, or "All rights reserved" if preferred.)
+## 📬 Contact
 
-Contact
-Email: your-email@example.com
-GitHub: @your-username
-<p align="center">Echosent · Student feedback, made clearer with sentiment analysis</p>
+- **Email:** your-email@example.com
+- **GitHub:** [@rowseiyyyy](https://github.com/rowseiyyyy)
+- **Website:** [echosent.duckdns.org](https://echosent.duckdns.org)
+
+---
+
+<div align="center">
+  <sub>EchoSent · Where every student voice is heard and every feedback is understood</sub>
+</div>
